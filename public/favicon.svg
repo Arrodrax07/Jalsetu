@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="waterGrad" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="bridgeGrad" x1="16" y1="40" x2="48" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0F172A"/>
+  <!-- Water Drop Outline -->
+  <path d="M32 10C32 10 16 30 16 42C16 50.8366 23.1634 58 32 58C40.8366 58 48 50.8366 48 42C48 30 32 10 32 10Z" fill="url(#waterGrad)"/>
+  <!-- Arch / Setu / Bridge node inside -->
+  <path d="M22 46C26 40 38 40 42 46" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="32" cy="38" r="3.5" fill="#FFFFFF"/>
+  <circle cx="23" cy="46" r="2.5" fill="#38BDF8"/>
+  <circle cx="41" cy="46" r="2.5" fill="#38BDF8"/>
+</svg>
