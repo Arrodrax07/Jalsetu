@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..db import get_db
 from ..models import Community, User, WaterRequest
 from ..schemas import RequestIn, RequestStatusIn
-from ..security import any_user, staff
+from ..security import require
 from ..services.common import audit, get_setting
 from ..services.priority import level_from_subscore, score_community, urgency_from_score, vulnerability_level
 from ..services.realtime import hub
@@ -58,19 +58,19 @@ def assess(db: Session, body: RequestIn) -> dict:
 
 
 @router.get("/requests")
-def list_requests(db: Session = Depends(get_db), _: User = Depends(any_user)):
+def list_requests(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     rows = db.scalars(select(WaterRequest).options(joinedload(WaterRequest.community)).order_by(WaterRequest.created_at.desc()))
     return [request_view(r) for r in rows]
 
 
 @router.post("/requests/assess")
-def assess_request(body: RequestIn, db: Session = Depends(get_db), _: User = Depends(staff)):
+def assess_request(body: RequestIn, db: Session = Depends(get_db), _: User = Depends(require("manage_requests"))):
     """Preview the AI priority assessment without saving."""
     return assess(db, body)
 
 
 @router.post("/requests", status_code=201)
-def create_request(body: RequestIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def create_request(body: RequestIn, db: Session = Depends(get_db), user: User = Depends(require("manage_requests"))):
     a = assess(db, body)
     r = WaterRequest(
         community_id=body.community_id,
@@ -96,7 +96,7 @@ def create_request(body: RequestIn, db: Session = Depends(get_db), user: User = 
 
 
 @router.patch("/requests/{code}/status")
-def update_status(code: str, body: RequestStatusIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def update_status(code: str, body: RequestStatusIn, db: Session = Depends(get_db), user: User = Depends(require("manage_requests"))):
     r = _get(db, code)
     if body.status != r.status and body.status not in ALLOWED_TRANSITIONS[r.status]:
         raise HTTPException(409, f"Cannot move request from {r.status} to {body.status}")

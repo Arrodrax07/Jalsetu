@@ -12,9 +12,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import (
-    AllocationPlan, Community, Complaint, Delivery, Depot, Tanker, Trip, TripStop, WaterRequest, utcnow,
+    AllocationPlan, Community, Complaint, Delivery, Depot, Tanker, WaterRequest, utcnow,
 )
-from .common import get_setting, haversine_m
+from .common import get_setting
 from .priority import PriorityContext, score_community, vulnerability_level
 
 
@@ -94,6 +94,10 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "contactOfficer": c.contact_officer,
             "officerPhone": c.officer_phone,
             "isActive": c.is_active,
+            "dataOrigin": c.data_origin,
+            "districtId": c.district_id,
+            "districtName": c.district.name if c.district else None,
+            "stateName": c.state.name if c.state else None,
         })
     return out
 
@@ -117,6 +121,8 @@ def request_view(r: WaterRequest) -> dict:
         "status": r.status,
         "priorityScore": r.priority_score,
         "aiAssessment": r.assessment or None,
+        "dataOrigin": r.data_origin,
+        "fulfilledAt": iso(r.fulfilled_at),
     }
 
 
@@ -144,105 +150,44 @@ def complaint_view(c: Complaint) -> dict:
         "labelVerified": c.label_verified,
         "source": c.source,
         "reporterName": c.reporter_name,
+        "dataOrigin": c.data_origin,
     }
 
 
 def depot_view(d: Depot | None) -> dict | None:
-    return {"id": d.id, "name": d.name, "lat": d.lat, "lng": d.lng} if d else None
-
-
-def _nearest_place(lat: float, lng: float, communities: list[Community], depots: list[Depot]) -> str:
-    best, best_d = None, float("inf")
-    for c in communities:
-        d = haversine_m(lat, lng, c.lat, c.lng)
-        if d < best_d:
-            best, best_d = c.name, d
-    for dp in depots:
-        d = haversine_m(lat, lng, dp.lat, dp.lng)
-        if d < 300 and d < best_d:
-            return f"At {dp.name}"
-    if best is None:
-        return "Unknown"
-    return f"At {best}" if best_d < 200 else f"{best_d / 1000:.1f} km from {best}"
+    return {"id": d.id, "name": d.name, "lat": d.lat, "lng": d.lng, "dataOrigin": d.data_origin,
+            "stockLitres": d.stock_litres, "stockUpdatedAt": iso(d.stock_updated_at)} if d else None
 
 
 def tanker_views(db: Session) -> list[dict]:
-    tankers = list(db.scalars(select(Tanker).order_by(Tanker.id)))
-    communities = list(db.scalars(select(Community)))
-    depots = list(db.scalars(select(Depot)))
-    ops = get_setting(db, "operations")
-    active_trips = {t.tanker_id: t for t in db.scalars(select(Trip).where(Trip.status.in_(("Planned", "En Route"))).order_by(Trip.created_at))}
+    """Vehicle list. Position/liveness come exclusively from accepted telemetry (see services.tracking)."""
+    from ..domain import TRIP_OPEN
+    from .tracking import active_trip, vehicle_view
 
-    out = []
+    ops = get_setting(db, "operations")
     now = utcnow()
-    for t in tankers:
-        trip = active_trips.get(t.id)
-        lat = t.lat if t.lat is not None else (t.depot.lat if t.depot else 19.035)
-        lng = t.lng if t.lng is not None else (t.depot.lng if t.depot else 72.898)
+    out = []
+    for t in db.scalars(select(Tanker).order_by(Tanker.id)):
+        trip = active_trip(db, t.id, TRIP_OPEN)
+        v = vehicle_view(t, ops, trip, now)
         stops = trip.stops if trip else []
-        pending = [s for s in stops if s.status == "Pending"]
-        next_stop = pending[0] if pending else None
-        eta = None
-        if next_stop and t.status == "En Route":
-            km = haversine_m(lat, lng, next_stop.community.lat, next_stop.community.lng) / 1000 * ops["roadCircuityFactor"]
-            speed = t.speed_kmh if t.speed_kmh and t.speed_kmh > 5 else ops["fallbackSpeedKmh"]
-            eta = f"{max(1, round(km / speed * 60))} min"
-        progress = round(100 * (len(stops) - len(pending)) / len(stops)) if stops else 0
-        online = bool(t.last_ping_at and now - t.last_ping_at < timedelta(minutes=5))
-        out.append({
+        v.update({
             "id": t.id,
             "vehicleNumber": t.vehicle_number,
-            "driverName": t.driver_name,
             "driverPhone": t.driver_phone,
-            "driverUserId": t.driver_user_id,
             "capacity": t.capacity,
             "currentLoad": t.current_load,
-            "status": t.status,
-            "currentLocationName": _nearest_place(lat, lng, communities, depots),
-            "destinationCommunity": next_stop.community.name if next_stop else ("Depot" if trip else "—"),
-            "eta": eta or "—",
-            "speedKmH": round(t.speed_kmh or 0),
-            "progressPercent": progress,
-            "currentCoordinates": [lat, lng],
-            "routeWaypoints": trip.route_geometry if trip else [],
-            "stops": [s.community.name for s in stops],
             "isDisrupted": t.status == "Maintenance" and bool(t.breakdown_note),
             "breakdownNote": t.breakdown_note,
             "activeTripId": trip.code if trip else None,
-            "lastPingAt": iso(t.last_ping_at),
-            "gpsOnline": online,
+            "routeWaypoints": trip.route_geometry if trip else [],
+            "stops": [s.community.name for s in stops],
+            "progressPercent": round(100 * sum(s.status in ("Delivered", "Verified") for s in stops) / len(stops)) if stops else 0,
             "depot": depot_view(t.depot),
+            "dataOrigin": t.data_origin,
         })
+        out.append(v)
     return out
-
-
-def trip_view(trip: Trip) -> dict:
-    return {
-        "id": trip.code,
-        "dbId": trip.id,
-        "tankerId": trip.tanker_id,
-        "vehicleNumber": trip.tanker.vehicle_number,
-        "status": trip.status,
-        "distanceKm": trip.distance_km,
-        "durationMin": trip.duration_min,
-        "baselineDistanceKm": trip.baseline_distance_km,
-        "baselineDurationMin": trip.baseline_duration_min,
-        "routingSource": trip.routing_source,
-        "routeGeometry": trip.route_geometry,
-        "createdAt": iso(trip.created_at),
-        "startedAt": iso(trip.started_at),
-        "completedAt": iso(trip.completed_at),
-        "stops": [{
-            "id": s.id,
-            "seq": s.seq,
-            "communityId": s.community_id,
-            "communityName": s.community.name,
-            "lat": s.community.lat,
-            "lng": s.community.lng,
-            "allocatedLitres": s.allocated_litres,
-            "status": s.status,
-        } for s in trip.stops],
-    }
 
 
 def delivery_view(d: Delivery) -> dict:
@@ -265,8 +210,15 @@ def delivery_view(d: Delivery) -> dict:
         "notes": d.notes,
         "fieldOfficer": d.verified_by or "Awaiting sign-off",
         "recordedBy": d.recorded_by,
-        "photoUrl": f"/api/deliveries/{d.id}/photo" if d.photo_path else None,
+        "photoUrl": f"/api/deliveries/{d.code}/photo" if d.photo_path else None,
+        "signatureUrl": f"/api/deliveries/{d.code}/signature" if d.signature_path else None,
         "tripMinutes": d.trip_minutes,
+        "tripId": f"TR-{3000 + d.trip_id}" if d.trip_id else None,
+        "receiverName": d.receiver_name,
+        "receiverPhone": d.receiver_phone,
+        "verifiedAt": iso(d.verified_at),
+        "verificationNotes": d.verification_notes,
+        "gpsDeviceTime": iso(d.gps_device_time),
     }
 
 

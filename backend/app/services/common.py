@@ -43,6 +43,21 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "geofenceRadiusM": 150,
         "varianceTolerancePct": 5,
         "duplicateSimilarity": 0.55,
+        # --- live tracking (all derived from real telemetry timestamps) ---
+        "liveSeconds": 30,                # LIVE if last fix received within this
+        "offlineSeconds": 180,            # STALE between live and this; OFFLINE beyond
+        "arrivalConsecutiveFixes": 2,     # fixes inside the geofence needed to declare arrival
+        "arrivalMaxAccuracyM": 100,       # fixes less accurate than this never count toward arrival
+        "startMaxAccuracyM": 200,         # START TRIP requires a fix at least this accurate
+        "maxPlausibleSpeedKmh": 160,      # implied speed above this between fixes = GPS jump
+        "lowAccuracyM": 150,              # flag fixes worse than this
+        "deviationThresholdM": 300,       # distance from planned route (plus fix accuracy) counted as off-route
+        "deviationConsecutiveFixes": 3,
+        "prolongedStopMinutes": 10,
+        "maxClockSkewSeconds": 120,       # device timestamps further in the future are rejected
+        "maxBufferedAgeHours": 24,        # oldest offline-buffered fix accepted
+        "requireReceiverName": True,      # delivery verification policy
+        "requireProofForVerification": False,
     },
 }
 
@@ -66,11 +81,29 @@ def put_setting(db: Session, key: str, value: dict[str, Any]) -> dict[str, Any]:
     return get_setting(db, key)
 
 
-def audit(db: Session, user: User | None, action: str, entity: str, entity_id: Any, details: dict | None = None) -> None:
+def audit(db: Session, who, action: str, entity: str, entity_id: Any, details: dict | None = None,
+          before: dict | None = None, after: dict | None = None) -> None:
+    """``who`` is a security.Actor (preferred: carries IP/device) or a User or None (system)."""
+    user = getattr(who, "user", who)
     db.add(AuditLog(
         user_email=user.email if user else "system",
+        user_role=user.role if user else "system",
         action=action,
         entity=entity,
         entity_id=str(entity_id),
         details=details or {},
+        before=before,
+        after=after,
+        ip=getattr(who, "ip", ""),
+        user_agent=getattr(who, "user_agent", ""),
+        device_id=getattr(who, "device_id", ""),
     ))
+
+
+def snapshot(obj, fields: tuple[str, ...]) -> dict:
+    """Small JSON-safe before/after snapshot of selected attributes."""
+    out = {}
+    for f in fields:
+        v = getattr(obj, f, None)
+        out[f] = v.isoformat() if hasattr(v, "isoformat") else v
+    return out

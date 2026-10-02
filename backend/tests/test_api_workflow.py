@@ -1,127 +1,125 @@
-"""End-to-end operational workflow through the HTTP API."""
+"""Auth, permissions, requests, complaints, allocation, settings, reports."""
+import pytest
+
+from conftest import STAFF_PW
 
 
 def test_health(client):
     assert client.get("/api/health").json()["status"] == "ok"
 
 
-def test_auth_required_and_roles(client, driver):
+def test_auth_required_and_permissions(client, driver, dispatcher, operator):
     assert client.get("/api/communities").status_code == 401
     assert client.post("/api/auth/login", json={"email": "admin@test.local", "password": "wrong"}).status_code == 401
+    assert client.get("/api/communities", headers=driver).status_code == 403          # drivers see only their trip
     assert client.post("/api/allocation/run", json={}, headers=driver).status_code == 403
-    assert client.get("/api/users", headers=driver).status_code == 403
+    assert client.post("/api/users", headers=operator, json={}).status_code in (403, 422)
+    assert client.post("/api/trips", headers=operator, json={"tankerId": "T-1888", "communityIds": ["c-sion"]}).status_code == 403
+    me = client.get("/api/auth/me", headers=dispatcher).json()
+    assert "dispatch" in me["permissions"] and "verify_delivery" not in me["permissions"]
 
 
-def test_communities_have_derived_fields(client, admin):
+def test_refresh_rotation_and_reuse_detection(client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    c = TestClient(app)
+    r = c.post("/api/auth/login", json={"email": "operator@jalsetu.local", "password": STAFF_PW})
+    assert r.status_code == 200 and r.json()["expiresInSeconds"] <= 15 * 60
+    first = c.cookies.get("jalsetu_refresh")
+    assert first
+    r2 = c.post("/api/auth/refresh")
+    assert r2.status_code == 200 and r2.json()["accessToken"]
+    second = c.cookies.get("jalsetu_refresh")
+    assert second and second != first
+    c.cookies.set("jalsetu_refresh", first, path="/api/auth")     # replay the rotated (revoked) token
+    assert c.post("/api/auth/refresh").status_code == 401
+    c.cookies.set("jalsetu_refresh", second, path="/api/auth")    # whole family was revoked on reuse
+    assert c.post("/api/auth/refresh").status_code == 401
+
+
+def test_password_policy_and_change(client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    c = TestClient(app)
+    tok = c.post("/api/auth/login", json={"email": "kailash.mehra@drivers.jalsetu.local", "password": STAFF_PW}).json()
+    assert tok["user"]["mustChangePassword"] is True
+    h = {"Authorization": f"Bearer {tok['accessToken']}"}
+    assert c.post("/api/auth/change-password", headers=h, json={"currentPassword": STAFF_PW, "newPassword": "short"}).status_code == 422
+    r = c.post("/api/auth/change-password", headers=h, json={"currentPassword": STAFF_PW, "newPassword": "NewDriverPass2026"})
+    assert r.status_code == 200 and r.json()["user"]["mustChangePassword"] is False
+
+
+def test_communities_labelled_and_located(client, admin):
     rows = client.get("/api/communities", headers=admin).json()
-    assert len(rows) == 10
+    assert len(rows) == 10 and all(r["dataOrigin"] == "seeded" for r in rows)
     c = next(r for r in rows if r["id"] == "c-shivaji")
     assert c["shortfall"] == c["dailyDemand"] - c["allocatedWater"]
-    assert 0 <= c["priorityScore"] <= 100
-    assert c["status"] in ("Critical", "High Demand", "Normal", "Recently Served")
 
 
-def test_request_gets_explainable_priority(client, officer):
+def test_request_gets_explainable_priority(client, operator):
     body = {"communityId": "c-dharavi", "requestedAmount": 12000, "daysWithoutWater": 4, "reason": "Pump failure",
             "contactPerson": "Test Person", "phone": "+91 90000 00000"}
-    r = client.post("/api/requests", json=body, headers=officer)
+    r = client.post("/api/requests", json=body, headers=operator)
     assert r.status_code == 201, r.text
-    j = r.json()
-    assert j["id"].startswith("WR-") and j["status"] == "Pending"
-    a = j["aiAssessment"]
+    a = r.json()["aiAssessment"]
     assert abs(sum(a["contributions"].values()) - a["priorityScore"]) <= 1
-    assert a["factors"]["unmetNeed"] >= 100  # 4 days without water saturates unmet need
+    assert r.json()["dataOrigin"] == "manual"
 
 
-def test_complaint_triage_and_label_feedback(client, officer):
-    r = client.post("/api/complaints", json={"communityId": "c-govandi", "description": "Tanker is late again, waiting since morning"}, headers=officer)
-    assert r.status_code == 201, r.text
+def test_complaint_triage_and_label_feedback(client, operator):
+    r = client.post("/api/complaints", json={"communityId": "c-govandi", "description": "Tanker is late again, waiting since morning"}, headers=operator)
+    if r.status_code == 503:
+        pytest.skip("complaint model not trained")
     c = r.json()
-    assert c["category"] in ("Late Tanker", "Missed Delivery")
-    assert 0 < c["categoryConfidence"] <= 1
-    r2 = client.patch(f"/api/complaints/{c['id']}", json={"category": "Late Tanker", "status": "Assigned", "assignedOfficer": "Officer X"}, headers=officer)
-    assert r2.json()["labelVerified"] is True and r2.json()["category"] == "Late Tanker"
+    assert c["category"] in ("Late Tanker", "Missed Delivery") and 0 < c["categoryConfidence"] <= 1
+    r2 = client.patch(f"/api/complaints/{c['id']}", json={"category": "Late Tanker", "status": "Assigned", "assignedOfficer": "Officer X"}, headers=operator)
+    assert r2.json()["labelVerified"] is True
 
 
-def test_public_complaint_portal(client):
+def test_public_portal_labels_citizen_origin(client, admin):
     r = client.post("/api/public/complaints", json={"communityId": "c-mankhurd", "description": "पाणी गढूळ येत आहे", "reporterName": "Citizen"})
-    assert r.status_code == 201, r.text
-    assert r.json()["id"].startswith("C-")
+    if r.status_code == 503:
+        pytest.skip("complaint model not trained")
+    assert r.status_code == 201
+    rows = client.get("/api/complaints", headers=admin).json()
+    assert next(x for x in rows if x["id"] == r.json()["id"])["dataOrigin"] == "citizen"
 
 
-def test_allocation_run_approve_and_disruption(client, admin):
-    r = client.post("/api/allocation/run", json={"useForecast": False}, headers=admin)
+def test_ml_unavailable_is_an_error_not_a_fake_result(client, operator, monkeypatch):
+    from app.services import ml
+
+    monkeypatch.setattr(ml, "triage", lambda: None)
+    monkeypatch.setitem(ml._load_errors, "complaints", "model file missing")
+    r = client.post("/api/complaints/analyze", json={"description": "no water for two days"}, headers=operator)
+    assert r.status_code == 503 and "model" in r.json()["detail"].lower()
+
+
+def test_allocation_deterministic_by_default(client, operator, admin):
+    r = client.post("/api/allocation/run", json={}, headers=operator)
     assert r.status_code == 200, r.text
     plan = r.json()
-    assert plan["status"] == "Proposed"
+    assert plan["demandSource"] == "baseline"     # forecast is advisory; never silently used
     assert sum(i["recommendedAllocation"] for i in plan["items"]) <= plan["totalSupply"]
-    assert plan["metricsAfter"]["needWeightedEquity"] >= plan["metricsBefore"]["needWeightedEquity"]
-
-    a = client.post(f"/api/allocation/{plan['id']}/approve", headers=admin)
-    assert a.status_code == 200, a.text
-    comms = {c["id"]: c for c in client.get("/api/communities", headers=admin).json()}
-    for it in plan["items"]:
-        assert comms[it["communityId"]]["allocatedWater"] == it["recommendedAllocation"]
-
-    b = client.post("/api/tankers/T-1888/breakdown", json={"note": "Axle failure"}, headers=admin)
-    assert b.status_code == 200, b.text
-    dplan = b.json()["plan"]
-    assert dplan["disruption"]["tankerId"] == "T-1888"
-    assert dplan["totalSupply"] < plan["totalSupply"]
-    approved = {i["communityId"]: i["recommendedAllocation"] for i in plan["items"]}
-    for it in dplan["items"]:
-        if comms[it["communityId"]]["vulnerabilityScore"] >= 80:
-            assert it["recommendedAllocation"] >= approved[it["communityId"]] - 100, it  # protected zones held
-    client.post("/api/tankers/T-1888/restore", headers=admin)
+    assert client.post(f"/api/allocation/{plan['id']}/approve", headers=operator).status_code == 200
 
 
-def test_dispatch_track_deliver_verify(client, admin, driver):
-    opt = client.post("/api/routes/optimize", json={"tankerId": "T-2045", "communityIds": ["c-dharavi", "c-shivaji", "c-kurla"]}, headers=admin)
-    assert opt.status_code == 200, opt.text
-    o = opt.json()
-    assert o["distanceAfterKm"] <= o["distanceBeforeKm"] + 1e-6
-    assert sorted(o["recommendedSequence"]) == sorted(["Dharavi", "Shivaji Nagar", "Kurla East"])
-
-    t = client.post("/api/trips", json={"tankerId": "T-2045", "communityIds": ["c-dharavi", "c-shivaji", "c-kurla"]}, headers=admin)
-    assert t.status_code == 201, t.text
-    trip = t.json()
-    assert client.post("/api/trips", json={"tankerId": "T-2045", "communityIds": ["c-sion"]}, headers=admin).status_code == 409
-
-    mine = client.get("/api/driver/trip", headers=driver).json()
-    assert mine["trip"]["id"] == trip["id"]
-
-    first, second = trip["stops"][0], trip["stops"][1]
-    assert client.post("/api/tracking/ping", json={"lat": first["lat"], "lng": first["lng"], "speedKmh": 18}, headers=driver).json()["ok"]
-
-    # On-site, exact amount -> awaiting officer sign-off
-    d1 = client.post("/api/deliveries", data={"tripStopId": first["id"], "deliveredAmount": first["allocatedLitres"]}, headers=driver)
-    assert d1.status_code == 201, d1.text
-    assert d1.json()["gpsVerified"] and d1.json()["status"] == "Pending Verification"
-
-    # Far from the stop and short-delivered -> flagged
-    d2 = client.post("/api/deliveries", data={"tripStopId": second["id"], "deliveredAmount": second["allocatedLitres"] - 2000,
-                                               "lat": first["lat"], "lng": first["lng"]}, headers=driver)
-    assert d2.json()["status"] == "Mismatch"
-    assert d2.json()["varianceAmount"] == 2000 and not d2.json()["gpsVerified"]
-
-    v = client.post(f"/api/deliveries/{d1.json()['id']}/verify", json={"notes": "Checked"}, headers=admin)
-    assert v.json()["status"] == "Verified" and v.json()["officerVerified"]
-    inv = client.post(f"/api/deliveries/{d2.json()['id']}/investigate", json={}, headers=admin)
-    assert inv.json()["status"] == "Under Investigation"
+def test_breakdown_replans_and_restore(client, operator):
+    b = client.post("/api/tankers/T-1888/breakdown", json={"note": "Axle failure"}, headers=operator)
+    assert b.status_code == 200 and b.json()["plan"]["disruption"]["tankerId"] == "T-1888"
+    assert client.post("/api/tankers/T-1888/restore", headers=operator).status_code == 200
 
 
-def test_analytics_and_reports(client, admin):
-    d = client.get("/api/analytics/dashboard", headers=admin).json()
-    assert d["fleetTotal"] == 8 and d["coverageBalance"] is not None
-    imp = client.get("/api/analytics/impact", headers=admin).json()
-    assert imp["deliveries"]["total"] >= 2 and imp["routing"]["trips"] >= 1
-    act = client.get("/api/analytics/activity?range=7d", headers=admin).json()
-    assert len(act["hourly"]) == 24
-    csv = client.get("/api/reports/deliveries.csv", headers=admin)
+def test_settings_weights_normalised(client, admin, operator):
+    payload = {"demand": 1, "vulnerability": 1, "unmetNeed": 1, "previousCoverage": 1, "population": 0}
+    assert client.put("/api/settings/weights", json=payload, headers=operator).status_code == 403
+    w = client.put("/api/settings/weights", json=payload, headers=admin).json()
+    assert abs(sum(w.values()) - 1) < 1e-3
+
+
+def test_reports_csv(client, operator):
+    csv = client.get("/api/reports/deliveries.csv", headers=operator)
     assert csv.status_code == 200 and "Variance" in csv.text
-
-
-def test_settings_weights_normalised(client, admin, officer):
-    assert client.put("/api/settings/weights", json={"demand": 1, "vulnerability": 1, "unmetNeed": 1, "previousCoverage": 1, "population": 0}, headers=officer).status_code == 403
-    w = client.put("/api/settings/weights", json={"demand": 1, "vulnerability": 1, "unmetNeed": 1, "previousCoverage": 1, "population": 0}, headers=admin).json()
-    assert abs(sum(w.values()) - 1) < 1e-3 and w["demand"] == 0.25

@@ -5,36 +5,45 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_settings
+from .config import INSECURE_JWT_SECRETS, get_settings
 from .db import SessionLocal, init_db
-from .routers import allocation, analytics, auth, communities, complaints, fleet, requests, system
+from .routers import allocation, analytics, auth, communities, complaints, disasters, fleet, ops, requests, system, tracking, trips
 from .security import user_from_token
 from .services import ml
 from .services.realtime import hub
 
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("jalsetu")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.environment == "production" and settings.jwt_secret == "change-me-in-production":
-        raise RuntimeError("Set JWT_SECRET before running in production")
+    if settings.jwt_secret in INSECURE_JWT_SECRETS or len(settings.jwt_secret) < 32:
+        if settings.is_production:
+            raise RuntimeError("Set a strong JWT_SECRET (>= 32 chars) before running in production")
+        log.warning("JWT_SECRET is weak or default. Acceptable for local development only.")
     init_db()
     hub.bind_loop(asyncio.get_running_loop())
-    # Load models off the request path (the embedding model takes a few seconds).
     threading.Thread(target=lambda: (ml.triage(), ml.forecaster()), daemon=True).start()
+    task = None
+    if settings.run_background_jobs:
+        from .ingestion.jobs import loop
+
+        task = asyncio.create_task(loop())
     yield
+    if task:
+        task.cancel()
 
 
 app = FastAPI(
     title=settings.app_name,
-    version="1.0.0",
-    description="Equitable municipal water allocation, complaint intelligence, fleet routing and proof-of-delivery.",
+    version="2.0.0",
+    description="Water logistics, disaster intelligence and real-time tanker operations.",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -45,7 +54,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, communities, requests, complaints, allocation, fleet, analytics, system):
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
+for r in (auth, communities, requests, complaints, allocation, fleet, trips, tracking, disasters, ops, analytics, system):
     app.include_router(r.router, prefix="/api")
 
 
@@ -54,7 +74,7 @@ async def websocket(ws: WebSocket):
     token = ws.query_params.get("token", "")
     with SessionLocal() as db:
         user = user_from_token(db, token)
-    if user is None:
+    if user is None or user.role == "driver":
         await ws.close(code=4401)
         return
     await hub.connect(ws)

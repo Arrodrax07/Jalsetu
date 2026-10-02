@@ -15,7 +15,7 @@ from ..config import BACKEND_DIR, get_settings
 from ..db import get_db
 from ..models import AllocationPlan, AuditLog, Complaint, Delivery, User, WaterRequest
 from ..schemas import OperationsIn, WeightsIn
-from ..security import admin_only, any_user, staff
+from ..security import any_user, require
 from ..services import ml
 from ..services.common import DEFAULT_SETTINGS, audit, get_setting, put_setting
 from ..services.realtime import hub
@@ -36,7 +36,7 @@ def get_settings_(db: Session = Depends(get_db), _: User = Depends(any_user)):
 
 
 @router.put("/settings/weights")
-def put_weights(body: WeightsIn, db: Session = Depends(get_db), admin: User = Depends(admin_only)):
+def put_weights(body: WeightsIn, db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
     w = body.model_dump(by_alias=True)
     total = sum(w.values())
     if total <= 0:
@@ -51,7 +51,7 @@ def put_weights(body: WeightsIn, db: Session = Depends(get_db), admin: User = De
 
 
 @router.put("/settings/operations")
-def put_operations(body: OperationsIn, db: Session = Depends(get_db), admin: User = Depends(admin_only)):
+def put_operations(body: OperationsIn, db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
     current = get_setting(db, "operations")
     current.update(body.model_dump(by_alias=True, exclude_none=True))
     value = put_setting(db, "operations", current)
@@ -70,7 +70,7 @@ _retrain_state = {"running": False, "log": "", "returncode": None}
 
 
 @router.post("/ml/retrain")
-def retrain(target: str = Query("all", pattern="^(all|complaints|demand)$"), admin: User = Depends(admin_only), db: Session = Depends(get_db)):
+def retrain(target: str = Query("all", pattern="^(all|complaints|demand)$"), admin: User = Depends(require("manage_settings")), db: Session = Depends(get_db)):
     """Retrain in a background process using real labelled data from this database, then hot-reload."""
     if _retrain_state["running"]:
         raise HTTPException(409, "A retrain is already running")
@@ -98,15 +98,21 @@ def retrain(target: str = Query("all", pattern="^(all|complaints|demand)$"), adm
 
 
 @router.get("/ml/retrain")
-def retrain_status(_: User = Depends(admin_only)):
+def retrain_status(_: User = Depends(require("manage_settings"))):
     return _retrain_state
 
 
 @router.get("/audit")
-def audit_log(limit: int = 200, db: Session = Depends(get_db), _: User = Depends(admin_only)):
-    rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(min(limit, 1000)))
-    return [{"id": r.id, "user": r.user_email, "action": r.action, "entity": r.entity, "entityId": r.entity_id,
-             "details": r.details, "createdAt": iso(r.created_at)} for r in rows]
+def audit_log(limit: int = 200, entity: str | None = None, entity_id: str | None = None, db: Session = Depends(get_db), _: User = Depends(require("manage_settings"))):
+    q = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(min(limit, 1000))
+    if entity:
+        q = q.where(AuditLog.entity == entity)
+    if entity_id:
+        q = q.where(AuditLog.entity_id == entity_id)
+    rows = db.scalars(q)
+    return [{"id": r.id, "user": r.user_email, "role": r.user_role, "action": r.action, "entity": r.entity, "entityId": r.entity_id,
+             "details": r.details, "before": r.before, "after": r.after, "ip": r.ip, "deviceId": r.device_id, "userAgent": r.user_agent,
+             "createdAt": iso(r.created_at)} for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +130,7 @@ def _csv(name: str, headers: list[str], rows: list[list]) -> StreamingResponse:
 
 
 @router.get("/reports/{kind}.csv")
-def report(kind: str, db: Session = Depends(get_db), _: User = Depends(staff)):
+def report(kind: str, db: Session = Depends(get_db), _: User = Depends(require("export_reports"))):
     if kind == "communities":
         v = community_views(db)
         return _csv("communities", ["ID", "Community", "Ward", "Population", "Daily demand (L)", "Allocated (L)", "Coverage %", "Shortfall (L)",

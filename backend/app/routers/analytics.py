@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
 from ..models import AllocationPlan, Community, Complaint, Delivery, Tanker, Trip, User, WaterRequest, utcnow
-from ..security import any_user
+from ..security import require
 from ..services import ml
 from ..services.allocation import AllocationInput, fairness_metrics
 from ..services.common import get_setting
@@ -34,7 +34,7 @@ def current_fairness(views: list[dict]) -> dict:
 
 
 @router.get("/analytics/dashboard")
-def dashboard(db: Session = Depends(get_db), _: User = Depends(any_user)):
+def dashboard(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     now = utcnow()
     views = community_views(db)
     tankers = db.scalars(select(Tanker)).all()
@@ -57,7 +57,7 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(any_user)):
     return {
         "fleetTotal": len(tankers),
         "fleetOperational": sum(1 for t in tankers if t.status != "Maintenance"),
-        "tankersActive": sum(1 for t in tankers if t.status in ("En Route", "Loading")),
+        "tankersActive": sum(1 for t in tankers if t.status in ("On Trip", "Assigned")),
         "communitiesTotal": len(views),
         "communitiesServed": sum(1 for v in views if v["currentCoverage"] >= 85),
         "underserved": sum(1 for v in views if v["currentCoverage"] < 75 or v["status"] == "Critical"),
@@ -77,7 +77,7 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(any_user)):
 
 
 @router.get("/analytics/activity")
-def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"), db: Session = Depends(get_db), _: User = Depends(any_user)):
+def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     """Requests + complaints by hour of day (IST) and by day."""
     now = utcnow()
     since = {"today": now - timedelta(hours=24), "7d": now - timedelta(days=7), "30d": now - timedelta(days=30)}[window]
@@ -97,7 +97,7 @@ def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"
 
 
 @router.get("/analytics/forecast")
-def city_forecast(days: int = Query(7, ge=1, le=14), db: Session = Depends(get_db), _: User = Depends(any_user)):
+def city_forecast(days: int = Query(7, ge=1, le=14), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     communities = db.scalars(select(Community).where(Community.is_active.is_(True))).all()
     if not communities:
         return {"days": [], "communities": [], "weatherSource": None}
@@ -122,7 +122,7 @@ def city_forecast(days: int = Query(7, ge=1, le=14), db: Session = Depends(get_d
 
 
 @router.get("/analytics/impact")
-def impact(db: Session = Depends(get_db), _: User = Depends(any_user)):
+def impact(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     ops = get_setting(db, "operations")
 
     plans = db.scalars(select(AllocationPlan).where(AllocationPlan.status.in_(("Approved", "Superseded"))).order_by(AllocationPlan.created_at)).all()

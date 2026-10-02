@@ -1,5 +1,5 @@
 {
-  "_comment": "Initial master data. Replace with your municipality's service clusters, depots and fleet (or manage them from the admin UI). Populations/demands are tanker-served cluster figures, not whole-locality census counts.",
+  "_comment": "REFERENCE / SEED data (labelled data_origin=seeded in the database and SEEDED in the UI). Not official municipal or census data. Replace with your authority's service clusters, depots and fleet, or manage them in the admin UI.",
   "depots": [
     {
       "name": "Central Water Depot A (Chembur)",
@@ -153,58 +153,76 @@
     {
       "id": "T-2045",
       "vehicleNumber": "MH-01-WT-2045",
-      "driverName": "Rameshwar Yadav",
-      "driverPhone": "+91 98204 88120",
       "capacity": 10000
     },
     {
       "id": "T-1821",
       "vehicleNumber": "MH-01-WT-1821",
-      "driverName": "Dilip Sawant",
-      "driverPhone": "+91 98199 44102",
       "capacity": 12000
     },
     {
       "id": "T-1934",
       "vehicleNumber": "MH-01-WT-1934",
-      "driverName": "Abdul Qadir",
-      "driverPhone": "+91 98201 55904",
       "capacity": 10000
     },
     {
       "id": "T-2102",
       "vehicleNumber": "MH-01-WT-2102",
-      "driverName": "Sanjay Ghag",
-      "driverPhone": "+91 98670 12093",
       "capacity": 15000
     },
     {
       "id": "T-2150",
       "vehicleNumber": "MH-01-WT-2150",
-      "driverName": "Harishankar Tiwari",
-      "driverPhone": "+91 98920 33810",
       "capacity": 10000
     },
     {
       "id": "T-1740",
       "vehicleNumber": "MH-01-WT-1740",
-      "driverName": "Kailash Mehra",
-      "driverPhone": "+91 98701 44523",
       "capacity": 8000
     },
     {
       "id": "T-1888",
       "vehicleNumber": "MH-01-WT-1888",
-      "driverName": "Mahesh Solanki",
-      "driverPhone": "+91 98190 77123",
       "capacity": 12000
     },
     {
       "id": "T-1690",
       "vehicleNumber": "MH-01-WT-1690",
-      "driverName": "Pravin Gaikwad",
-      "driverPhone": "+91 98212 99014",
       "capacity": 10000
+    }
+  ],
+  "tankers_drivers": [
+    {
+      "name": "Rameshwar Yadav",
+      "phone": "+91 98204 88120"
+    },
+    {
+      "name": "Dilip Sawant",
+      "phone": "+91 98199 44102"
+    },
+    {
+      "name": "Abdul Qadir",
+      "phone": "+91 98201 55904"
+    },
+    {
+      "name": "Sanjay Ghag",
+      "phone": "+91 98670 12093"
+    },
+    {
+      "name": "Harishankar Tiwari",
+      "phone": "+91 98920 33810"
+    },
+    {
+      "name": "Kailash Mehra",
+      "phone": "+91 98701 44523"
+    },
+    {
+      "name": "Mahesh Solanki",
+      "phone": "+91 98190 77123"
+    },
+    {
+      "name": "Pravin Gaikwad",
+      "phone": "+91 98212 99014"
     }
   ]
 }

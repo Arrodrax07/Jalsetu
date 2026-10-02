@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..db import get_db
 from ..models import Community, Complaint, User, utcnow
 from ..schemas import ComplaintAnalyzeIn, ComplaintIn, ComplaintUpdate
-from ..security import any_user, staff
+from ..security import require
 from ..services import ml
 from ..services.common import audit, get_setting
 from ..services.realtime import hub
@@ -80,6 +80,7 @@ def _create(db: Session, body: ComplaintIn, source: str, user: User | None) -> d
         recommended_action=a.recommended_action,
         model_version=a.model_version,
         source=source,
+        data_origin="citizen" if source == "citizen" else "manual",
         reporter_name=body.reporter_name,
         reporter_phone=body.reporter_phone,
     )
@@ -94,19 +95,19 @@ def _create(db: Session, body: ComplaintIn, source: str, user: User | None) -> d
 
 
 @router.get("/complaints")
-def list_complaints(db: Session = Depends(get_db), _: User = Depends(any_user)):
+def list_complaints(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     rows = db.scalars(select(Complaint).options(joinedload(Complaint.community)).order_by(Complaint.created_at.desc()))
     return [complaint_view(c) for c in rows]
 
 
 @router.post("/complaints/analyze")
-def analyze(body: ComplaintAnalyzeIn, db: Session = Depends(get_db), _: User = Depends(staff)):
+def analyze(body: ComplaintAnalyzeIn, db: Session = Depends(get_db), _: User = Depends(require("manage_complaints"))):
     """Run the triage model without saving (live preview while typing)."""
     return _analysis_view(_analyse(db, body.description, body.community_id))
 
 
 @router.post("/complaints", status_code=201)
-def create_complaint(body: ComplaintIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def create_complaint(body: ComplaintIn, db: Session = Depends(get_db), user: User = Depends(require("manage_complaints"))):
     return _create(db, body, "officer", user)
 
 
@@ -126,7 +127,7 @@ def public_complaint(body: ComplaintIn, request: Request, db: Session = Depends(
 
 
 @router.patch("/complaints/{code}")
-def update_complaint(code: str, body: ComplaintUpdate, db: Session = Depends(get_db), user: User = Depends(staff)):
+def update_complaint(code: str, body: ComplaintUpdate, db: Session = Depends(get_db), user: User = Depends(require("manage_complaints"))):
     try:
         c = db.get(Complaint, int(code.split("-")[-1]) - 2000)
     except ValueError:

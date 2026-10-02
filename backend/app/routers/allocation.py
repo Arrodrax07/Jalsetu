@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session, selectinload
 from ..db import get_db
 from ..models import AllocationItem, AllocationPlan, Community, Tanker, User, WaterRequest, utcnow
 from ..schemas import AllocationRunIn, BreakdownIn
-from ..security import admin_only, any_user, staff
+from ..domain import TANKER_AVAILABLE, TANKER_MAINTENANCE
+from ..security import require
 from ..services import ml
 from ..services.allocation import AllocationInput, optimise
 from ..services.common import audit, get_setting
@@ -39,7 +40,7 @@ def forecast_demands(communities: list[Community]) -> tuple[dict[str, int], str]
             log.warning("forecast failed for %s: %s", c.id, exc)
     if len(out) != len(communities):
         return {c.id: c.daily_demand for c in communities}, "baseline"
-    return out, "ml-forecast (" + ",".join(sorted(sources)) + ")"
+    return out, "PREDICTED: ml-forecast (" + ",".join(sorted(sources)) + "); advisory, needs real observations for calibration"
 
 
 def latest_plan(db: Session, statuses=("Proposed", "Approved")) -> AllocationPlan | None:
@@ -47,7 +48,7 @@ def latest_plan(db: Session, statuses=("Proposed", "Approved")) -> AllocationPla
                      .options(selectinload(AllocationPlan.items)).order_by(AllocationPlan.created_at.desc()))
 
 
-def run_plan(db: Session, user: User | None, supply: int | None = None, use_forecast: bool = True, disruption: dict | None = None) -> AllocationPlan:
+def run_plan(db: Session, user: User | None, supply: int | None = None, use_forecast: bool = False, disruption: dict | None = None) -> AllocationPlan:
     communities = list(db.scalars(select(Community).where(Community.is_active.is_(True))))
     if not communities:
         raise HTTPException(400, "No active communities configured")
@@ -117,25 +118,25 @@ def run_plan(db: Session, user: User | None, supply: int | None = None, use_fore
 
 
 @router.get("/allocation/current")
-def current_plan(db: Session = Depends(get_db), _: User = Depends(any_user)):
+def current_plan(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     plan = latest_plan(db)
     ops = get_setting(db, "operations")
     return {"plan": plan_view(plan) if plan else None, "fleetSupply": fleet_supply(db, ops["tripsPerDay"])}
 
 
 @router.get("/allocation/history")
-def plan_history(limit: int = 30, db: Session = Depends(get_db), _: User = Depends(any_user)):
+def plan_history(limit: int = 30, db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     plans = db.scalars(select(AllocationPlan).order_by(AllocationPlan.created_at.desc()).limit(min(limit, 200)))
     return [{k: v for k, v in plan_view(p).items() if k != "items"} for p in plans]
 
 
 @router.post("/allocation/run")
-def run(body: AllocationRunIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def run(body: AllocationRunIn, db: Session = Depends(get_db), user: User = Depends(require("run_allocation"))):
     return plan_view(run_plan(db, user, body.total_supply, body.use_forecast))
 
 
 @router.post("/allocation/{plan_id}/approve")
-def approve(plan_id: int, db: Session = Depends(get_db), user: User = Depends(admin_only)):
+def approve(plan_id: int, db: Session = Depends(get_db), user: User = Depends(require("approve_allocation"))):
     plan = db.get(AllocationPlan, plan_id)
     if not plan:
         raise HTTPException(404, "Plan not found")
@@ -160,12 +161,12 @@ def approve(plan_id: int, db: Session = Depends(get_db), user: User = Depends(ad
 
 
 @router.post("/tankers/{tanker_id}/breakdown")
-def breakdown(tanker_id: str, body: BreakdownIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def breakdown(tanker_id: str, body: BreakdownIn, db: Session = Depends(get_db), user: User = Depends(require("report_breakdown"))):
     t = db.get(Tanker, tanker_id)
     if not t:
         raise HTTPException(404, "Tanker not found")
     ops = get_setting(db, "operations")
-    t.status, t.breakdown_note, t.speed_kmh = "Maintenance", body.note, 0
+    t.status, t.breakdown_note = TANKER_MAINTENANCE, body.note
     audit(db, user, "tanker.breakdown", "tanker", t.id, {"note": body.note})
     db.commit()
     hub.publish("tankers.changed")
@@ -176,11 +177,11 @@ def breakdown(tanker_id: str, body: BreakdownIn, db: Session = Depends(get_db), 
 
 
 @router.post("/tankers/{tanker_id}/restore")
-def restore(tanker_id: str, db: Session = Depends(get_db), user: User = Depends(staff)):
+def restore(tanker_id: str, db: Session = Depends(get_db), user: User = Depends(require("report_breakdown"))):
     t = db.get(Tanker, tanker_id)
     if not t:
         raise HTTPException(404, "Tanker not found")
-    t.status, t.breakdown_note = "Idle", None
+    t.status, t.breakdown_note = TANKER_AVAILABLE, None
     audit(db, user, "tanker.restore", "tanker", t.id)
     db.commit()
     hub.publish("tankers.changed")

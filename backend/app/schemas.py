@@ -18,7 +18,7 @@ Urgency = Literal["Low", "Medium", "High", "Critical"]
 RequestStatus = Literal["Pending", "Allocated", "Dispatched", "Delivered", "Rejected"]
 ComplaintStatus = Literal["Pending", "Escalated", "Assigned", "Resolved"]
 Category = Literal["No Water", "Late Tanker", "Insufficient Quantity", "Poor Water Quality", "Missed Delivery", "Billing or Other"]
-Role = Literal["admin", "officer", "driver"]
+Role = Literal["admin", "operator", "dispatcher", "driver"]
 # Format check only: internal deployments often use non-public domains (e.g. *.local, *.gov.in intranets).
 Email = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
 
@@ -31,7 +31,7 @@ class LoginIn(In):
 class UserCreate(In):
     email: Email
     name: str = Field(min_length=2, max_length=120)
-    password: str = Field(min_length=8, max_length=200)
+    password: str = Field(min_length=10, max_length=200)
     role: Role
     designation: str = ""
     ward: str = ""
@@ -45,7 +45,7 @@ class UserUpdate(In):
     ward: str | None = None
     phone: str | None = None
     is_active: bool | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=200)
+    password: str | None = Field(default=None, min_length=10, max_length=200)
 
 
 class CommunityIn(In):
@@ -126,7 +126,8 @@ class TankerUpdate(In):
     driver_name: str | None = None
     driver_phone: str | None = None
     depot_id: int | None = None
-    status: Literal["Idle", "Loading", "En Route", "Maintenance"] | None = None
+    tracking_source: Literal["phone_gps", "vltd", "ais140", "manual"] | None = None
+    vehicle_number: str | None = Field(default=None, min_length=4, max_length=20)
 
 
 class BreakdownIn(In):
@@ -136,7 +137,7 @@ class BreakdownIn(In):
 
 class AllocationRunIn(In):
     total_supply: int | None = Field(default=None, gt=0)
-    use_forecast: bool = True
+    use_forecast: bool = False  # forecast is advisory; allocation defaults to recorded baseline demand
 
 
 class RouteOptimizeIn(In):
@@ -146,16 +147,64 @@ class RouteOptimizeIn(In):
 
 
 class DispatchIn(RouteOptimizeIn):
-    pass
+    driver_user_id: int | None = None
 
 
-class PingIn(In):
+class AssignDriverIn(In):
+    driver_user_id: int
+
+
+class CancelIn(In):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+TelemetrySource = Literal["phone_gps", "vltd", "ais140", "manual"]
+
+
+class StartTripIn(In):
+    lat: float
+    lng: float
+    accuracy_m: float | None = None
+    speed_kmh: float | None = None
+    heading: float | None = None
+    device_time: str
+    source: TelemetrySource = "phone_gps"
+    device_id: str | None = Field(default=None, max_length=80)
+
+
+class TelemetryPoint(In):
+    lat: float
+    lng: float
+    accuracy_m: float | None = None
+    speed_kmh: float | None = None
+    heading: float | None = None
+    device_time: str
+
+
+class TelemetryIn(In):
+    vehicle_id: str
+    trip_id: str | None = None
+    source: TelemetrySource = "phone_gps"
+    device_id: str | None = Field(default=None, max_length=80)
+    points: list[TelemetryPoint] = Field(min_length=1, max_length=500)
+
+
+class AckIn(In):
+    note: str = Field(default="", max_length=1000)
+
+
+class PasswordChangeIn(In):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=10, max_length=200)
+
+
+class DepotIn(In):
+    name: str = Field(min_length=2, max_length=120)
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
-    speed_kmh: float | None = Field(default=None, ge=0, le=200)
-    heading: float | None = None
-    accuracy_m: float | None = None
-    tanker_id: str | None = None  # admins/simulators may post on behalf of a tanker
+    capacity_litres: int | None = Field(default=None, ge=0)
+
+
 
 
 class DeliveryAction(In):
