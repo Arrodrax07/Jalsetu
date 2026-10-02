@@ -1,0 +1,210 @@
+{
+  "_comment": "Initial master data. Replace with your municipality's service clusters, depots and fleet (or manage them from the admin UI). Populations/demands are tanker-served cluster figures, not whole-locality census counts.",
+  "depots": [
+    {
+      "name": "Central Water Depot A (Chembur)",
+      "lat": 19.035,
+      "lng": 72.898
+    }
+  ],
+  "communities": [
+    {
+      "id": "c-shivaji",
+      "name": "Shivaji Nagar",
+      "ward": "M/East Ward",
+      "contactOfficer": "Rajesh Patil (Jal Nigam)",
+      "officerPhone": "+91 98201 44521",
+      "population": 8420,
+      "dailyDemand": 62000,
+      "allocatedWater": 48000,
+      "vulnerabilityScore": 88,
+      "lat": 19.0607,
+      "lng": 72.9264,
+      "previousAllocation": 40000
+    },
+    {
+      "id": "c-kurla",
+      "name": "Kurla East",
+      "ward": "L Ward",
+      "contactOfficer": "Sunil Jadhav",
+      "officerPhone": "+91 98212 90812",
+      "population": 6200,
+      "dailyDemand": 45000,
+      "allocatedWater": 38000,
+      "vulnerabilityScore": 68,
+      "lat": 19.0657,
+      "lng": 72.8837,
+      "previousAllocation": 42000
+    },
+    {
+      "id": "c-dharavi",
+      "name": "Dharavi",
+      "ward": "G/North Ward",
+      "contactOfficer": "Anand Shinde",
+      "officerPhone": "+91 98334 11200",
+      "population": 15000,
+      "dailyDemand": 80000,
+      "allocatedWater": 52000,
+      "vulnerabilityScore": 95,
+      "lat": 19.0434,
+      "lng": 72.8567,
+      "previousAllocation": 35000
+    },
+    {
+      "id": "c-govandi",
+      "name": "Govandi",
+      "ward": "M/East Ward",
+      "contactOfficer": "Deepak More",
+      "officerPhone": "+91 98199 44321",
+      "population": 11500,
+      "dailyDemand": 70000,
+      "allocatedWater": 54000,
+      "vulnerabilityScore": 84,
+      "lat": 19.0558,
+      "lng": 72.9158,
+      "previousAllocation": 50000
+    },
+    {
+      "id": "c-mankhurd",
+      "name": "Mankhurd",
+      "ward": "M/East Ward",
+      "contactOfficer": "Pooja Kulkarni",
+      "officerPhone": "+91 98450 78219",
+      "population": 9800,
+      "dailyDemand": 58000,
+      "allocatedWater": 46000,
+      "vulnerabilityScore": 78,
+      "lat": 19.0522,
+      "lng": 72.9324,
+      "previousAllocation": 45000
+    },
+    {
+      "id": "c-chembur",
+      "name": "Chembur",
+      "ward": "M/West Ward",
+      "contactOfficer": "Vikas Deshmukh",
+      "officerPhone": "+91 98701 54390",
+      "population": 7500,
+      "dailyDemand": 48000,
+      "allocatedWater": 44000,
+      "vulnerabilityScore": 55,
+      "lat": 19.0622,
+      "lng": 72.8995,
+      "previousAllocation": 46000
+    },
+    {
+      "id": "c-sion",
+      "name": "Sion",
+      "ward": "F/North Ward",
+      "contactOfficer": "Mahesh Gokhale",
+      "officerPhone": "+91 98692 33114",
+      "population": 6800,
+      "dailyDemand": 42000,
+      "allocatedWater": 40000,
+      "vulnerabilityScore": 38,
+      "lat": 19.039,
+      "lng": 72.8619,
+      "previousAllocation": 41000
+    },
+    {
+      "id": "c-wadala",
+      "name": "Wadala",
+      "ward": "F/North Ward",
+      "contactOfficer": "Ramesh Thorat",
+      "officerPhone": "+91 98920 18274",
+      "population": 5400,
+      "dailyDemand": 36000,
+      "allocatedWater": 35000,
+      "vulnerabilityScore": 32,
+      "lat": 19.0178,
+      "lng": 72.856,
+      "previousAllocation": 35000
+    },
+    {
+      "id": "c-bandra",
+      "name": "Bandra East",
+      "ward": "H/East Ward",
+      "contactOfficer": "Ganesh Sawant",
+      "officerPhone": "+91 98200 66543",
+      "population": 6100,
+      "dailyDemand": 40000,
+      "allocatedWater": 39000,
+      "vulnerabilityScore": 28,
+      "lat": 19.0596,
+      "lng": 72.8465,
+      "previousAllocation": 40000
+    },
+    {
+      "id": "c-vikhroli",
+      "name": "Vikhroli",
+      "ward": "S Ward",
+      "contactOfficer": "Sachin Kamble",
+      "officerPhone": "+91 98190 22345",
+      "population": 8900,
+      "dailyDemand": 55000,
+      "allocatedWater": 45000,
+      "vulnerabilityScore": 65,
+      "lat": 19.111,
+      "lng": 72.9277,
+      "previousAllocation": 48000
+    }
+  ],
+  "tankers": [
+    {
+      "id": "T-2045",
+      "vehicleNumber": "MH-01-WT-2045",
+      "driverName": "Rameshwar Yadav",
+      "driverPhone": "+91 98204 88120",
+      "capacity": 10000
+    },
+    {
+      "id": "T-1821",
+      "vehicleNumber": "MH-01-WT-1821",
+      "driverName": "Dilip Sawant",
+      "driverPhone": "+91 98199 44102",
+      "capacity": 12000
+    },
+    {
+      "id": "T-1934",
+      "vehicleNumber": "MH-01-WT-1934",
+      "driverName": "Abdul Qadir",
+      "driverPhone": "+91 98201 55904",
+      "capacity": 10000
+    },
+    {
+      "id": "T-2102",
+      "vehicleNumber": "MH-01-WT-2102",
+      "driverName": "Sanjay Ghag",
+      "driverPhone": "+91 98670 12093",
+      "capacity": 15000
+    },
+    {
+      "id": "T-2150",
+      "vehicleNumber": "MH-01-WT-2150",
+      "driverName": "Harishankar Tiwari",
+      "driverPhone": "+91 98920 33810",
+      "capacity": 10000
+    },
+    {
+      "id": "T-1740",
+      "vehicleNumber": "MH-01-WT-1740",
+      "driverName": "Kailash Mehra",
+      "driverPhone": "+91 98701 44523",
+      "capacity": 8000
+    },
+    {
+      "id": "T-1888",
+      "vehicleNumber": "MH-01-WT-1888",
+      "driverName": "Mahesh Solanki",
+      "driverPhone": "+91 98190 77123",
+      "capacity": 12000
+    },
+    {
+      "id": "T-1690",
+      "vehicleNumber": "MH-01-WT-1690",
+      "driverName": "Pravin Gaikwad",
+      "driverPhone": "+91 98212 99014",
+      "capacity": 10000
+    }
+  ]
+}

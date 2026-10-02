@@ -1,171 +1,118 @@
 # JalSetu AI (जलसेतु)
-> **"Fair Water. Stronger Communities."**  
-> **Problem Statement ID:** PS 11 — Community Water-Supply Allocation and Complaint Intelligence  
-> **Domain:** Community Services  
-> **Team:** Ecoders
+> **Fair Water. Stronger Communities.** — equitable municipal water allocation, complaint intelligence, tanker routing and verified delivery.
+> Problem statement PS 11 · Community Services · Team Ecoders
 
----
+JalSetu is a working system for a municipal water department that supplies
+water-stressed communities by tanker. It decides **who gets how much water** (fairly and
+explainably), **routes and tracks the tankers**, **verifies every delivery**, and turns citizen
+complaints in English, Hinglish, Hindi and Marathi into prioritised, de-duplicated tickets.
 
-## 1. Project Overview
+## What's real
 
-Water-stressed urban communities often experience severe water inequality: municipal tankers and piped supplies are frequently distributed based on vocal pressure or ad-hoc scheduling, leaving vulnerable and informal settlements critically underserved. Furthermore, citizen grievances, tanker tracking, and proof-of-delivery operate in disconnected silos.
+| Capability | How it works |
+|---|---|
+| Accounts & roles | JWT auth, bcrypt passwords; admin / field officer / driver; every action audit-logged |
+| Data | SQLAlchemy on SQLite (dev) or PostgreSQL (prod); all KPIs computed live from records |
+| Complaint triage (ML) | Multilingual MiniLM sentence embeddings + TF-IDF → logistic regression. **80% category accuracy on unseen phrasings**; officer corrections feed retraining |
+| Duplicate detection (ML) | Character n-gram + semantic embedding similarity within a community, 72 h window |
+| Demand forecast (ML) | Gradient boosting on **real Open-Meteo weather** (2019–2025 history, live 16-day forecast); 80% interval |
+| Fair allocation | Exact convex optimisation: survival floor → protected communities → min coverage → weighted proportional fairness; Jain's-index fairness reporting |
+| Disruption handling | Report a tanker breakdown → supply recomputed → plan re-optimised with vulnerable communities held harmless |
+| Routing | **Real road network** via OSRM; priority-aware stop sequencing; fuel and CO₂ savings vs the entered order |
+| Live tracking | Driver phone GPS → API → WebSocket fan-out to the control room map |
+| Proof of delivery | GPS geofence check, volume variance vs allocation, meter photo, officer sign-off |
+| Citizen portal | Public `/report` page; complaint classified instantly, ticket ID returned |
+| Reports | Server-side CSV exports + printable daily summary |
 
-**JalSetu AI** is a complete, civic-technology command center engineered to ensure **equitable, transparent, and resilient municipal water allocation**. The platform unifies demand aggregation, transparent AI priority scoring, automated complaint intelligence, dynamic fleet reallocation, route optimization, real-time GPS telemetry, and proof-of-delivery (POD) verification into an intuitive, zero-cost, self-contained prototype.
+Model details, metrics and limitations: [ml/MODEL_CARD.md](ml/MODEL_CARD.md).
 
----
+## Architecture
 
-## 2. Key Features & Demonstrations
+```
+ Citizens (/report) ─┐                                   ┌─ Open-Meteo (weather, free)
+ Control room (web) ─┼─ HTTPS / WebSocket ─▶  FastAPI  ──┼─ OSRM (road routing)
+ Drivers (phone)  ───┘                        backend   └─ jalsetu_ml (models, in-process)
+                                                 │
+                                         PostgreSQL / SQLite
+```
 
-### 1. Command Center Dashboard
-- **8 Live Civic KPIs:** Active Requests, Critical Shortfalls, Tankers Active, Communities Served, Underserved Wards, Pending Complaints, Mean Delivery Time, and Coverage Fairness Index.
-- **Interactive Geospatial Map:** Custom Leaflet map with status markers (Blue: Normal, Orange: High Demand, Red: Critical/Pulsing, Green: Recently Served, Tanker Fleet Pins) with interactive popups.
-- **Live Operations Stream:** Real-time progress bars and status badges for active municipal tankers.
+```
+.
+├── backend/    FastAPI API, optimisers, routing, auth, tests        → backend/README.md
+├── frontend/   React web app (control room, driver app, citizen portal) → frontend/README.md
+├── ml/         jalsetu_ml package: training, evaluation, inference  → ml/README.md, ml/MODEL_CARD.md
+├── docker-compose.yml   Postgres + model training job + API + nginx-served web app
+├── setup.ps1 / setup.bat   one-time local setup (Windows)
+└── start.ps1 / start.bat   run API + web app locally
+```
 
-### 2. Community Requests & AI Assessment
-- Filterable and searchable requisition board.
-- **`+ Create Water Request` Modal:** Allows filing community water requirements.
-- **"Analyze Request with AI":** Evaluates population density, consecutive dry days, and demographic vulnerability to calculate a transparent **0–100 Priority Score** with plain-language civic justification.
+Each folder is self-contained with its own README and dependency manifest
+(`backend/requirements.txt`, `ml/requirements.txt` + `pyproject.toml`, `frontend/package.json`)
+and `.env.example`.
 
-### 3. Complaint Intelligence Hub
-- Natural Language Processing (NLP) rule-based classifier that extracts:
-  - **Category:** *No Water, Late Tanker, Insufficient Quantity, Poor Water Quality, Missed Delivery, Duplicate Request*
-  - **Sentiment:** *Critical, Negative, Neutral*
-  - **Duplicate Probability:** Identifies redundant tickets (e.g., 94% duplicate match) to prevent fleet misallocation.
-  - **Multi-Ticket Clustering:** Flags repeated complaints from identical standposts within 48 hours.
-  - **Actions:** One-click *Escalate*, *Assign Officer*, and *Mark Resolved*.
+## Quick start (Windows, local)
 
-### 4. Demand & Vulnerability Analytics
-- Interactive charts powered by Recharts:
-  - *Daily Demand vs Allocated Supply* across wards
-  - *Shortfall Rankings* isolating emergency areas
-  - *Socioeconomic Vulnerability Distribution*
-  - *Hourly Requisition Profile* with Time Filters (*Today, 7 Days, 30 Days*).
+Prerequisites: Python 3.11+, Node.js 20+, internet access (weather, routing, one-time model download).
 
-### 5. Fair Allocation AI Engine (Core Differentiator)
-- **Multi-Stage Animated Pipeline:**
-  `Analyzing demand...` ➔ `Checking vulnerability...` ➔ `Reviewing allocations...` ➔ `Calculating unmet need...` ➔ `Optimizing fairness...` ➔ `Plan Ready!`
-- **Transparent Factor Weighting:**
-  - Demand Severity: **35%**
-  - Socioeconomic Vulnerability: **30%**
-  - Unmet Need & Dry Days: **20%**
-  - Historical Coverage Gap: **10%**
-  - Impacted Population: **5%**
-- **Measurable Equity Leap:** Demonstrates fairness balance jump from **62% (pre-AI)** to **84% (AI-optimized)**.
-- **Approve Allocation:** Commits recommended quotas directly to active municipal dispatch queues.
+```powershell
+.\setup.ps1     # venv + deps, backend\.env with random JWT secret, trains ML models (~5–10 min once), seeds DB, npm ci
+.\start.ps1     # API on :8000 (docs at /docs), web app on :5173
+```
 
-### 6. Dynamic Reallocation Simulation
-- **"Simulate Supply Disruption":** Simulates sudden breakdown of Tanker T-2045 (12,000 L deficit).
-- **Automated AI Protection:** Instantly recalculates allocations city-wide, ensuring high-vulnerability informal zones (Shivaji Nagar, Dharavi) remain **100% protected** by absorbing reserves from lower-stress wards.
+Sign in with the admin from `backend\.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, default
+`admin@jalsetu.local` / `ChangeMe!2026`; **change it**). Setup also creates
+`officer@jalsetu.local` and one driver account per tanker
+(e.g. `rameshwar.yadav@drivers.jalsetu.local`) with the same password.
 
-### 7. Fleet Route Optimizer
-- Traveling Salesperson heuristic minimizing travel distance while honoring urgent deliveries.
-- **Concrete Savings:**
-  - Distance: **25.6 km ➔ 18.4 km** (**7.2 km / 28% saved**)
-  - Travel Time: **63 min ➔ 47 min** (**16 min saved**)
-  - Direct Fuel Savings: **₹310 per trip**
-  - CO₂ Reduced: **4.8 kg**.
+Typical flow:
+1. **Allocation AI** → *Run allocation* (uses today's weather forecast) → review fairness → *Approve plan*.
+2. **Route & Dispatch** → pick an idle tanker and stops → *Optimise route* → *Dispatch*.
+3. Driver signs in on a phone → *Start* location sharing → records delivery at each stop.
+   (No phone? `backend\.venv\Scripts\python -m scripts.simulate_fleet --email … --password …`
+   drives dispatched tankers along their real routes.)
+4. **Delivery Verification** → sign off or investigate flagged deliveries.
+5. Citizens file complaints at `http://localhost:5173/report`; they appear live in **Complaints**.
 
-### 8. Live GPS Fleet Telemetry
-- Real-time animated moving tanker markers traversing urban corridors.
-- Detailed telemetry card displaying Speedometer (km/h), Water Load gauge (Litres), Driver profile, One-click Call trigger, and Geofence corridor compliance.
+## Deploy with Docker
 
-### 9. Proof-of-Delivery (POD) Verification & Discrepancy Detector
-- Cryptographic Geofence validation (12m radius) and Field Officer digital sign-offs.
-- **Variance Detection:** Highlights discrepancies such as Delivery `#DV-4022` where 12,000 L was allocated but only 7,000 L was delivered (**5,000 L shortage flagged for fraud investigation**).
-
-### 10. Impact Analytics & Fairness Feedback Loop
-- Projected metrics clearly labeled as *Illustrative Demo Metrics / Projected Impact*:
-  - **-28%** Unmet water requests
-  - **-22%** Fleet travel distance
-  - **-35%** Duplicate complaints
-  - **+31%** Improvement in coverage equality balance
-- Before vs AI-Optimized Allocation bar chart.
-- **Fairness Feedback Loop:** Visual 6-phase learning cycle (*Requests ➔ AI Allocation ➔ Delivery ➔ Service Data ➔ Fairness Check ➔ Next Allocation*).
-
-### 11. Guided 11-Step "Pitch Demo" Tour
-- A built-in presenter bar that takes hackathon judges through a 3–5 minute storyline:
-  1. *Identify Underserved Community (Shivaji Nagar)*
-  2. *Review Critical Request WR-1024*
-  3. *AI Assessment & Priority Scoring*
-  4. *Open Fair Allocation Engine*
-  5. *Run AI Resource Allocation*
-  6. *Explainable AI Breakdown & 62% ➔ 84% Balance*
-  7. *Optimize Tanker Route (7.2 km saved)*
-  8. *Dispatch Tanker T-2045*
-  9. *Live GPS Telemetry & Tracking*
-  10. *Proof-of-Delivery Verification (5,000 L Variance)*
-  11. *Impact Analytics & Fairness Feedback Loop*.
-
----
-
-## 3. Tech Stack
-
-- **Frontend:** React 19 + TypeScript + Vite
-- **Styling:** Tailwind CSS (Water-tech palette: Slate, Cyan, Emerald, Amber, Rose)
-- **Icons:** Lucide React
-- **Data Visualizations:** Recharts (Bar, Area, Line, Pie)
-- **Mapping:** Leaflet & React-Leaflet + OpenStreetMap tiles with offline vector fallback
-- **State & Data Store:** Centralized React context backed by browser `localStorage`
-- **Zero-Dependency Guarantee:** Runs 100% locally without external paid APIs, credit cards, or cloud accounts.
-
----
-
-## 4. How to Run the Prototype
-
-### Prerequisites
-- Node.js (v18+ or v22+)
-- npm
-
-### Launch Command
 ```bash
-# 1. Clone repository / open project directory
-cd "c:/VPP Project"
+# .env next to docker-compose.yml
+POSTGRES_PASSWORD=...
+JWT_SECRET=...            # long random string
+ADMIN_PASSWORD=...
 
-# 2. Install dependencies (if not already installed)
-npm install
-
-# 3. Start local development server
-npm run dev
+docker compose up --build   # → http://localhost:8080
 ```
 
-Open your browser at:
+The `train` service trains the models into a shared volume on first start (skipped when
+present). Put a TLS terminator in front (required for driver GPS on phones).
+
+## Tests
+
+```powershell
+cd backend; .venv\Scripts\python -m pytest tests -q        # 24 API/optimiser/routing tests
+cd ml;      ..\backend\.venv\Scripts\python -m pytest tests -q   # 9 model quality gates
+cd frontend; npm run build; npm run lint
 ```
-http://localhost:5173/
-```
 
----
+## Honest limitations
 
-## 5. Demo Credentials & Quick Roles
+* **Bootstrap training data.** No public labelled dataset of Indian water complaints or metered
+  tanker demand exists. The complaint model is trained on a generated multilingual corpus
+  (evaluated on held-out phrasings), and the demand model learns a documented response function
+  driven by real weather. Both have built-in loops to retrain on real officer-verified labels and
+  metered observations from this system's own database. See the model card.
+* Seed communities, fleet and depot (`backend/seed_data/master.json`) are sample master data
+  for Mumbai's eastern suburbs. Replace them with your municipality's data.
+* Uses the public OSRM demo server by default; self-host OSRM for production volume.
+* Single-process realtime (WebSocket hub, rate limits); add Redis before running multiple API
+  workers. No database migrations yet (tables auto-created); add Alembic before the first
+  production schema change.
+* The Docker stack and PostgreSQL path have not been run in this development environment
+  (Docker daemon unavailable); local SQLite has been tested end to end.
 
-Click any of the **One-Click Demo Roles** on the login page:
-1. **Administrator (Commissioner):** Full command center access, allocation approvals, weight tuning.
-2. **Field Officer (Ward M/East):** On-the-ground request logging and POD sign-off.
-3. **Hackathon Pitch Evaluator:** Activates the guided 11-step walkthrough.
+## Roadmap
 
-*(You can also use: `commissioner@jalsetu.gov.in` / any password)*
-
----
-
-## 6. AI Priority Scoring Formula
-
-The core priority score ($P \in [0, 100]$) is calculated as:
-
-$$P = w_d \cdot S_{\text{demand}} + w_v \cdot S_{\text{vuln}} + w_u \cdot S_{\text{unmet}} + w_c \cdot S_{\text{gap}} + w_p \cdot S_{\text{pop}}$$
-
-Where:
-- $S_{\text{demand}} = \min(100, \frac{\text{Demand}}{80,000} \times 100)$
-- $S_{\text{vuln}} = \text{Community Vulnerability Score } (0 - 100)$
-- $S_{\text{unmet}} = \min(100, \frac{\text{Shortfall}}{\text{Daily Demand}} \times 100)$
-- $S_{\text{gap}} = 100 - \text{Current Coverage } (\%)$
-- $S_{\text{pop}} = \min(100, \frac{\text{Population}}{15,000} \times 100)$
-
-Default weights ($w_d=0.35, w_v=0.30, w_u=0.20, w_c=0.10, w_p=0.05$) can be dynamically modified in the **Settings** page with instant live recalculation.
-
----
-
-## 7. Future Scope & Production Roadmap
-
-1. **IoT Ultrasonic Flow Sensors:** Direct hardware telemetry via LoRaWAN/NB-IoT flow meters on tanker discharge nozzles.
-2. **Citizen WhatsApp Chatbot:** Ingesting water requests and grievances in Marathi and Hindi via open-source conversational bots.
-3. **Aadhaar/OTP Citizen Verification:** Community biometric or SMS OTP confirmation upon tanker delivery.
-4. **Predictive Monsoon Groundwater Modeling:** Integrating seasonal rainfall and reservoir capacity forecasts.
+SMS/WhatsApp notifications and complaint intake (Twilio / WhatsApp Business API) · IoT flow
+meters on tanker outlets posting delivered litres · Alembic migrations · Redis pub/sub for
+multi-worker realtime · festival/event calendar in the demand model · per-ward officer scoping.

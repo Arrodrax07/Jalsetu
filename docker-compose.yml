@@ -1,0 +1,48 @@
+# Production-like stack:  docker compose up --build   ->  http://localhost:8080
+# Set JWT_SECRET, POSTGRES_PASSWORD and ADMIN_PASSWORD in a .env file next to this file first.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jalsetu
+      POSTGRES_USER: jalsetu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jalsetu"]
+      interval: 5s
+      retries: 20
+
+  # One-shot: trains the ML models into the shared volume if they are not there yet.
+  train:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    working_dir: /app/ml
+    command: ["sh", "-c", "test -f artifacts/complaint_classifier.joblib && test -f artifacts/demand_forecaster.joblib || python -m jalsetu_ml.train all"]
+    volumes: [models:/app/ml/artifacts]
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://jalsetu:${POSTGRES_PASSWORD}@db:5432/jalsetu
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@jalsetu.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
+    volumes:
+      - models:/app/ml/artifacts
+      - uploads:/app/backend/uploads
+    depends_on:
+      db: { condition: service_healthy }
+      train: { condition: service_completed_successfully }
+
+  frontend:
+    build: { context: frontend }
+    ports: ["8080:80"]
+    depends_on: [backend]
+
+volumes:
+  pgdata:
+  models:
+  uploads:

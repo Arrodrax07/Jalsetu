@@ -1,0 +1,11 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/dist
+backend/*.db*
+backend/uploads
+backend/.env
+ml/artifacts/*.joblib
+ml/artifacts/embeddings_cache
+ml/data/raw
+.git

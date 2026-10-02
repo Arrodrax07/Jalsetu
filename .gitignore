@@ -1,24 +1,39 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
+# Node / Vite
 node_modules
 dist
 dist-ssr
 *.local
+npm-debug.log*
 
-# Editor directories and files
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Secrets & local config
+.env
+!.env.example
+
+# Runtime data
+backend/*.db
+backend/*.db-*
+backend/uploads/
+
+# ML: trained artifacts and caches are reproducible (python -m jalsetu_ml.train all)
+ml/artifacts/*.joblib
+ml/artifacts/embeddings_cache/
+ml/data/raw/
+ml/data/processed/
+
+# Editors / OS
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.sw?
+logs
+*.log

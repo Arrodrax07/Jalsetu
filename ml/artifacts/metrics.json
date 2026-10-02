@@ -1,0 +1,231 @@
+{
+  "complaint_classifier": {
+    "meta": {
+      "model": "tfidf(word1-2+char2-5) + multilingual MiniLM embeddings -> logistic regression",
+      "version": "1.0.0",
+      "trained_at": "2026-10-02T15:21:43",
+      "n_train": 14000,
+      "n_real_labels": 0,
+      "train_seconds": 234.8
+    },
+    "metrics": {
+      "category": {
+        "holdout_unseen_phrasings": {
+          "n": 3000,
+          "accuracy": 0.8003,
+          "macro_f1": 0.8035,
+          "per_class": {
+            "No Water": {
+              "precision": 0.7029,
+              "recall": 0.8173,
+              "f1-score": 0.7558,
+              "support": 498.0
+            },
+            "Late Tanker": {
+              "precision": 0.9847,
+              "recall": 0.9131,
+              "f1-score": 0.9476,
+              "support": 495.0
+            },
+            "Insufficient Quantity": {
+              "precision": 0.7724,
+              "recall": 0.7871,
+              "f1-score": 0.7797,
+              "support": 526.0
+            },
+            "Poor Water Quality": {
+              "precision": 0.6369,
+              "recall": 0.9076,
+              "f1-score": 0.7485,
+              "support": 487.0
+            },
+            "Missed Delivery": {
+              "precision": 0.9462,
+              "recall": 0.7785,
+              "f1-score": 0.8542,
+              "support": 474.0
+            },
+            "Billing or Other": {
+              "precision": 0.9269,
+              "recall": 0.6096,
+              "f1-score": 0.7355,
+              "support": 520.0
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "No Water",
+              "Late Tanker",
+              "Insufficient Quantity",
+              "Poor Water Quality",
+              "Missed Delivery",
+              "Billing or Other"
+            ],
+            "matrix": [
+              [
+                407,
+                0,
+                75,
+                12,
+                4,
+                0
+              ],
+              [
+                7,
+                452,
+                2,
+                7,
+                13,
+                14
+              ],
+              [
+                32,
+                0,
+                414,
+                74,
+                2,
+                4
+              ],
+              [
+                16,
+                7,
+                19,
+                442,
+                1,
+                2
+              ],
+              [
+                87,
+                0,
+                8,
+                5,
+                369,
+                5
+              ],
+              [
+                30,
+                0,
+                18,
+                154,
+                1,
+                317
+              ]
+            ]
+          }
+        },
+        "by_language": {
+          "en": 0.9473,
+          "hi": 0.8344,
+          "hi_latn": 0.6397,
+          "mr": 0.6051
+        }
+      },
+      "severity": {
+        "holdout_unseen_phrasings": {
+          "n": 3000,
+          "accuracy": 0.7103,
+          "macro_f1": 0.6828,
+          "per_class": {
+            "Low": {
+              "precision": 0.7803,
+              "recall": 0.453,
+              "f1-score": 0.5732,
+              "support": 596.0
+            },
+            "Medium": {
+              "precision": 0.6321,
+              "recall": 0.6265,
+              "f1-score": 0.6293,
+              "support": 565.0
+            },
+            "High": {
+              "precision": 0.6126,
+              "recall": 0.7916,
+              "f1-score": 0.6907,
+              "support": 835.0
+            },
+            "Critical": {
+              "precision": 0.8335,
+              "recall": 0.8426,
+              "f1-score": 0.838,
+              "support": 1004.0
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "Low",
+              "Medium",
+              "High",
+              "Critical"
+            ],
+            "matrix": [
+              [
+                270,
+                113,
+                163,
+                50
+              ],
+              [
+                61,
+                354,
+                132,
+                18
+              ],
+              [
+                10,
+                63,
+                661,
+                101
+              ],
+              [
+                5,
+                30,
+                123,
+                846
+              ]
+            ]
+          }
+        },
+        "by_language": {
+          "en": 0.7728,
+          "hi": 0.695,
+          "hi_latn": 0.6343,
+          "mr": 0.6688
+        }
+      }
+    }
+  },
+  "demand_forecaster": {
+    "meta": {
+      "model": "HistGradientBoosting (median + P10/P90 quantile)",
+      "target": "demand_index = daily demand / community baseline",
+      "weather_source": "Open-Meteo archive (ERA5 reanalysis), Mumbai",
+      "weather_range": [
+        "2019-01-01",
+        "2025-12-31"
+      ],
+      "version": "1.0.0",
+      "trained_at": "2026-10-02T15:07:55",
+      "train_seconds": 31.7
+    },
+    "metrics": {
+      "split": "train < 2024-01-01 <= test",
+      "n_train": 21912,
+      "n_test": 8772,
+      "model": {
+        "mae_index": 0.0404,
+        "mape_pct": 3.91
+      },
+      "baseline_static_demand": {
+        "mae_index": 0.2497,
+        "mape_pct": 26.19
+      },
+      "baseline_monthly_seasonal": {
+        "mae_index": 0.0942,
+        "mape_pct": 8.87
+      },
+      "interval_80_coverage_pct": 73.9,
+      "n_real_observations": 0
+    }
+  }
+}
