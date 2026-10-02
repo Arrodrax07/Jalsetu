@@ -16,6 +16,7 @@ venv/
 # Secrets & local config
 .env
 !.env.example
+backend/.seed-credentials.txt
 
 # Runtime data
 backend/*.db

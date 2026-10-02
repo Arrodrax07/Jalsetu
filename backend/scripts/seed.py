@@ -116,10 +116,16 @@ def seed(sample_users: bool, staff_password: str | None) -> None:
                 printed.append(f"{len(made)} staff accounts ({', '.join(made[:3])}{', …' if len(made) > 3 else ''}) "
                                + (f"password (generated, shown once): {pw}" if generated else "password from --staff-password"))
         db.commit()
-    for line in printed:
-        print(line)
     if printed:
-        print("All seeded accounts must change their password at first sign-in.")
+        # Never echo secrets to the console/logs: write them to a git-ignored local file.
+        cred = Path(__file__).resolve().parent.parent / ".seed-credentials.txt"
+        with open(cred, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(printed) + "\nAll seeded accounts must change their password at first sign-in.\n")
+        try:
+            cred.chmod(0o600)
+        except OSError:
+            pass
+        print(f"Created {len(printed)} credential entr{'y' if len(printed) == 1 else 'ies'}; see {cred.name} (git-ignored). Delete it after first sign-in.")
 
 
 def sample_activity() -> None:

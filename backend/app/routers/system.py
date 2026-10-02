@@ -158,4 +158,12 @@ def report(kind: str, db: Session = Depends(get_db), _: User = Depends(require("
             raise HTTPException(404, "No allocation plan yet")
         return _csv(f"allocation-plan-{plan.id}", ["Community", "Demand (L)", "Previous (L)", "Survival floor (L)", "Recommended (L)", "Priority", "Plan status", "Justification"],
                     [[it.community.name, it.demand, it.previous_allocation, it.survival_floor, it.recommended, it.priority_score, plan.status, it.reason] for it in plan.items])
+    if kind == "trips":
+        from ..models import Trip
+        rows = db.scalars(select(Trip).order_by(Trip.created_at.desc()))
+        return _csv("trips", ["Trip", "Vehicle", "Driver", "Status", "Stops", "Created (UTC)", "Started (UTC)", "Arrived (UTC)", "Completed (UTC)",
+                              "Planned km", "GPS km travelled", "Start lat", "Start lng", "Cancel reason"],
+                    [[t.code, t.tanker.vehicle_number, t.driver.name if t.driver else "", t.status, " > ".join(s.community.name for s in t.stops),
+                      iso(t.created_at), iso(t.started_at), iso(t.arrived_at), iso(t.completed_at), t.distance_km, t.distance_travelled_km,
+                      t.start_lat, t.start_lng, t.cancel_reason or ""] for t in rows])
     raise HTTPException(404, "Unknown report")

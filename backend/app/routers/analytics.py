@@ -191,3 +191,54 @@ def impact(db: Session = Depends(get_db), _: User = Depends(require("view_operat
             "open": sum(1 for r in req if r.status in ("Pending", "Allocated", "Dispatched")),
         },
     }
+
+
+@router.get("/analytics/operations")
+def operations_metrics(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+    """Trip / delivery / response metrics from real records only. Null when there is no data for a metric."""
+    from ..models import Anomaly
+
+    now = utcnow()
+    since = now - timedelta(days=days)
+    trips = db.scalars(select(Trip).where(Trip.created_at >= since)).all()
+    done = [t for t in trips if t.status == "Completed"]
+    started = [t for t in trips if t.started_at]
+
+    def avg(xs):
+        xs = [x for x in xs if x is not None]
+        return round(sum(xs) / len(xs), 1) if xs else None
+
+    def mins(a, b):
+        return (b - a).total_seconds() / 60 if a and b else None
+
+    deliveries = db.scalars(select(Delivery).where(Delivery.delivered_at >= since)).all()
+    reqs = db.scalars(select(WaterRequest).where(WaterRequest.created_at >= since)).all()
+    fulfilled = [r for r in reqs if r.fulfilled_at]
+    anomalies = db.scalars(select(Anomaly).where(Anomaly.detected_at >= since)).all()
+    tankers = db.scalars(select(Tanker)).all()
+    # Utilisation: share of the window each vehicle spent between real trip start and completion/now.
+    window_h = days * 24
+    busy_h = sum(((t.completed_at or t.cancelled_at or now) - t.started_at).total_seconds() / 3600 for t in started)
+    by_day: dict[str, dict] = defaultdict(lambda: {"trips": 0, "litres": 0})
+    for t in done:
+        by_day[(t.completed_at + IST).date().isoformat()]["trips"] += 1
+    for d in deliveries:
+        by_day[(d.delivered_at + IST).date().isoformat()]["litres"] += d.delivered_amount
+    return {
+        "windowDays": days,
+        "tripsCreated": len(trips), "tripsStarted": len(started), "tripsCompleted": len(done),
+        "tripsCancelled": sum(t.status == "Cancelled" for t in trips),
+        "completionRatePct": round(100 * len(done) / len(started), 1) if started else None,
+        "avgDispatchToStartMin": avg([mins(t.created_at, t.started_at) for t in started]),
+        "avgStartToArrivalMin": avg([mins(t.started_at, t.arrived_at) for t in started]),
+        "avgStartToCompletionMin": avg([mins(t.started_at, t.completed_at) for t in done]),
+        "gpsKmTravelled": round(sum(t.distance_travelled_km for t in done), 2),
+        "deliveries": len(deliveries), "deliveriesVerified": sum(d.status == "Verified" for d in deliveries),
+        "litresDelivered": sum(d.delivered_amount for d in deliveries),
+        "requestsCreated": len(reqs), "requestsFulfilled": len(fulfilled),
+        "avgRequestToFulfilmentHours": avg([(r.fulfilled_at - r.created_at).total_seconds() / 3600 for r in fulfilled]),
+        "fleetUtilisationPct": round(100 * busy_h / (window_h * max(len(tankers), 1)), 2) if started else None,
+        "anomaliesByKind": dict(Counter(a.kind for a in anomalies)),
+        "routeDeviations": sum(a.kind == "route_deviation" for a in anomalies),
+        "daily": [{"date": k, **v} for k, v in sorted(by_day.items())],
+    }

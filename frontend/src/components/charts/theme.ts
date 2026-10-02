@@ -1,13 +1,15 @@
-// Chart tokens. Categorical order is fixed (validated with the dataviz palette validator: CVD ΔE ≥ 23).
-export const SERIES = ['#0284c7', '#d97706', '#7c3aed'] as const;
-export const REFERENCE = '#94a3b8'; // baselines / targets (neutral, not a series)
-export const GRID = '#e2e8f0';
-export const AXIS_TICK = { fontSize: 11, fill: '#64748b' };
+// Chart tokens for the dark operations surface (#0c121d).
+// Categorical order is fixed; validated with the dataviz palette validator (dark mode: lightness band, chroma,
+// CVD separation ΔE ≥ 22, normal-vision ΔE ≥ 30, contrast ≥ 3:1).
+export const SERIES = ['#0284c7', '#d97706', '#8b5cf6'] as const;
+export const REFERENCE = '#64748b';
+export const GRID = '#1e2a3d';
+export const AXIS_TICK = { fontSize: 11, fill: '#94a3bd' };
 
 export const tooltipStyle = {
-  contentStyle: { borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 10px 15px -3px rgba(15,23,42,.08)' },
-  labelStyle: { fontWeight: 700, color: '#0f172a' },
-  itemStyle: { color: '#334155' },
+  contentStyle: { borderRadius: 10, border: '1px solid #2e3e58', background: '#111927', fontSize: 12, color: '#e6edf6' },
+  labelStyle: { fontWeight: 600, color: '#e6edf6' },
+  itemStyle: { color: '#c7d2e2' },
 };
 
 export const kLitres = (v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v));

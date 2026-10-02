@@ -1,66 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import { Droplets, Send, CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Droplets, Send } from 'lucide-react';
 import { api } from '../services/api';
+import { Button, ErrorBox, Field } from '../components/ui';
 
 export const CitizenPortal: React.FC = () => {
   const [communities, setCommunities] = useState<{ id: string; name: string; ward: string }[]>([]);
-  const [communityId, setCommunityId] = useState('');
+  const [cid, setCid] = useState('');
   const [text, setText] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ id: string; category: string; severity: string; message: string } | null>(null);
-
-  useEffect(() => {
-    api.publicCommunities().then(c => { setCommunities(c); setCommunityId(c[0]?.id || ''); }).catch(e => setError(e.message));
-  }, []);
-
+  useEffect(() => { api.publicCommunities().then(c => { setCommunities(c); setCid(c[0]?.id || ''); }).catch(e => setErr(e.message)); }, []);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try { setTicket(await api.publicComplaint({ communityId, description: text, reporterName: name, reporterPhone: phone })); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setBusy(true); setErr(null);
+    try { setTicket(await api.publicComplaint({ communityId: cid, description: text, reporterName: name, reporterPhone: phone })); }
+    catch (x) { setErr(x instanceof Error ? x.message : String(x)); }
     setBusy(false);
   };
-
-  const input = 'w-full px-3 py-3 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/30';
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white">
-      <header className="bg-sky-700 text-white px-4 py-4">
-        <div className="max-w-lg mx-auto flex items-center gap-2"><Droplets className="w-6 h-6" /><div><p className="font-black">JalSetu · जलसेतु</p><p className="text-xs text-sky-100">Report a water supply problem / पानी की शिकायत दर्ज करें / पाण्याची तक्रार नोंदवा</p></div></div>
+    <div className="min-h-full bg-cc-bg">
+      <header className="border-b border-cc-border bg-cc-surface px-4 py-4">
+        <div className="mx-auto flex max-w-lg items-center gap-2"><Droplets className="h-6 w-6 text-cc-accent" aria-hidden />
+          <div><p className="font-semibold">JalSetu · जलसेतु</p><p className="text-xs text-cc-muted">Report a water supply problem · पानी की शिकायत · पाण्याची तक्रार</p></div></div>
       </header>
-      <main className="max-w-lg mx-auto p-4">
+      <main className="mx-auto max-w-lg p-4">
         {ticket ? (
-          <div className="p-6 rounded-2xl bg-white border border-emerald-200 shadow-subtle text-center space-y-3">
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-            <p className="text-lg font-black text-slate-900">Ticket {ticket.id}</p>
-            <p className="text-sm text-slate-600">{ticket.message}</p>
-            <p className="text-xs text-slate-500">Classified as <strong>{ticket.category}</strong> · priority <strong>{ticket.severity}</strong></p>
-            <button onClick={() => { setTicket(null); setText(''); }} className="text-sm font-semibold text-sky-700">Report another problem</button>
+          <div className="panel space-y-2 p-6 text-center">
+            <CheckCircle2 className="mx-auto h-10 w-10 text-green-400" aria-hidden />
+            <p className="text-lg font-semibold">Ticket {ticket.id}</p>
+            <p className="text-sm text-cc-muted">{ticket.message}</p>
+            <button className="text-sm text-cc-accent hover:underline" onClick={() => { setTicket(null); setText(''); }}>Report another problem</button>
           </div>
         ) : (
-          <form onSubmit={submit} className="p-5 rounded-2xl bg-white border border-slate-200 shadow-subtle space-y-4">
-            <label className="block text-sm font-semibold text-slate-800">Your area
-              <select value={communityId} onChange={e => setCommunityId(e.target.value)} required className={`${input} mt-1`}>
-                {communities.map(c => <option key={c.id} value={c.id}>{c.name} ({c.ward})</option>)}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold text-slate-800">What is the problem? (any language)
-              <textarea rows={5} value={text} onChange={e => setText(e.target.value)} required minLength={5} maxLength={3000} className={`${input} mt-1`}
-                placeholder="e.g. No water for 3 days in lane 4 / 3 दिन से पानी नहीं आया / टँकर आला नाही" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)" className={input} maxLength={120} />
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone (optional)" className={input} maxLength={32} />
-            </div>
-            {error && <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</p>}
-            <button type="submit" disabled={busy || !communityId} className="w-full py-3.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-bold flex items-center justify-center gap-2">
-              {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} Submit complaint
-            </button>
-            <p className="text-[11px] text-slate-500 text-center">Your complaint goes directly to the ward water office. Phone number is used only to contact you about this complaint.</p>
+          <form onSubmit={submit} className="panel space-y-4 p-5">
+            <Field label="Your area"><select className="input" required value={cid} onChange={e => setCid(e.target.value)}>{communities.map(c => <option key={c.id} value={c.id}>{c.name} ({c.ward})</option>)}</select></Field>
+            <Field label="What is the problem? (any language)"><textarea className="input" rows={5} required minLength={5} maxLength={3000} value={text} onChange={e => setText(e.target.value)} placeholder="e.g. No water for 3 days in lane 4 / 3 दिन से पानी नहीं आया / टँकर आला नाही" /></Field>
+            <div className="grid grid-cols-2 gap-3"><input className="input" placeholder="Name (optional)" value={name} onChange={e => setName(e.target.value)} maxLength={120} /><input className="input" type="tel" placeholder="Phone (optional)" value={phone} onChange={e => setPhone(e.target.value)} maxLength={32} /></div>
+            {err && <ErrorBox message={err} />}
+            <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={!cid} icon={<Send className="h-4 w-4" />}>Submit complaint</Button>
+            <p className="text-center text-2xs text-cc-faint">Sent directly to the ward water office. Your phone number is used only to contact you about this complaint.</p>
           </form>
         )}
       </main>

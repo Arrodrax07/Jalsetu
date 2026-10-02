@@ -1,160 +1,155 @@
-import React, { useEffect, useState } from 'react';
-import { Search, MapPin, Phone, Plus, Pencil, Loader2 } from 'lucide-react';
-import { useWaterData } from '../context/WaterDataContext';
-import { StatusBadge } from '../components/common/StatusBadge';
-import { Modal } from '../components/common/Modal';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Crosshair, Pencil, Plus, Warehouse } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
+import { OpsMap } from '../components/map/OpsMap';
+import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, Panel, SlideOver, StatusChip } from '../components/ui';
 import type { Community } from '../types';
-import { dateTime, litres, timeAgo } from '../utils/format';
-
-const input = 'w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20';
+import { litres, timeAgo } from '../utils/format';
 
 export const Communities: React.FC = () => {
-  const { communities, selectedCommunity, setSelectedCommunity, currentUser } = useWaterData();
+  const { communities, depots, can } = useApp();
   const [q, setQ] = useState('');
-  const [editing, setEditing] = useState<Community | 'new' | null>(null);
-  const isAdmin = currentUser?.role === 'admin';
-
-  const rows = communities.filter(c => !q.trim() || [c.name, c.ward, c.contactOfficer].some(v => v.toLowerCase().includes(q.toLowerCase())));
-
+  const [sel, setSel] = useState<Community | null>(null);
+  const [edit, setEdit] = useState<Community | 'new' | null>(null);
+  const [depotOpen, setDepotOpen] = useState(false);
+  const rows = useMemo(() => communities.filter(c => !q || `${c.name} ${c.ward} ${c.districtName} ${c.stateName}`.toLowerCase().includes(q.toLowerCase())), [communities, q]);
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900">Communities</h2>
-          <p className="text-xs text-slate-500 mt-1">{communities.length} service clusters. Coverage, status and priority are computed live from allocations, deliveries and complaints.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-60">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="search" placeholder="Search community, ward, officer…" value={q} onChange={e => setQ(e.target.value)} className={`${input} pl-9 bg-white`} />
-          </div>
-          {isAdmin && <button onClick={() => setEditing('new')} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold"><Plus className="w-4 h-4" />Add</button>}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {rows.map(c => (
-          <button key={c.id} onClick={() => setSelectedCommunity(c)} className="text-left p-4 bg-white rounded-2xl border border-slate-200/90 shadow-subtle hover:shadow-card hover:border-slate-300 transition-all space-y-3">
-            <div className="flex items-start justify-between">
-              <div><h3 className="text-sm font-black text-slate-900">{c.name}</h3><p className="text-[11px] text-slate-500">{c.ward}</p></div>
-              <StatusBadge status={c.status} />
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="p-2 rounded-lg bg-slate-50"><p className="text-[10px] text-slate-400 uppercase">Population</p><p className="font-bold">{c.population.toLocaleString('en-IN')}</p></div>
-              <div className="p-2 rounded-lg bg-slate-50"><p className="text-[10px] text-slate-400 uppercase">Vulnerability</p><p className="font-bold">{c.vulnerabilityScore}</p></div>
-              <div className="p-2 rounded-lg bg-slate-50"><p className="text-[10px] text-slate-400 uppercase">Priority</p><p className="font-bold text-sky-700">{c.priorityScore}</p></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-[11px] text-slate-600 mb-1"><span>Coverage {c.currentCoverage}%</span><span>short {litres(c.shortfall)}</span></div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className={`h-full rounded-full ${c.currentCoverage >= 85 ? 'bg-emerald-500' : c.currentCoverage >= 65 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${c.currentCoverage}%` }} /></div>
-            </div>
-            <p className="text-[11px] text-slate-500">Last delivery {timeAgo(c.lastDelivery)} · {c.openComplaints} open complaint(s)</p>
-          </button>
-        ))}
-      </div>
-
-      {selectedCommunity && <CommunityDetail c={communities.find(x => x.id === selectedCommunity.id) || selectedCommunity} onClose={() => setSelectedCommunity(null)} onEdit={isAdmin ? (c) => { setSelectedCommunity(null); setEditing(c); } : undefined} />}
-      {editing && <CommunityForm initial={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+    <div className="p-4 lg:p-6">
+      <PageHeader title="Communities & depots" subtitle="Service locations with their district/state (from imported boundaries). Coverage, status and priority are computed live."
+        actions={can('manage_master_data') && <>
+          <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => setDepotOpen(true)}>Add depot</Button>
+          <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEdit('new')}>Add community</Button>
+        </>} />
+      <input className="input mb-3 max-w-sm" placeholder="Search name, ward, district, state" value={q} onChange={e => setQ(e.target.value)} aria-label="Search communities" />
+      <Panel bodyClassName="overflow-x-auto">
+        {rows.length === 0 ? <Empty title="No communities" /> : (
+          <table className="table-cc">
+            <thead><tr><th>Community</th><th>District / State</th><th className="text-right">Population</th><th className="text-right">Demand / day</th><th>Coverage</th><th>Status</th><th>Last delivery</th><th>Record</th></tr></thead>
+            <tbody>{rows.map(c => (
+              <tr key={c.id} className="cursor-pointer" onClick={() => setSel(c)}>
+                <td className="font-medium">{c.name}<div className="text-2xs text-cc-faint">{c.ward}</div></td>
+                <td className="text-cc-muted">{c.districtName || '—'}{c.stateName ? `, ${c.stateName}` : ''}</td>
+                <td className="num text-right">{c.population.toLocaleString('en-IN')}</td><td className="num text-right">{litres(c.dailyDemand)}</td>
+                <td><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded-full bg-cc-bg"><div className="h-full rounded-full bg-cc-accent" style={{ width: `${c.currentCoverage}%` }} /></div><span className="num text-xs">{c.currentCoverage}%</span></div></td>
+                <td><StatusChip status={c.status === 'Critical' ? 'Critical' : c.status === 'High Demand' ? 'High' : 'Low'} label={c.status} /></td>
+                <td className="text-cc-muted">{timeAgo(c.lastDelivery)}</td><td><OriginLabel origin={c.dataOrigin} /></td>
+              </tr>))}</tbody>
+          </table>
+        )}
+      </Panel>
+      <p className="mt-2 text-2xs text-cc-faint">Depots: {depots.map(d => `${d.name}${d.dataOrigin === 'seeded' ? ' (reference)' : ''}`).join(' · ') || 'none'}</p>
+      {sel && <CommunityDetail c={sel} onClose={() => setSel(null)} onEdit={can('manage_master_data') ? () => { setEdit(sel); setSel(null); } : undefined} />}
+      {edit && <CommunityForm initial={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+      {depotOpen && <DepotForm onClose={() => setDepotOpen(false)} />}
     </div>
   );
 };
 
-const CommunityDetail: React.FC<{ c: Community; onClose: () => void; onEdit?: (c: Community) => void }> = ({ c, onClose, onEdit }) => {
-  const { requests, complaints, deliveries } = useWaterData();
+const CommunityDetail: React.FC<{ c: Community; onClose: () => void; onEdit?: () => void }> = ({ c, onClose, onEdit }) => {
   const [fc, setFc] = useState<{ weatherSource: string; days: any[] } | null>(null);
-  const [fcErr, setFcErr] = useState<string | null>(null);
-  useEffect(() => { api.communityForecast(c.id, 7).then(setFc).catch(e => setFcErr(e.message)); }, [c.id]);
-
-  const reqs = requests.filter(r => r.communityId === c.id).slice(0, 5);
-  const comps = complaints.filter(x => x.communityId === c.id).slice(0, 5);
-  const dels = deliveries.filter(d => d.communityId === c.id).slice(0, 5);
-
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { api.communityForecast(c.id).then(setFc).catch(e => setErr(e.message)); }, [c.id]);
   return (
-    <Modal isOpen onClose={onClose} title={c.name} subtitle={`${c.ward} · ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`} maxWidth="3xl">
-      <div className="space-y-4 text-xs">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {([['Daily demand', litres(c.dailyDemand)], ['Allocated', `${litres(c.allocatedWater)} (${c.currentCoverage}%)`], ['Shortfall', litres(c.shortfall)], ['Priority', `${c.priorityScore}/100`]] as [string, string][]).map(([k, v]) => (
-            <div key={k} className="p-2.5 rounded-lg bg-slate-50 border border-slate-100"><p className="text-[10px] uppercase font-bold text-slate-400">{k}</p><p className="font-bold text-slate-900">{v}</p></div>
-          ))}
+    <SlideOver open onClose={onClose} title={c.name} subtitle={`${c.ward} · ${c.districtName || 'district unknown'}${c.stateName ? `, ${c.stateName}` : ''}`} width="max-w-lg">
+      <div className="space-y-4">
+        <div className="flex gap-2"><OriginLabel origin={c.dataOrigin} />{onEdit && <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}</div>
+        {c.dataOrigin === 'seeded' && <p className="text-xs text-violet-200">Reference record for demonstration and testing. Population and demand values are not official statistics.</p>}
+        <div>
+          <KV k="Coordinates" v={<span className="num">{c.lat.toFixed(5)}, {c.lng.toFixed(5)}</span>} />
+          <KV k="Population (recorded)" v={<span className="num">{c.population.toLocaleString('en-IN')}</span>} />
+          <KV k="Baseline demand" v={<span className="num">{litres(c.dailyDemand)}/day</span>} />
+          <KV k="Allocated" v={<span className="num">{litres(c.allocatedWater)} ({c.currentCoverage}%)</span>} />
+          <KV k="Vulnerability score" v={<span className="num">{c.vulnerabilityScore}/100 ({c.vulnerability})</span>} />
+          <KV k="Open complaints" v={c.openComplaints} />
+          <KV k="Last delivery" v={timeAgo(c.lastDelivery)} />
+          {c.contactOfficer && <KV k="Contact officer" v={`${c.contactOfficer} ${c.officerPhone}`} />}
         </div>
-        <div className="flex flex-wrap gap-4 text-slate-600">
-          <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Vulnerability {c.vulnerabilityScore} ({c.vulnerability})</span>
-          {c.contactOfficer && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{c.contactOfficer} {c.officerPhone}</span>}
-          {onEdit && <button onClick={() => onEdit(c)} className="ml-auto flex items-center gap-1 text-sky-700 font-semibold"><Pencil className="w-3.5 h-3.5" />Edit</button>}
-        </div>
-
-        <div className="p-3 rounded-xl border border-sky-200 bg-sky-50/60">
-          <p className="font-bold text-sky-900 mb-2">7-day demand forecast {fc && <span className="font-normal text-slate-500">(weather: {fc.weatherSource})</span>}</p>
-          {fcErr ? <p className="text-rose-700">{fcErr}</p> : !fc ? <p className="flex items-center gap-1 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin" />Loading…</p> : (
-            <div className="grid grid-cols-7 gap-1 text-center">
-              {fc.days.map((d: any) => (
-                <div key={d.date} className="p-1.5 rounded-lg bg-white border border-sky-100">
-                  <p className="text-[10px] text-slate-500">{new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short' })}</p>
-                  <p className="font-bold text-slate-900">{Math.round(d.litres_p50 / 1000)}k</p>
-                  <p className="text-[10px] text-slate-500">{d.temp_max}° · {d.precip_mm}mm</p>
-                </div>
-              ))}
-            </div>
+        <div className="rounded-lg border border-cc-border p-3">
+          <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">7-day demand forecast</p><KindLabel kind="predicted" title="Advisory only; not used by allocation unless explicitly selected" /></div>
+          {err ? <p className="text-xs text-cc-muted">{err}</p> : !fc ? <Loading /> : (
+            <>
+              <div className="grid grid-cols-7 gap-1 text-center">{fc.days.map((d: any) => (
+                <div key={d.date} className="rounded bg-cc-raised p-1"><p className="text-2xs text-cc-muted">{new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short' })}</p>
+                  <p className="num text-xs font-semibold">{Math.round(d.litres_p50 / 1000)}k</p><p className="text-[10px] text-cc-faint">{d.temp_max}°</p></div>))}</div>
+              <p className="mt-2 text-2xs text-cc-faint">Weather: {fc.weatherSource}. Demand response learned from a documented simulation driven by real weather; needs real metered observations before production use.</p>
+            </>
           )}
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <List title="Requests" empty="No requests" items={reqs.map(r => ({ k: r.id, a: `${r.id} · ${litres(r.requestedAmount)}`, b: `${r.status} · ${timeAgo(r.submittedAt)}` }))} />
-          <List title="Complaints" empty="No complaints" items={comps.map(x => ({ k: x.id, a: `${x.id} · ${x.category}`, b: `${x.severity} · ${x.status}` }))} />
-          <List title="Deliveries" empty="No deliveries" items={dels.map(d => ({ k: d.id, a: `${d.id} · ${litres(d.deliveredAmount)}`, b: `${d.status} · ${dateTime(d.deliveryTime)}` }))} />
-        </div>
       </div>
-    </Modal>
+    </SlideOver>
   );
 };
 
-const List: React.FC<{ title: string; empty: string; items: { k: string; a: string; b: string }[] }> = ({ title, empty, items }) => (
-  <div className="p-3 rounded-xl border border-slate-200">
-    <p className="font-bold text-slate-800 mb-1.5">{title}</p>
-    {items.length === 0 ? <p className="text-slate-400">{empty}</p> : items.map(i => <div key={i.k} className="py-1 border-b border-slate-50 last:border-0"><p className="font-semibold text-slate-800">{i.a}</p><p className="text-[10px] text-slate-500">{i.b}</p></div>)}
-  </div>
-);
-
 const CommunityForm: React.FC<{ initial: Community | null; onClose: () => void }> = ({ initial, onClose }) => {
-  const { refresh, handleError, addToast } = useWaterData();
+  const { refresh, fail, toast, communities, depots } = useApp();
   const [f, setF] = useState({
     name: initial?.name || '', ward: initial?.ward || '', population: initial?.population || 1000, dailyDemand: initial?.dailyDemand || 10000,
-    allocatedWater: initial?.allocatedWater || 0, vulnerabilityScore: initial?.vulnerabilityScore ?? 50, lat: initial?.lat ?? 19.06, lng: initial?.lng ?? 72.89,
-    contactOfficer: initial?.contactOfficer || '', officerPhone: initial?.officerPhone || '',
+    allocatedWater: initial?.allocatedWater || 0, vulnerabilityScore: initial?.vulnerabilityScore ?? 50,
+    lat: initial?.lat ?? NaN, lng: initial?.lng ?? NaN, contactOfficer: initial?.contactOfficer || '', officerPhone: initial?.officerPhone || '',
   });
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [where, setWhere] = useState<string | null>(null);
+  const hasPos = Number.isFinite(f.lat) && Number.isFinite(f.lng);
   const set = (k: keyof typeof f, v: string) => setF(s => ({ ...s, [k]: typeof s[k] === 'number' ? Number(v) : v }));
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const useDevice = () => {
+    setLocating(true);
+    navigator.geolocation?.getCurrentPosition(p => { setF(s => ({ ...s, lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6) })); setWhere(`Device GPS ± ${Math.round(p.coords.accuracy)} m`); setLocating(false); },
+      e => { fail(new Error(e.message || 'Location unavailable')); setLocating(false); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  };
+  const submit = async () => {
     setBusy(true);
     try {
       if (initial) await api.updateCommunity(initial.id, f); else await api.createCommunity(f);
-      addToast(initial ? 'Community updated' : 'Community added', f.name, 'success');
-      await refresh('communities', 'dashboard');
+      toast(initial ? 'Community updated' : 'Community added', f.name, 'success');
+      await refresh('communities', 'overview');
       onClose();
-    } catch (err) { handleError(err, 'Could not save community'); }
+    } catch (e) { fail(e, 'Could not save'); }
     setBusy(false);
   };
-
-  const field = (k: keyof typeof f, label: string, type = 'text', extra: Record<string, unknown> = {}) => (
-    <div><label className="block text-[11px] font-semibold text-slate-700 mb-1">{label}</label><input type={type} value={f[k] as any} onChange={e => set(k, e.target.value)} className={input} required={k === 'name' || k === 'ward'} {...extra} /></div>
-  );
-
   return (
-    <Modal isOpen onClose={onClose} title={initial ? `Edit ${initial.name}` : 'Add community'} subtitle="Vulnerability score: 0–100 from census / socio-economic survey (higher = more vulnerable)." maxWidth="xl">
-      <form onSubmit={submit} className="grid grid-cols-2 gap-3">
-        {field('name', 'Name')}{field('ward', 'Ward')}
-        {field('population', 'Population', 'number', { min: 1 })}{field('dailyDemand', 'Baseline daily demand (L)', 'number', { min: 1 })}
-        {field('allocatedWater', 'Current allocation (L/day)', 'number', { min: 0 })}{field('vulnerabilityScore', 'Vulnerability score', 'number', { min: 0, max: 100 })}
-        {field('lat', 'Latitude', 'number', { step: 'any', min: -90, max: 90 })}{field('lng', 'Longitude', 'number', { step: 'any', min: -180, max: 180 })}
-        {field('contactOfficer', 'Contact officer')}{field('officerPhone', 'Officer phone')}
-        <div className="col-span-2 flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
-          <button type="submit" disabled={busy} className="px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 rounded-xl">{busy ? 'Saving…' : 'Save'}</button>
+    <Dialog open onClose={onClose} title={initial ? `Edit ${initial.name}` : 'Add community'} subtitle="Click the map, enter coordinates, or use this device's location. District/state are assigned from boundaries on save." wide>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Name" className="col-span-2"><input className="input" value={f.name} onChange={e => set('name', e.target.value)} /></Field>
+          <Field label="Ward / locality" className="col-span-2"><input className="input" value={f.ward} onChange={e => set('ward', e.target.value)} /></Field>
+          <Field label="Latitude"><input className="input num" type="number" step="any" value={Number.isFinite(f.lat) ? f.lat : ''} onChange={e => set('lat', e.target.value)} /></Field>
+          <Field label="Longitude"><input className="input num" type="number" step="any" value={Number.isFinite(f.lng) ? f.lng : ''} onChange={e => set('lng', e.target.value)} /></Field>
+          <div className="col-span-2 flex items-center gap-2"><Button size="sm" icon={<Crosshair className="h-3.5 w-3.5" />} loading={locating} onClick={useDevice}>Use this device's location</Button>{where && <Chip tone="ok">{where}</Chip>}</div>
+          <Field label="Population (recorded)"><input className="input" type="number" min={1} value={f.population} onChange={e => set('population', e.target.value)} /></Field>
+          <Field label="Baseline demand (L/day)"><input className="input" type="number" min={1} value={f.dailyDemand} onChange={e => set('dailyDemand', e.target.value)} /></Field>
+          <Field label="Current allocation (L/day)"><input className="input" type="number" min={0} value={f.allocatedWater} onChange={e => set('allocatedWater', e.target.value)} /></Field>
+          <Field label="Vulnerability (0–100)" hint="From census / survey"><input className="input" type="number" min={0} max={100} value={f.vulnerabilityScore} onChange={e => set('vulnerabilityScore', e.target.value)} /></Field>
+          <Field label="Contact officer"><input className="input" value={f.contactOfficer} onChange={e => set('contactOfficer', e.target.value)} /></Field>
+          <Field label="Officer phone"><input className="input" value={f.officerPhone} onChange={e => set('officerPhone', e.target.value)} /></Field>
         </div>
-      </form>
-    </Modal>
+        <div className="h-[420px] overflow-hidden rounded-lg border border-cc-border">
+          <OpsMap vehicles={[]} communities={[...communities.filter(c => c.id !== initial?.id),
+            ...(hasPos ? [{ ...(initial || {}), id: '__new', name: f.name || 'New', lat: f.lat, lng: f.lng, status: 'Normal', dataOrigin: 'manual' } as unknown as Community] : [])]}
+            depots={depots} onMapClick={(lat, lng) => { setF(s => ({ ...s, lat: +lat.toFixed(6), lng: +lng.toFixed(6) })); setWhere('Picked on map'); }}
+            fit={hasPos ? { center: [f.lat, f.lng], zoom: 15, key: initial?.id || 'new' } : null} />
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={busy} disabled={!f.name || !f.ward || !hasPos} onClick={submit}>Save</Button></div>
+    </Dialog>
+  );
+};
+
+const DepotForm: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { refresh, fail, toast } = useApp();
+  const [f, setF] = useState({ name: '', lat: NaN, lng: NaN });
+  const ok = f.name.length >= 2 && Number.isFinite(f.lat) && Number.isFinite(f.lng);
+  return (
+    <Dialog open onClose={onClose} title="Add depot" subtitle="Filling station / yard where tankers load.">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Name" className="col-span-2"><input className="input" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Latitude"><input className="input" type="number" step="any" onChange={e => setF({ ...f, lat: Number(e.target.value) })} /></Field>
+        <Field label="Longitude"><input className="input" type="number" step="any" onChange={e => setF({ ...f, lng: Number(e.target.value) })} /></Field>
+      </div>
+      <div className="mt-4 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!ok} onClick={async () => { try { await api.createDepot(f); toast('Depot added', f.name, 'success'); refresh('depots'); onClose(); } catch (e) { fail(e); } }}>Save</Button></div>
+    </Dialog>
   );
 };

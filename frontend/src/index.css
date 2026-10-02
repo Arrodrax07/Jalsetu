@@ -2,103 +2,90 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   JalSetu operations design tokens (RGB triplets for Tailwind alpha support).
+   Contrast: text on surface >= 12:1, muted >= 5:1 (WCAG AA for body text).
+   --------------------------------------------------------------------------- */
+:root {
+  --cc-bg: 6 10 17;
+  --cc-surface: 12 18 29;
+  --cc-raised: 17 25 39;
+  --cc-hover: 23 33 51;
+  --cc-border: 30 42 61;
+  --cc-border-strong: 46 62 88;
+  --cc-text: 230 237 246;
+  --cc-muted: 148 163 189;
+  --cc-faint: 100 116 139;
+  --cc-accent: 56 189 248;
+  --cc-accent-strong: 14 165 233;
+
+  /* tracking state */
+  --cc-live: 34 197 94;
+  --cc-stale: 245 158 11;
+  --cc-offline: 239 68 68;
+  --cc-nosignal: 100 116 139;
+
+  /* CAP severity */
+  --cc-sev-extreme: 220 38 38;
+  --cc-sev-severe: 249 115 22;
+  --cc-sev-moderate: 234 179 8;
+  --cc-sev-minor: 59 130 246;
+
+  /* data provenance */
+  --cc-seeded: 167 139 250;
+  --cc-external: 56 189 248;
+  --cc-predicted: 244 114 182;
+  --cc-estimated: 251 191 36;
+
+  /* outcome */
+  --cc-ok: 34 197 94;
+  --cc-warn: 245 158 11;
+  --cc-danger: 239 68 68;
+
+  color-scheme: dark;
+}
+
 @layer base {
-  :root {
-    --primary: #0284c7;
-    --primary-light: #e0f2fe;
-    --navy-dark: #0f172a;
-    --navy-surface: #1e293b;
-    --border-color: #e2e8f0;
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-cc-bg text-cc-text font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
   }
+  #root { display: flex; flex-direction: column; }
+  :focus-visible { outline: 2px solid rgb(var(--cc-accent)); outline-offset: 2px; }
+  ::selection { background: rgb(var(--cc-accent) / 0.35); }
+}
 
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    background-color: #f8fafc;
-    color: #0f172a;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+@layer components {
+  .panel { @apply bg-cc-surface border border-cc-border rounded-xl shadow-panel; }
+  .panel-header { @apply flex items-center justify-between gap-3 px-4 py-3 border-b border-cc-border; }
+  .eyebrow { @apply text-2xs font-semibold uppercase tracking-[0.12em] text-cc-muted; }
+  .num { font-variant-numeric: tabular-nums; }
+  .input {
+    @apply w-full rounded-lg border border-cc-border bg-cc-bg px-3 py-2 text-sm text-cc-text placeholder:text-cc-faint
+           focus:border-cc-accent focus:outline-none focus:ring-2 focus:ring-cc-accent/25 disabled:opacity-60;
   }
-
-  #root {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    padding: 0;
-    border: none;
-    text-align: left;
-  }
+  .label { @apply mb-1 block text-xs font-medium text-cc-muted; }
+  .table-cc { @apply w-full text-left text-sm; }
+  .table-cc thead th { @apply sticky top-0 z-[1] bg-cc-raised px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-cc-muted; }
+  .table-cc tbody td { @apply border-t border-cc-border px-3 py-2.5 align-top; }
+  .table-cc tbody tr:hover { @apply bg-cc-hover/60; }
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--cc-border-strong)); border-radius: 8px; }
 
-/* Leaflet Map overrides for clean civic style */
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  border-radius: 0.75rem;
-  font-family: inherit !important;
-  z-index: 10;
-}
+/* MapLibre theming */
+.maplibregl-popup-content { background: rgb(var(--cc-raised)) !important; color: rgb(var(--cc-text)); border: 1px solid rgb(var(--cc-border-strong)); border-radius: 10px !important; padding: 10px 12px !important; box-shadow: 0 20px 40px -12px rgb(0 0 0 / .7) !important; }
+.maplibregl-popup-tip { border-top-color: rgb(var(--cc-raised)) !important; border-bottom-color: rgb(var(--cc-raised)) !important; }
+.maplibregl-ctrl-group { background: rgb(var(--cc-raised)) !important; border: 1px solid rgb(var(--cc-border)); }
+.maplibregl-ctrl-group button + button { border-top-color: rgb(var(--cc-border)) !important; }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.85); }
+.maplibregl-ctrl-attrib { background: rgb(var(--cc-bg) / .75) !important; color: rgb(var(--cc-muted)); font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: rgb(var(--cc-muted)) !important; }
 
-.leaflet-popup-content-wrapper {
-  border-radius: 0.75rem !important;
-  padding: 0 !important;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.2) !important;
-  border: 1px solid #e2e8f0;
-}
-
-.leaflet-popup-content {
-  margin: 0 !important;
-  line-height: 1.4 !important;
-}
-
-.leaflet-popup-tip {
-  background: white !important;
-}
-
-/* Custom Ping animations for critical map pins */
-@keyframes map-ping {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-  }
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
-  }
-  100% {
-    transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-  }
-}
-
-.map-ping-critical {
-  animation: map-ping 2s infinite;
-}
-
-/* Glassmorphism utility */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
