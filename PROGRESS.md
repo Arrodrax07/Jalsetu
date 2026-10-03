@@ -5,6 +5,30 @@ Last updated: 2026-10-03.
 
 ## Done
 
+### 2026-10-04: PS 11 gap list completed (Phase 1), commits e58e1cb, 064fe21, 295fbef
+- Impact page (`#impact`, `GET /api/analytics/impact-replay`, `services/impact.py`): same requests, fleet, depots and daily
+  limits (trips/day, `tankerShiftHours`, km/h, `stopServiceMinutes`) replayed as first come first served vs JalSetu
+  (repeats merged + live auto-dispatch planner). Unmet need, waits, Jain fairness, vulnerable places, km, fuel, repeat calls.
+  Honest result on current data: JalSetu better on most metrics, slightly fewer vulnerable places reached (45 vs 49).
+- Voice + EN/मराठी/हिंदी: citizen portal and driver app (`src/i18n`), Web Speech dictation, driver voice commands, spoken updates.
+- Offline citizen PWA: manifest + icons + `public/sw.js`; on-device outbox (`src/citizen/outbox.ts`) with `clientRef`
+  idempotency on the server. Verified: offline submit → reconnect → stored once; offline reload of /report and /water (production build).
+- Public tap schedules + supply notices (migration 0004, `routers/schedules.py`, staff page `#schedules`, public `/water`, ticket status `/track`).
+- Request dedupe (Merged status, override, split back out) + distance-to-water priority factor (`services/access.py`, weight 0.10).
+- Synthetic demo history `python -m scripts.demo_history` (data_origin=synthetic, closed, no GPS, excluded from live logic;
+  analytics `origin=all|real`). Currently loaded: 28 days, 525 requests, 290 trips.
+- Tests: backend 79, ML 9. Docs: README x3, `docs/INTEGRATIONS.md`. Docker: `migrate` + `worker` services (compose validated;
+  Docker daemon not running here, stack not executed).
+- Fixes: breakdown double-submit (409 now) and restore resetting tankers with open trips to Available (data repaired, audited);
+  allocation plan scope (default: towns/villages in crisis within tanker reach + open requests; cities excluded);
+  live distance travelled; tests no longer write to `.seed-credentials.txt`.
+- Verified in the browser (Playwright): every staff page loads without console/network errors; full driver lifecycle in
+  Marathi on an isolated DB copy with emulated GPS (accept → start → geofence arrival → delivery → end → operator verify →
+  Completed, 3.76 km).
+- Housekeeping done: TR-3005 (T-2045) cancelled, T-2045 Available at Chembur; new allocation plan #24 Proposed (not approved).
+- `start.ps1` now runs the production build (offline portal works); `-Dev` for hot reload.
+- QA passwords for operator + dispatcher recorded in `backend/.seed-credentials.txt`.
+
 ### 2026-10-03 (latest): landing page + "water atlas" redesign
 - Every page load starts on the landing page (in-memory flag in `App.tsx`); "Open the control room" enters the app
   (existing session goes straight in, otherwise sign-in). `/welcome` shows the landing page to anyone; `/login` = sign-in.
@@ -66,23 +90,15 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## State at pause (2026-10-03, ~23:00 IST)
-- Everything committed up to `8de69ec` except the user's own edit to `backend/tests/test_trip_lifecycle.py` (left uncommitted on purpose; ask before committing).
-- Servers: start with `start.ps1` (API :8000, web :5173). Phone demo: `cloudflared tunnel --url http://localhost:5173` (URL changes each restart).
-- Demo driver: kailash.mehra@drivers.jalsetu.local (tanker T-2045, kept at Chembur depot); password in `backend/.seed-credentials.txt`.
-- Live data refresh: `python -m app.ingestion crisis` (also every 3 h in the background); depots: `python -m app.ingestion depots 6 --keep T-2045`.
-- Machine has limited RAM: an unrelated uvicorn on :8001 uses ~1.3 GB.
+## State at pause (2026-10-04)
+- Phase 1 complete except the **real phone GPS test**, which needs a person with a phone.
+- Running: API :8000, production preview :4173, Cloudflare tunnel (URL in `../tunnel.log`).
+- Next: real phone test (driver = kailash.mehra, tanker T-2045), then Phase 2 (full frontend transformation).
 
-## Next steps (agreed with the user, in order) — gaps against PS 11
-1. **Impact page: first-come-first-served vs JalSetu.** Replay the same real data both ways; show unmet demand, coverage
-   fairness (Jain), vulnerable places served, km driven, duplicate requests avoided. (PS point 5)
-2. **Voice + language switch** (English / मराठी / हिंदी) on citizen portal and driver app; Web Speech API (mr-IN, hi-IN). (PS point 4)
-3. **Offline citizen reporting**: installable PWA, queue complaints offline, send on reconnect. (PS point 4)
-4. **Public-tap schedules / supply information**: operators set tap timings per place; public "when is water coming" page.
-   (Named in the PS problem text; not built yet.)
-5. **Duplicate detection for water requests** (complaints already have it) + **distance as an explicit priority factor**. (PS points 2, 5)
-6. **Demo history script**: a few weeks of clearly labelled synthetic deliveries so trend/analytics charts are not empty. (PS point 3)
-7. Tests for `GET /api/public/summary`; then docs (READMEs, `docs/INTEGRATIONS.md`), Docker migrate/worker services.
+## Next steps
+1. Real phone GPS acceptance test (user + phone).
+2. Phase 2: complete frontend transformation (design system, motion language, command centre, map, driver, citizen,
+   analytics/impact, tables, responsive, accessibility), Playwright-iterated.
 
 ## Housekeeping before any demo
 - Allocation page shows an old approved plan for the archived Mumbai sample communities: press "Compute a plan".

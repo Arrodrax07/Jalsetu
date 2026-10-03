@@ -44,7 +44,7 @@ export const Analytics: React.FC = () => {
           <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             <Kpi label="Trips completed" value={ops.tripsCompleted} sub={`${ops.tripsStarted} started · ${ops.tripsCancelled} cancelled`} tone="ok" />
             <Kpi label="Completion rate" value={pct(ops.completionRatePct, 1)} sub="of started trips" />
-            <Kpi label="Start → arrival" value={ops.avgStartToArrivalMin != null ? `${ops.avgStartToArrivalMin} min` : '—'} sub="GPS-detected, average" />
+            <Kpi label="Start → arrival" value={ops.avgStartToArrivalMin != null ? `${ops.avgStartToArrivalMin} min` : '—'} sub={ops.synthetic.trips ? 'real: GPS-detected · synthetic: estimated' : 'GPS-detected, average'} />
             <Kpi label="Start → completion" value={ops.avgStartToCompletionMin != null ? `${ops.avgStartToCompletionMin} min` : '—'} sub="incl. verification" />
             <Kpi label="Water delivered" value={litres(ops.litresDelivered)} sub={`${ops.deliveriesVerified}/${ops.deliveries} deliveries verified`} tone="accent" />
             <Kpi label="GPS distance" value={km(ops.gpsKmTravelled)} sub="from real telemetry" />
