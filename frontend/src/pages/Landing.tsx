@@ -65,7 +65,7 @@ const Ticker: React.FC<{ items: PublicSummary['headlines'] }> = ({ items }) => {
 // ---------------------------------------------------------------------------- nav
 const Nav: React.FC<{ scrolled: boolean }> = ({ scrolled }) => (
   <motion.header initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6, ease: EASE, delay: 0.2 }}
-    className={cx('fixed inset-x-0 top-0 z-50 transition-all duration-500', scrolled ? 'border-b border-cc-border bg-cc-bg/80 backdrop-blur-md' : 'bg-transparent')}>
+    className={cx('fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-500', scrolled ? 'border-b border-cc-border bg-cc-bg/80 backdrop-blur-md' : 'bg-transparent')}>
     <div className="mx-auto flex h-16 max-w-[1320px] items-center justify-between px-5 md:px-8">
       <a href="/" className="flex items-center gap-2.5"><Mark className="h-8 w-8 text-cc-accent" /><span className="display text-[26px] leading-none">JalSetu</span></a>
       <nav className="hidden items-center gap-8 text-sm text-cc-muted md:flex">
@@ -155,7 +155,7 @@ const Situation: React.FC<{ s: PublicSummary }> = ({ s }) => {
               <p className="mt-5 max-w-[48ch] text-[17px] leading-relaxed text-cc-muted">{b.body}</p>
             </motion.div>
             <div className="mt-10 flex items-center gap-3">
-              {beats.map((_, i) => <span key={i} className={cx('h-1 rounded-full transition-all duration-500', i === beat ? 'w-10 bg-cc-ink' : 'w-4 bg-cc-strong')} />)}
+              {beats.map((_, i) => <span key={i} className={cx('h-1 rounded-full transition-[width,background-color] duration-500', i === beat ? 'w-10 bg-cc-ink' : 'w-4 bg-cc-strong')} />)}
             </div>
           </div>
           <div className="relative hidden md:block">

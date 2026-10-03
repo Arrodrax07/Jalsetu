@@ -85,7 +85,7 @@ const ReviewDialog: React.FC<{ d: DeliveryRecord; onClose: () => void }> = ({ d,
           <KV k="Recorded by / at" v={`${d.recordedBy} · ${dt(d.deliveryTime)}`} />
           <KV k="Status" v={<StatusChip status={d.status} />} />
           {d.notes && <p className="mt-2 rounded-md border border-cc-warn/40 bg-cc-warn/10 p-2 text-xs text-amber-800">{d.notes}</p>}
-          {d.verifiedBy && <p className="mt-2 text-xs text-green-700">Verified by {d.verifiedBy}, {dt(d.verifiedAt)} {d.verificationNotes && `— ${d.verificationNotes}`}</p>}
+          {d.verifiedBy && <p className="mt-2 text-xs text-green-700">Verified by {d.verifiedBy}, {dt(d.verifiedAt)} {d.verificationNotes && `: ${d.verificationNotes}`}</p>}
         </div>
         <div className="space-y-3">
           <div><p className="label flex items-center gap-1"><FileImage className="h-3.5 w-3.5" /> Photo</p>{photo ? <img src={photo} alt="Delivery photo" className="max-h-56 w-full rounded-lg border border-cc-border object-contain" /> : <p className="text-xs text-cc-faint">{d.photoUrl ? 'Loading…' : 'No photo attached'}</p>}</div>

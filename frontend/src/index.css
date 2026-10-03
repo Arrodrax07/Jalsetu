@@ -129,7 +129,10 @@
   :focus-visible { outline: 2px solid rgb(var(--cc-accent)); outline-offset: 2px; border-radius: 6px; }
   ::selection { background: rgb(var(--cc-accent) / 0.2); }
   :lang(mr), :lang(hi) { font-family: "Mukta", "Geist Variable", system-ui, sans-serif; }
-  button, [role="button"], a { -webkit-tap-highlight-color: transparent; }
+  button, [role="button"], a, input, select, textarea, label { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  [role="dialog"] .overflow-y-auto, aside.overflow-y-auto { overscroll-behavior: contain; }
+  select { background-color: rgb(var(--cc-surface)); color: rgb(var(--cc-text)); }
+  :target { scroll-margin-top: 72px; }
 }
 
 @layer components {

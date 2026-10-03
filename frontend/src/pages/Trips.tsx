@@ -230,7 +230,7 @@ const TripRecord: React.FC<{ ref_: string }> = ({ ref_ }) => {
                 <div className="flex items-center justify-between"><span className="font-medium">{d.id} · {d.communityName}</span><StatusChip status={d.status} /></div>
                 <p className="num mt-1 text-xs text-cc-muted">{litres(d.deliveredAmount)} of {litres(d.allocatedAmount)} · receiver {d.receiverName || '—'} · {dt(d.deliveryTime)}</p>
                 {d.notes && <p className="mt-1 text-xs text-amber-800">{d.notes}</p>}
-                {d.verifiedBy && <p className="mt-1 text-xs text-green-700">Verified by {d.verifiedBy} {dt(d.verifiedAt)}{d.verificationNotes ? ` — ${d.verificationNotes}` : ''}</p>}
+                {d.verifiedBy && <p className="mt-1 text-xs text-green-700">Verified by {d.verifiedBy} {dt(d.verifiedAt)}{d.verificationNotes ? `: ${d.verificationNotes}` : ''}</p>}
               </li>))}</ul>
           )}
         </Panel>

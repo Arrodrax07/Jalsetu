@@ -108,7 +108,7 @@ export const DriverApp: React.FC = () => {
     if (!trip) return;
     const f: Fix = fix && Date.now() - Date.parse(fix.deviceTime) < 30000 ? fix : await currentFix().catch((e: GpsError) => { throw new Error(geoErrorText(e)); });
     if (f.accuracyM == null || (th && f.accuracyM > th.startMaxAccuracyM)) {
-      throw new Error(`GPS accuracy ${f.accuracyM ?? '?'} m — need ≤ ${th?.startMaxAccuracyM} m. Move to open sky and wait a moment.`);
+      throw new Error(`GPS accuracy ${f.accuracyM ?? '?'} m; need ≤ ${th?.startMaxAccuracyM} m. Move to open sky and wait a moment.`);
     }
     await api.startTrip(trip.id, { lat: f.lat, lng: f.lng, accuracyM: f.accuracyM, speedKmh: f.speedKmh, heading: f.heading, deviceTime: f.deviceTime });
     toast(t('drv.started'), t('drv.startedBody'), 'success');
@@ -121,7 +121,7 @@ export const DriverApp: React.FC = () => {
     else if (cmd === 'start' && trip.status === 'Accepted') start();
     else if (cmd === 'confirm' && trip.status === 'Arrived') act('Confirm arrival', () => api.confirmArrival(trip.id));
     else if (cmd === 'end' && trip.status === 'Delivered' && !trip.driverEndedAt) act('End trip', async () => { await api.endTrip(trip.id); uploader.current?.stop(); });
-    else toast(t('drv.voiceCmd'), `“${heard}” — ${trip.status}`, 'warning');
+    else toast(t('drv.voiceCmd'), `“${heard}” · ${trip.status}`, 'warning');
   };
 
   if (!user) return null;

@@ -90,16 +90,37 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## State at pause (2026-10-04)
-- Phase 1 complete. Real phone GPS: user accepted the 2026-10-03 run (19 accepted fixes, 6–100 m accuracy, START + live
-  tracking on a real phone). Arrival/delivery on a physical phone not yet exercised (done with emulated GPS on a DB copy).
-- Running: API :8000, production preview :4173, Cloudflare tunnel (URL in `../tunnel.log`).
-- Next: real phone test (driver = kailash.mehra, tanker T-2045), then Phase 2 (full frontend transformation).
+## State at pause (2026-10-04 ~01:30 IST): Phase 2 (frontend transformation) in progress
 
-## Next steps
-1. (Optional) real-phone arrival + delivery run before the presentation.
-2. Phase 2: complete frontend transformation (design system, motion language, command centre, map, driver, citizen,
-   analytics/impact, tables, responsive, accessibility), Playwright-iterated.
+Phase 1 is complete (see Done). Phase 2 work so far (commits 9b2cf7e, 643d156, 820aaeb + final pause commit):
+- Design system: tokens in `src/index.css` (cool neutrals, one water accent, full dark theme via `html[data-theme]`,
+  palette shades remapped in `tailwind.config.js`), `src/theme.ts` (light/dark/auto, switch in nav + command palette),
+  fonts self-hosted (Geist, Geist Mono, Mona Sans with width axis + italic, Mukta for Devanagari), icons = Phosphor via
+  `src/components/icons.tsx` (lucide no longer imported; package still in package.json), motion tokens `src/motion.ts`.
+- UI kit `src/components/ui.tsx`: provenance/trust marks (`Provenance`, `ProvMark`: solid=observed, outline/dashed=derived,
+  hatched=reference/synthetic, hollow=stale, struck=offline), metrics, drawers with focus trap, dialogs, tabs with keys.
+- Shell: collapsible nav rail, mobile nav sheet, skip link, theme switch, realtime indicator.
+- Map `components/map/OpsMap.tsx`: theme basemaps, clustered places, HTML vehicle markers that glide between real fixes
+  and change SHAPE for live/stale/offline, route draw-on, district drill-down, overlay-aware camera padding.
+- Command centre: map-first, glass situation strip + docked intelligence rail with inline detail views.
+- Live operations: map-first, trips grouped by GPS freshness, FreshnessMeter, TripProgress, follow mode (`components/live.tsx`).
+- `components/DataTable.tsx` (search, filters, sort, paging, expand, keyboard) on requests, complaints, communities,
+  trips, verification, fleet, alerts, allocation. Charts theme-aware (`components/charts/theme.ts` + CSS).
+- Driver app: mobile-first task card + thumb dock (geofence approach bar), status pills, menu sheet, finish state.
+- Citizen portal: own register (`.citizen` scoped tokens, icon tiles). Heavy screens lazy-loaded (portal bundle ~226 KB gz).
+- Verified with Playwright: light + dark command centre, live ops with an emulated moving phone on the QA DB copy
+  (live -> stale transition), driver flow, citizen portal (EN/MR, dark), no console errors.
+
+Running at pause (may be gone tomorrow): API :8000, prod preview :4173, dev :5180 (-> :8000), QA API :8010 on a DB copy
+in the session scratchpad + QA dev :5181, Cloudflare tunnel. Restart with `start.ps1` (or `-Dev`).
+
+## Next steps (resume here)
+1. Finish the responsive pass: tablet (820 px) and phone (390 px) screenshots of overview, requests, live, impact were
+   being taken when paused; fix any overflow / layout issues found.
+2. Remaining guideline items: remove unused imports (lint warnings), `lucide-react` from package.json, Intro/Login page
+   polish to the new type system, Landing copy check, Schedules/Admin/Reports/Analytics visual pass.
+3. Final Playwright review of every page in light + dark, desktop + mobile; fix anything generic or inconsistent.
+4. Update README/PROGRESS, rebuild prod (`npm run build`), commit.
 
 ## Housekeeping before any demo
 - Allocation page shows an old approved plan for the archived Mumbai sample communities: press "Compute a plan".
