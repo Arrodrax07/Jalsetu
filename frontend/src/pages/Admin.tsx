@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Brain, Database, Plus, RefreshCw, Save } from 'lucide-react';
+import { Brain, Database, Plus, RefreshCw, Save } from '../components/icons';
 import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, Chip, Dialog, Empty, Field, Loading, PageHeader, Panel, StatusChip, Tabs } from '../components/ui';

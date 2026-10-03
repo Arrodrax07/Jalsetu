@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { CheckCircle2, CloudOff, Droplets, Loader2, LocateFixed, MapPin, Search, Send, Ticket, Truck } from 'lucide-react';
+import { CheckCircle2, CloudOff, Droplets, Loader2, LocateFixed, MapPin, Search, Send, Ticket, Truck } from '../components/icons';
 import { api, ApiError } from '../services/api';
 import { Button, cx, EASE, ErrorBox, SPRING } from '../components/ui';
 import { Mark } from '../components/shell/Shell';
@@ -131,7 +131,7 @@ const PlacePicker: React.FC<{ places: Place[]; value: Place | null; onChange: (p
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-cc-muted">{t('place.nearby')}:</span>
           {near.map(n => (
-            <button type="button" key={n.id} onClick={() => onChange(n)} className={cx('min-h-[32px] rounded-full px-2.5 ring-1', n.id === value.id ? 'bg-cc-text text-white ring-cc-text' : 'ring-cc-border hover:ring-cc-strong')}>
+            <button type="button" key={n.id} onClick={() => onChange(n)} className={cx('min-h-[32px] rounded-full px-2.5 ring-1', n.id === value.id ? 'bg-cc-ink text-cc-on-ink ring-cc-ink' : 'ring-cc-border hover:ring-cc-strong')}>
               {n.name} · {n.km < 1 ? '<1' : n.km.toFixed(0)} km</button>
           ))}
         </div>

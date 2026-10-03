@@ -1,6 +1,6 @@
 /** Live crisis signals: news reports and measured rainfall deficit, with operator review. */
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CloudRain, ExternalLink, Newspaper, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, CloudRain, ExternalLink, Newspaper, RefreshCw, XCircle } from './icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import type { CrisisSignal } from '../types';

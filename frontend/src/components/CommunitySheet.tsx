@@ -1,7 +1,7 @@
 /** Side sheet for one community: numbers, the evidence behind its crisis score, and where the data came from. */
 import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { CloudRain, Crosshair, ExternalLink, MapPin, Newspaper, Route } from 'lucide-react';
+import { CloudRain, Crosshair, ExternalLink, MapPin, Newspaper, Route } from './icons';
 import { useApp } from '../context/AppContext';
 import { districtName, litres, timeAgo } from '../utils/format';
 import { Button, Chip, CountUp, EASE, KV, SlideOver, StatusChip } from './ui';
@@ -22,15 +22,30 @@ const Gauge: React.FC<{ value: number }> = ({ value }) => {
   );
 };
 
-export const CommunitySheet: React.FC<{ id: string | null; onClose: () => void; onFocus?: (lat: number, lng: number) => void }> = ({ id, onClose, onFocus }) => {
+type SheetProps = { id: string | null; onClose: () => void; onFocus?: (lat: number, lng: number) => void };
+
+export const communitySubtitle = (c: { settlementType?: string | null; districtName: string | null; stateName: string | null }) =>
+  [c.settlementType && c.settlementType[0].toUpperCase() + c.settlementType.slice(1), c.districtName && `${districtName(c.districtName)} district`, plain(c.stateName)].filter(Boolean).join(' · ');
+
+export const CommunitySheet: React.FC<SheetProps> = (props) => {
+  const { communities } = useApp();
+  const c = communities.find(x => x.id === props.id) || null;
+  return (
+    <SlideOver open={!!c} onClose={props.onClose} width="max-w-lg" title={c?.name ?? ''} subtitle={c ? communitySubtitle(c) : null}>
+      <CommunityDetail {...props} />
+    </SlideOver>
+  );
+};
+
+/** One community: the numbers, the evidence behind its crisis score, and where the data came from. */
+export const CommunityDetail: React.FC<SheetProps> = ({ id, onClose, onFocus }) => {
   const { communities, signals, navigate, can } = useApp();
   const c = communities.find(x => x.id === id) || null;
   const evidence = useMemo(() => !c ? [] : signals.filter(s => s.status !== 'dismissed' && (s.communities.some(x => x.id === c.id) || s.districts.some(d => d.id === c.districtId)))
     .sort((a, b) => Number(b.communities.some(x => x.id === c.id)) - Number(a.communities.some(x => x.id === c.id))), [c, signals]);
 
   return (
-    <SlideOver open={!!c} onClose={onClose} width="max-w-lg"
-      title={c?.name ?? ''} subtitle={c ? [c.settlementType && c.settlementType[0].toUpperCase() + c.settlementType.slice(1), c.districtName && `${districtName(c.districtName)} district`, plain(c.stateName)].filter(Boolean).join(' · ') : null}>
+    <>
       {c && (
         <div className="space-y-6">
           <div className="flex items-center gap-5 rounded-2xl border border-cc-border bg-cc-raised p-4">
@@ -101,6 +116,6 @@ export const CommunitySheet: React.FC<{ id: string | null; onClose: () => void; 
           </div>
         </div>
       )}
-    </SlideOver>
+    </>
   );
 };

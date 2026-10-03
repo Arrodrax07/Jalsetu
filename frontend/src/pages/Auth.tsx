@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, KeyRound, Lock, Mail, MessageSquareWarning, Newspaper, Satellite, Scale } from 'lucide-react';
+import { ArrowRight, KeyRound, Lock, Mail, MessageSquareWarning, Newspaper, Satellite, Scale } from '../components/icons';
 import { motion } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';

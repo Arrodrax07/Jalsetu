@@ -52,6 +52,7 @@ const Routed: React.FC = () => {
 
 const Root: React.FC = () => {
   const { user, authChecked, route } = useApp();
+  const [menu, setMenu] = React.useState(false);
   // Every page load starts on the landing page (it lives only in memory, so a refresh resets it).
   // "Open the control room" enters the app; an existing session goes straight in, otherwise sign-in.
   const [entered, setEntered] = React.useState(() => window.location.pathname.startsWith('/login'));
@@ -62,12 +63,13 @@ const Root: React.FC = () => {
   if (user.role === 'driver') return <LangProvider><DriverApp /></LangProvider>;
   const fullBleed = ['overview', '', 'live'].includes(route.split('/')[0]);
   return (
-    <div className="flex h-full flex-col">
-      <TopBar />
-      <MobileNav />
-      <div className="flex min-h-0 flex-1">
-        <NavRail />
-        <main className={fullBleed ? 'min-w-0 flex-1 overflow-hidden' : 'min-w-0 flex-1 overflow-y-auto'}>
+    <div className="flex h-full">
+      <a href="#main" className="skip-link">Skip to content</a>
+      <NavRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar onMenu={() => setMenu(true)} />
+        <MobileNav open={menu} onClose={() => setMenu(false)} />
+        <main id="main" tabIndex={-1} className={fullBleed ? 'min-h-0 min-w-0 flex-1 overflow-hidden outline-none' : 'min-h-0 min-w-0 flex-1 overflow-y-auto outline-none'}>
           <React.Suspense fallback={<Loading />}>
             <FadeSwap k={route.split('/')[0] || 'overview'} className={fullBleed ? 'h-full' : 'mx-auto w-full max-w-[1600px]'}><Routed /></FadeSwap>
           </React.Suspense>

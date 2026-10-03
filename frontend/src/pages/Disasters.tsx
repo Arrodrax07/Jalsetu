@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw } from '../components/icons';
 import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { AlertPanel } from '../components/panels';

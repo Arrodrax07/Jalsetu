@@ -5,7 +5,7 @@
  */
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform, MotionValue } from 'motion/react';
-import { ArrowRight, ArrowUpRight, CheckCircle2, CloudRain, MapPin, Navigation, Newspaper, Radio, Route, Scale, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CheckCircle2, CloudRain, MapPin, Navigation, Newspaper, Radio, Route, Scale, ShieldCheck, Truck } from '../components/icons';
 import { api } from '../services/api';
 import type { PublicSummary } from '../types';
 import { Mark } from '../components/shell/Shell';
@@ -74,7 +74,7 @@ const Nav: React.FC<{ scrolled: boolean }> = ({ scrolled }) => (
         <a href="#evidence" className="transition-colors hover:text-cc-text">Evidence</a>
         <a href="/report" className="transition-colors hover:text-cc-text">Report a problem</a>
       </nav>
-      <EnterLink className="group flex items-center gap-1.5 rounded-full bg-cc-text px-4 py-2 text-sm font-medium text-white shadow-[0_8px_20px_-10px_rgb(19_31_42/0.7)] transition hover:bg-[#0b1621]">
+      <EnterLink className="group flex items-center gap-1.5 rounded-full bg-cc-ink px-4 py-2 text-sm font-medium text-cc-on-ink shadow-[0_8px_20px_-10px_rgb(19_31_42/0.7)] transition hover:bg-[#0b1621]">
         Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
       </EnterLink>
     </div>
@@ -111,7 +111,7 @@ const Hero: React.FC<{ s: PublicSummary | null; progress: React.MutableRefObject
             : 'JalSetu finds where water is short from rainfall and news, sends the right tanker, and proves the water arrived.'}
         </motion.p>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2, duration: 0.7, ease: EASE }} className="pointer-events-auto mt-9 flex flex-wrap gap-3">
-          <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-text px-6 py-3.5 text-[15px] font-medium text-white shadow-[0_14px_30px_-14px_rgb(19_31_42/0.8)] transition hover:-translate-y-0.5">
+          <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-ink px-6 py-3.5 text-[15px] font-medium text-cc-on-ink shadow-[0_14px_30px_-14px_rgb(19_31_42/0.8)] transition hover:-translate-y-0.5">
             Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </EnterLink>
           <a href="/report" className="flex items-center gap-2 rounded-full border border-cc-border bg-cc-surface/80 px-6 py-3.5 text-[15px] font-medium backdrop-blur transition hover:border-cc-strong">
@@ -155,7 +155,7 @@ const Situation: React.FC<{ s: PublicSummary }> = ({ s }) => {
               <p className="mt-5 max-w-[48ch] text-[17px] leading-relaxed text-cc-muted">{b.body}</p>
             </motion.div>
             <div className="mt-10 flex items-center gap-3">
-              {beats.map((_, i) => <span key={i} className={cx('h-1 rounded-full transition-all duration-500', i === beat ? 'w-10 bg-cc-text' : 'w-4 bg-cc-strong')} />)}
+              {beats.map((_, i) => <span key={i} className={cx('h-1 rounded-full transition-all duration-500', i === beat ? 'w-10 bg-cc-ink' : 'w-4 bg-cc-strong')} />)}
             </div>
           </div>
           <div className="relative hidden md:block">
@@ -180,7 +180,7 @@ const Situation: React.FC<{ s: PublicSummary }> = ({ s }) => {
                 ))}
               </ul>
             </div>
-            <motion.div className="absolute -left-6 top-0 h-full w-[3px] origin-top rounded-full bg-cc-text/80" style={{ scaleY: bar }} />
+            <motion.div className="absolute -left-6 top-0 h-full w-[3px] origin-top rounded-full bg-cc-ink/80" style={{ scaleY: bar }} />
           </div>
         </div>
       </div>
@@ -203,7 +203,7 @@ const How: React.FC = () => {
   const x = useTransform(scrollYProgress, [0.05, 0.95], ['0%', '-62%']);
   const line = useSpring(useTransform(scrollYProgress, [0.05, 0.95], [0, 1]), { stiffness: 140, damping: 30 });
   return (
-    <section id="how" ref={ref} className="relative h-[320vh] bg-cc-text text-[#f5f3ee]">
+    <section id="how" ref={ref} className="relative h-[320vh] bg-cc-ink text-[#f5f3ee]">
       <div className="sticky top-0 flex h-[100svh] flex-col justify-center overflow-hidden">
         <div className="mx-auto w-full max-w-[1320px] px-5 md:px-8">
           <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">02 · How JalSetu works</p>
@@ -334,7 +334,7 @@ const Field: React.FC = () => {
                   <div className="rounded-2xl bg-cc-surface p-3 shadow-panel">
                     <div className="flex items-center justify-between text-[11px]"><span className="flex items-center gap-1.5 font-semibold"><span className="relative flex h-1.5 w-1.5"><span className="absolute inset-0 animate-ping rounded-full bg-cc-live opacity-60" /><span className="relative h-1.5 w-1.5 rounded-full bg-cc-live" /></span>GPS live</span><span className="text-cc-muted">± 6 m</span></div>
                   </div>
-                  <div className="rounded-2xl bg-cc-text py-3 text-center text-sm font-semibold text-white">ARRIVED · unlocks at 150 m</div>
+                  <div className="rounded-2xl bg-cc-ink py-3 text-center text-sm font-semibold text-cc-on-ink">ARRIVED · unlocks at 150 m</div>
                 </div>
               </div>
             </div>
@@ -358,7 +358,7 @@ const Closing: React.FC<{ s: PublicSummary | null }> = ({ s }) => (
         {s ? `${s.places.toLocaleString('en-IN')} places · ${fmtM(s.people)} people · ${s.tankers} tankers · ${s.depots} depots sited on real water infrastructure.` : ''}
       </p></Reveal>
       <Reveal delay={0.18} className="mt-10 flex flex-wrap justify-center gap-3">
-        <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-text px-7 py-4 text-[15px] font-medium text-white transition hover:-translate-y-0.5">Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></EnterLink>
+        <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-ink px-7 py-4 text-[15px] font-medium text-cc-on-ink transition hover:-translate-y-0.5">Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></EnterLink>
         <a href="/report" className="flex items-center gap-2 rounded-full border border-cc-border px-7 py-4 text-[15px] font-medium transition hover:border-cc-strong">Report a water problem</a>
       </Reveal>
     </div>

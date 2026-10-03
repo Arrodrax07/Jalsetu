@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Crosshair, Phone, Route as RouteIcon, Satellite } from 'lucide-react';
+import { Crosshair, Phone, Route as RouteIcon, Satellite } from './icons';
 import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import type { DisasterEvent, DisasterImpact } from '../types';
@@ -7,8 +7,25 @@ import { dt, km } from '../utils/format';
 import { Button, Chip, Empty, ErrorBox, formatAge, KindLabel, KV, Loading, OriginLabel, SeverityChip, SlideOver, SourceLink, StatusChip, TrackingBadge } from './ui';
 
 // ---------------------------------------------------------------------------- vehicle
-export const VehiclePanel: React.FC<{ id: string | null; onClose: () => void; onFocus?: (lat: number, lng: number) => void; onOpenTrip?: (ref: string) => void }> =
-  ({ id, onClose, onFocus, onOpenTrip }) => {
+type VehicleProps = { id: string | null; onClose: () => void; onFocus?: (lat: number, lng: number) => void; onOpenTrip?: (ref: string) => void };
+
+export const VehiclePanel: React.FC<VehicleProps> = (props) => {
+  const { vehicles, thresholds, serverOffsetMs } = useApp();
+  const now = useNow(serverOffsetMs);
+  const v = vehicles.find(x => x.vehicleId === props.id);
+  if (!props.id) return null;
+  const ls = v ? liveState(v, thresholds, now) : null;
+  return (
+    <SlideOver open={!!props.id} onClose={props.onClose} title={<span className="flex items-center gap-2">{v?.registration ?? 'Vehicle'} {ls && <TrackingBadge state={ls.state} ageSeconds={ls.age} />}</span>}
+      subtitle={v ? `${v.vehicleId} · ${v.status}` : undefined}>
+      <VehicleDetail {...props} />
+    </SlideOver>
+  );
+};
+
+/** Vehicle facts, every one from the last accepted real GPS fix. Used in a slide-over and inline in the command centre. */
+export const VehicleDetail: React.FC<VehicleProps> =
+  ({ id, onFocus, onOpenTrip }) => {
     const { vehicles, thresholds, serverOffsetMs } = useApp();
     const now = useNow(serverOffsetMs);
     const v = vehicles.find(x => x.vehicleId === id);
@@ -24,8 +41,7 @@ export const VehiclePanel: React.FC<{ id: string | null; onClose: () => void; on
     if (!id) return null;
     const ls = v ? liveState(v, thresholds, now) : null;
     return (
-      <SlideOver open={!!id} onClose={onClose} title={<span className="flex items-center gap-2">Vehicle {v?.registration} {ls && <TrackingBadge state={ls.state} ageSeconds={ls.age} />}</span>}
-        subtitle={v ? `${v.vehicleId} · ${v.status}` : undefined}>
+      <>
         {!v ? <Empty title="Vehicle not found" /> : (
           <div className="space-y-5">
             <div className="rounded-lg border border-cc-border bg-cc-raised p-3">
@@ -64,7 +80,7 @@ export const VehiclePanel: React.FC<{ id: string | null; onClose: () => void; on
                     : <span className="text-cc-faint">{eta.reason}</span>} />
                 </>
               ) : <KV k="Trip" v="None" />}
-              <KV k="Capacity / load" v={<span className="num">{v.capacity?.toLocaleString('en-IN')} L / {v.currentLoad?.toLocaleString('en-IN')} L</span>} />
+              {v.capacity != null && <KV k="Capacity / load" v={<span className="num">{v.capacity?.toLocaleString('en-IN')} L / {v.currentLoad?.toLocaleString('en-IN')} L</span>} />}
               <KV k="Record" v={<OriginLabel origin={v.dataOrigin} />} />
             </div>
             <div className="flex gap-2">
@@ -73,7 +89,7 @@ export const VehiclePanel: React.FC<{ id: string | null; onClose: () => void; on
             </div>
           </div>
         )}
-      </SlideOver>
+      </>
     );
   };
 
@@ -87,6 +103,16 @@ const AREA_METHOD: Record<string, string> = {
 };
 
 export const AlertPanel: React.FC<{ id: number | null; onClose: () => void; onZoom?: (bbox: number[]) => void }> = ({ id, onClose, onZoom }) => {
+  if (id == null) return null;
+  return (
+    <SlideOver open onClose={onClose} width="max-w-xl" title="Official alert">
+      <AlertDetail id={id} onZoom={onZoom} />
+    </SlideOver>
+  );
+};
+
+/** Official alert, its area and its operational impact on JalSetu records. */
+export const AlertDetail: React.FC<{ id: number | null; onZoom?: (bbox: number[]) => void }> = ({ id, onZoom }) => {
   const { fail, toast, can, refresh } = useApp();
   const [e, setE] = useState<DisasterEvent | null>(null);
   const [imp, setImp] = useState<DisasterImpact | null>(null);
@@ -99,11 +125,14 @@ export const AlertPanel: React.FC<{ id: number | null; onClose: () => void; onZo
   }, [id]);
   if (id == null) return null;
   return (
-    <SlideOver open onClose={onClose} width="max-w-xl" title={e ? <span className="flex items-center gap-2"><SeverityChip severity={e.severity} /> {e.eventRaw || e.eventType}</span> : 'Alert'}
-      subtitle={e ? `${e.provider} via ${e.sourceLabel}` : undefined}>
+    <>
       {err && <ErrorBox message={err} />}
       {!e ? <Loading /> : (
         <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-2"><SeverityChip severity={e.severity} /><span className="text-[15px] font-semibold">{e.eventRaw || e.eventType}</span></div>
+            <p className="mt-1 text-[12px] text-cc-muted">{e.provider} via {e.sourceLabel}</p>
+          </div>
           <div className="flex flex-wrap gap-2"><KindLabel kind="external-alert" title="Issued by an official authority; JalSetu does not create alerts" />
             <StatusChip status={e.status === 'active' ? 'connected' : 'unknown'} label={e.status} /></div>
           <p className="text-sm leading-relaxed">{e.headline}</p>
@@ -160,6 +189,6 @@ export const AlertPanel: React.FC<{ id: number | null; onClose: () => void; onZo
           </section>
         </div>
       )}
-    </SlideOver>
+    </>
   );
 };

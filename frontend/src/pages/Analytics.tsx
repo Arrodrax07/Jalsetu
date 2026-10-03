@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, tooltipStyle } from '../components/charts/theme';
 import { Chip, Empty, KindLabel, Kpi, Loading, PageHeader, Panel, Segmented } from '../components/ui';
-import { FlaskConical } from 'lucide-react';
+import { FlaskConical } from '../components/icons';
 import type { CityForecast, ImpactStats, OperationsMetrics } from '../types';
 import { km, litres, num, pct } from '../utils/format';
 

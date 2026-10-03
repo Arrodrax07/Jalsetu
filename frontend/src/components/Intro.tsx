@@ -43,8 +43,8 @@ export const MaharashtraArt: React.FC<{ draw?: boolean; delay?: number; classNam
             <motion.g key={name} initial={{ opacity: 0, scale: 0.4 }} animate={{ opacity: 1, scale: 1 }} style={{ transformOrigin: `${x}px ${y}px` }}
               transition={{ delay: delay + 0.9 + i * 0.07, type: 'spring', stiffness: 380, damping: 22 }}>
               {hot && (
-                <motion.circle cx={x} cy={y} r={10} fill="none" stroke="#cc5422" strokeWidth="2"
-                  animate={{ r: [10, 34], opacity: [0.7, 0] }} transition={{ delay: delay + 1.6, duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+                <motion.circle cx={x} cy={y} r={10} fill="none" stroke="#cc5422" strokeWidth="2" style={{ transformOrigin: `${x}px ${y}px` }}
+                  animate={{ scale: [1, 3.4], opacity: [0.7, 0] }} transition={{ delay: delay + 1.6, duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
               )}
               <circle cx={x} cy={y} r={hot ? 9 : 6} fill={hot ? '#cc5422' : '#0c6e96'} stroke="#fff" strokeWidth="2.5" />
               {labels && <text x={x + 13} y={y + 5} fontSize="22" fontFamily="Geist, sans-serif" fill={hot ? '#a8401a' : '#3c4a56'} fontWeight={hot ? 600 : 500}>{name}</text>}
@@ -108,7 +108,7 @@ export const Intro: React.FC<{ onDone: () => void }> = ({ onDone }) => {
               Water, where it is needed most
             </motion.p>
             <div className="mx-auto mt-6 h-px w-48 overflow-hidden bg-cc-border">
-              <motion.div className="h-full bg-cc-text" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} style={{ transformOrigin: 'left' }}
+              <motion.div className="h-full bg-cc-ink" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} style={{ transformOrigin: 'left' }}
                 transition={{ duration: reduce ? 2.5 : 3.3, ease: 'linear' }} />
             </div>
           </div>

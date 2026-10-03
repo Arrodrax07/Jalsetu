@@ -1,6 +1,6 @@
 /** Auto-dispatch proposals: the system suggests tanker -> community trips; a dispatcher approves or rejects each. */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, MapPin, Sparkles, Truck, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, MapPin, Sparkles, Truck, X } from './icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import type { DispatchProposal } from '../types';

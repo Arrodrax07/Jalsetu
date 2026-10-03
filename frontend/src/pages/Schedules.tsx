@@ -1,7 +1,7 @@
 /** Operators publish tap timings and supply notices; residents see them at /water. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BellRing, Clock, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { BellRing, Clock, ExternalLink, Pencil, Plus, Search, Trash2 } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api, type ScheduleInput } from '../services/api';
 import { Button, Chip, cx, Dialog, EASE, Empty, Field, Loading, PageHeader, Panel, StatusChip } from '../components/ui';
@@ -134,7 +134,7 @@ export const Schedules: React.FC = () => {
             <Field label="Point name (what residents call it)"><input className="input" value={edit.f.pointName} onChange={e => setEdit({ ...edit, f: { ...edit.f, pointName: e.target.value } })} placeholder="e.g. Standpost near the gram panchayat office" /></Field>
             <div role="group" aria-label="Kind"><span className="label">Kind</span><div className="flex flex-wrap gap-1.5">{KINDS.map(k => (
               <button key={k.id} type="button" aria-pressed={edit.f.kind === k.id} onClick={() => setEdit({ ...edit, f: { ...edit.f, kind: k.id } })}
-                className={cx('rounded-full px-3 py-1.5 text-sm ring-1', edit.f.kind === k.id ? 'bg-cc-text text-white ring-cc-text' : 'ring-cc-border')}>{k.label}</button>))}</div></div>
+                className={cx('rounded-full px-3 py-1.5 text-sm ring-1', edit.f.kind === k.id ? 'bg-cc-ink text-cc-on-ink ring-cc-ink' : 'ring-cc-border')}>{k.label}</button>))}</div></div>
             <div role="group" aria-label="Days"><span className="label">Days</span><div className="flex flex-wrap gap-1.5">{DAYS.map((d, i) => {
               const on = edit.f.days.includes(i + 1);
               return <button key={d} type="button" aria-pressed={on} aria-label={d} onClick={() => setEdit({ ...edit, f: { ...edit.f, days: on ? edit.f.days.filter(x => x !== i + 1) : [...edit.f.days, i + 1].sort() } })}

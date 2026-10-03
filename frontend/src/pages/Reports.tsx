@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, PageHeader } from '../components/ui';

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Link2, Plus } from 'lucide-react';
+import { CheckCircle2, Link2, Plus } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, Panel, StatusChip } from '../components/ui';

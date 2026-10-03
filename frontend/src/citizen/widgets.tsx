@@ -1,7 +1,7 @@
 /** Citizen-facing widgets: language switch, voice button, offline status, outbox, install prompt. */
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, CheckCircle2, CloudOff, Download, Loader2, Mic, MicOff, RefreshCw, Square, Trash2, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, CloudOff, Download, Loader2, Mic, MicOff, RefreshCw, Square, Trash2, Volume2 } from '../components/icons';
 import { cx, EASE, SPRING } from '../components/ui';
 import { LANGS, speechLocale, useLang } from '../i18n';
 import { speak, ttsSupported, useDictation, type SpeechState } from '../i18n/speech';
@@ -41,7 +41,7 @@ export const VoiceButton: React.FC<{ onText: (t: string) => void; compact?: bool
         whileTap={{ scale: 0.92 }} transition={SPRING}
         className={cx('relative flex flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40',
           compact ? 'h-9 w-9' : 'h-11 w-11',
-          d.listening ? 'bg-cc-danger text-white' : 'bg-cc-text text-white hover:bg-[#0b1621]')}>
+          d.listening ? 'bg-cc-danger text-white' : 'bg-cc-ink text-cc-on-ink hover:bg-cc-ink/90')}>
         {d.listening && (
           <motion.span aria-hidden className="absolute inset-0 rounded-full bg-cc-danger"
             animate={{ scale: [1, 1.35 + d.level * 0.3], opacity: [0.45, 0] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'easeOut' }} />
@@ -111,7 +111,7 @@ export const OutboxPanel: React.FC<{ items: OutboxItem[]; online: boolean }> = (
     <motion.section layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="panel overflow-hidden">
       <header className="flex items-center justify-between gap-3 border-b border-cc-border px-4 py-3">
         <p className="flex items-center gap-2 text-sm font-semibold"><CloudOff className="h-4 w-4 text-cc-muted" aria-hidden />{t('outbox.title')}
-          <span className="num rounded-full bg-cc-text px-2 text-[11px] text-white">{items.length}</span></p>
+          <span className="num rounded-full bg-cc-ink px-2 text-[11px] text-cc-on-ink">{items.length}</span></p>
         <button type="button" disabled={!online || busy} onClick={async () => { setBusy(true); await flush(true); setBusy(false); }}
           className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3 text-xs font-medium text-cc-accent-strong ring-1 ring-cc-accent/25 disabled:opacity-40">
           <RefreshCw className={cx('h-3.5 w-3.5', busy && 'animate-spin')} aria-hidden />{t('outbox.retry')}
@@ -152,7 +152,7 @@ export const SentToast: React.FC<{ count: number }> = ({ count }) => {
     <AnimatePresence>
       {count > 0 && (
         <motion.div role="status" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-          className="fixed inset-x-4 bottom-5 z-50 mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-cc-text px-4 py-3 text-sm text-white shadow-pop">
+          className="fixed inset-x-4 bottom-5 z-50 mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-cc-ink px-4 py-3 text-sm text-cc-on-ink shadow-pop">
           <CheckCircle2 className="h-5 w-5 text-emerald-300" aria-hidden />{t('outbox.allSent')}
         </motion.div>
       )}

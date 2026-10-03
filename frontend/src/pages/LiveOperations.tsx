@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, MapPin } from 'lucide-react';
+import { Crosshair, MapPin } from '../components/icons';
 import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { OpsMap, MapRoute } from '../components/map/OpsMap';

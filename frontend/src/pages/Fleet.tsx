@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, RotateCcw, Wrench } from 'lucide-react';
+import { Plus, RotateCcw, Wrench } from '../components/icons';
 import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { VehiclePanel } from '../components/panels';

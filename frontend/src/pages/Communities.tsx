@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Crosshair, Map as MapIcon, Pencil, Plus, Search, Warehouse } from 'lucide-react';
+import { Crosshair, Map as MapIcon, Pencil, Plus, Search, Warehouse } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { MAP_COLORS, OpsMap } from '../components/map/OpsMap';

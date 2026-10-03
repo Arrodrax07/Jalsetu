@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, LogOut, Mic, Navigation, PenLine, RefreshCw, Satellite, Truck, Volume2, VolumeX, WifiOff } from 'lucide-react';
+import { Camera, CheckCircle2, LogOut, Mic, Navigation, PenLine, RefreshCw, Satellite, Truck, Volume2, VolumeX, WifiOff } from '../components/icons';
 import { motion } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
@@ -232,7 +232,7 @@ const VoiceCommand: React.FC<{ onHeard: (t: string) => void }> = ({ onHeard }) =
   return (
     <section className="panel flex items-center gap-3 p-3">
       <motion.button type="button" onClick={d.listening ? d.stop : d.start} whileTap={{ scale: 0.92 }} aria-pressed={d.listening} aria-label={t('drv.voiceCmd')}
-        className={cx('relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full text-white', d.listening ? 'bg-cc-danger' : 'bg-cc-text')}>
+        className={cx('relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full', d.listening ? 'bg-cc-danger text-white' : 'bg-cc-ink text-cc-on-ink')}>
         {d.listening && <motion.span aria-hidden className="absolute inset-0 rounded-full bg-cc-danger" animate={{ scale: [1, 1.4], opacity: [0.45, 0] }} transition={{ duration: 1.1, repeat: Infinity }} />}
         <Mic className="relative h-6 w-6" />
       </motion.button>

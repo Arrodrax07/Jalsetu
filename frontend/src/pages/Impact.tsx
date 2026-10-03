@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDownRight, ArrowUpRight, FlaskConical, Info, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, FlaskConical, Info, Minus } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { AXIS_TICK, GRID, tooltipStyle, kLitres } from '../components/charts/theme';

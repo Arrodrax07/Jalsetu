@@ -3,20 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#F5F3EE" />
+    <meta name="theme-color" content="#EFF2F4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#080D12" media="(prefers-color-scheme: dark)" />
+    <script>
+      // Theme before first paint (no flash): saved choice, else the OS setting.
+      (function () {
+        try {
+          var t = localStorage.getItem('jalsetu_theme') || 'auto';
+          var dark = t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+      })();
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JalSetu · Water operations</title>
-    <meta name="description" content="Community Water-Supply Allocation and Complaint Intelligence Platform. AI-powered equitable water distribution, tanker dispatch optimization, and verified civic delivery." />
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-    
-  </head>
+    <meta name="description" content="Community Water-Supply Allocation and Complaint Intelligence Platform. Fair water allocation, tanker dispatch and verified delivery for water-stressed communities." />
+</head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

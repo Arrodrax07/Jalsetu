@@ -3,86 +3,163 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   JalSetu design tokens: "water atlas" (RGB triplets for Tailwind alpha support).
-   Warm paper, deep ink, one water-blue accent, terracotta for crisis.
-   Contrast on white: text 15:1, muted 6.4:1, faint 3.3:1 (large/secondary only).
+   JalSetu design tokens. RGB triplets so Tailwind can apply alpha (bg-cc-accent/10).
+   Light: cool survey-paper neutrals, deep ink, one water accent. Dark: night operations room.
+   Contrast on surface: text >= 14:1, muted >= 6:1, faint >= 3.4:1 (secondary / large text only).
+   Theme: html[data-theme] is set before first paint (index.html) from the saved choice or the OS setting.
    --------------------------------------------------------------------------- */
 :root {
-  --cc-bg: 245 243 238;          /* paper */
-  --cc-surface: 255 255 255;
-  --cc-raised: 250 249 246;
-  --cc-hover: 242 239 232;
-  --cc-border: 229 225 215;
-  --cc-border-strong: 207 200 186;
-  --cc-text: 19 31 42;           /* ink */
-  --cc-muted: 84 96 108;
-  --cc-faint: 134 143 152;
-  --cc-accent: 12 110 150;       /* water */
-  --cc-accent-strong: 8 84 118;
-  --cc-violet: 104 76 180;
-  --cc-teal: 13 116 108;
+  --cc-bg: 239 242 244;
+  --cc-surface: 252 253 253;
+  --cc-raised: 246 248 249;
+  --cc-sunken: 232 236 239;
+  --cc-hover: 233 237 240;
+  --cc-border: 219 226 231;
+  --cc-border-strong: 190 201 209;
+  --cc-text: 12 24 34;
+  --cc-muted: 72 88 102;
+  --cc-faint: 116 131 143;
+  --cc-ink: 12 24 34;            /* strong fills: primary buttons, selected chips */
+  --cc-on-ink: 250 252 252;
+  --cc-shadow: 16 32 44;
+  --cc-accent: 9 102 148;        /* water */
+  --cc-accent-strong: 5 76 112;
+  --cc-accent-soft: 221 236 244;
+  --cc-violet: 98 78 168;
+  --cc-teal: 12 112 104;
 
   /* tracking state */
-  --cc-live: 22 150 72;
-  --cc-stale: 198 128 8;
-  --cc-offline: 200 40 36;
-  --cc-nosignal: 140 150 160;
+  --cc-live: 18 138 74;
+  --cc-stale: 186 118 6;
+  --cc-offline: 192 46 34;
+  --cc-nosignal: 128 140 150;
 
   /* CAP severity */
-  --cc-sev-extreme: 168 32 26;
-  --cc-sev-severe: 204 84 34;    /* terracotta */
-  --cc-sev-moderate: 196 136 10;
-  --cc-sev-minor: 40 96 200;
+  --cc-sev-extreme: 160 30 26;
+  --cc-sev-severe: 196 78 32;
+  --cc-sev-moderate: 180 124 6;
+  --cc-sev-minor: 36 98 196;
 
-  /* data provenance */
-  --cc-seeded: 112 70 200;
-  --cc-external: 12 110 150;
-  --cc-predicted: 182 30 96;
-  --cc-estimated: 176 92 10;
+  /* provenance */
+  --cc-seeded: 112 92 166;
+  --cc-external: 9 102 148;
+  --cc-predicted: 166 42 102;
+  --cc-estimated: 166 94 12;
 
   /* outcome */
-  --cc-ok: 22 128 64;
-  --cc-warn: 186 104 8;
-  --cc-danger: 190 38 32;
+  --cc-ok: 20 126 70;
+  --cc-warn: 176 102 6;
+  --cc-danger: 184 38 32;
+
+  /* remapped palette shades (semantic text and tints used in pages) */
+  --p-red-500: 220 60 50; --p-red-700: 176 34 28; --p-red-800: 150 28 24;
+  --p-amber-50: 253 247 232; --p-amber-100: 250 236 200; --p-amber-300: 232 196 112; --p-amber-600: 196 120 8;
+  --p-amber-700: 168 98 6; --p-amber-800: 140 78 8; --p-amber-900: 112 62 10; --p-amber-950: 70 38 6;
+  --p-green-700: 20 120 66; --p-green-800: 16 98 54;
+  --p-emerald-300: 110 220 170;
+  --p-violet-500: 128 104 204; --p-violet-700: 96 72 170;
+  --p-sky-500: 30 150 210; --p-sky-700: 9 102 148; --p-sky-800: 6 80 118;
+  --p-pink-700: 166 42 102;
+  --p-teal-800: 12 96 90;
+  --p-orange-400: 240 150 80;
+  --p-cyan-700: 8 112 140;
 
   color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --cc-bg: 8 13 18;
+  --cc-surface: 14 21 28;
+  --cc-raised: 18 27 35;
+  --cc-sunken: 6 10 14;
+  --cc-hover: 25 36 46;
+  --cc-border: 33 46 57;
+  --cc-border-strong: 53 70 85;
+  --cc-text: 226 233 239;
+  --cc-muted: 152 167 180;
+  --cc-faint: 110 126 140;
+  --cc-ink: 226 233 239;
+  --cc-on-ink: 10 16 22;
+  --cc-shadow: 0 0 0;
+  --cc-accent: 38 140 196;
+  --cc-accent-strong: 120 192 230;
+  --cc-accent-soft: 16 44 62;
+  --cc-violet: 160 140 230;
+  --cc-teal: 60 186 170;
+  --cc-live: 56 200 122;
+  --cc-stale: 232 170 56;
+  --cc-offline: 240 100 86;
+  --cc-nosignal: 118 130 140;
+  --cc-sev-extreme: 240 92 82;
+  --cc-sev-severe: 240 130 80;
+  --cc-sev-moderate: 230 178 60;
+  --cc-sev-minor: 100 160 240;
+  --cc-seeded: 168 150 230;
+  --cc-external: 90 176 226;
+  --cc-predicted: 236 110 170;
+  --cc-estimated: 232 160 70;
+  --cc-ok: 64 196 122;
+  --cc-warn: 230 168 60;
+  --cc-danger: 238 98 86;
+  --p-red-500: 240 100 90; --p-red-700: 246 128 116; --p-red-800: 250 150 140;
+  --p-amber-50: 40 30 10; --p-amber-100: 58 42 12; --p-amber-300: 140 100 30; --p-amber-600: 236 170 60;
+  --p-amber-700: 240 184 80; --p-amber-800: 242 192 96; --p-amber-900: 246 206 120; --p-amber-950: 250 222 160;
+  --p-green-700: 90 210 140; --p-green-800: 110 220 156;
+  --p-emerald-300: 110 220 170;
+  --p-violet-500: 168 150 230; --p-violet-700: 184 168 240;
+  --p-sky-500: 80 176 230; --p-sky-700: 110 190 236; --p-sky-800: 140 204 240;
+  --p-pink-700: 240 130 180;
+  --p-teal-800: 90 200 186;
+  --p-orange-400: 240 150 80;
+  --p-cyan-700: 90 196 220;
+  color-scheme: dark;
 }
 
 @layer base {
   html, body, #root { height: 100%; }
   body {
     @apply bg-cc-bg text-cc-text font-sans antialiased;
+    font-size: 14px;
     font-feature-settings: "ss01", "cv11";
     text-rendering: optimizeLegibility;
   }
   #root { display: flex; flex-direction: column; }
-  h1, h2, h3 { letter-spacing: -0.015em; }
+  h1, h2, h3 { letter-spacing: -0.02em; text-wrap: balance; }
+  p { text-wrap: pretty; }
   :focus-visible { outline: 2px solid rgb(var(--cc-accent)); outline-offset: 2px; border-radius: 6px; }
-  ::selection { background: rgb(var(--cc-accent) / 0.18); }
+  ::selection { background: rgb(var(--cc-accent) / 0.2); }
+  :lang(mr), :lang(hi) { font-family: "Mukta", "Geist Variable", system-ui, sans-serif; }
+  button, [role="button"], a { -webkit-tap-highlight-color: transparent; }
 }
 
 @layer components {
-  .panel { @apply bg-cc-surface border border-cc-border rounded-2xl shadow-panel; }
+  /* Containers: one radius (14px). Elevation only where it means something (map overlays, drawers, dialogs). */
+  .panel { @apply bg-cc-surface border border-cc-border rounded-card shadow-panel; }
   .panel-header { @apply flex items-center justify-between gap-3 px-5 py-3.5 border-b border-cc-border; }
+  .glass { @apply border border-cc-border/80 bg-cc-surface/90 shadow-float backdrop-blur-xl; }
   .eyebrow { @apply text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cc-faint; }
-  .display { @apply font-display font-normal tracking-[-0.02em]; }
+  .display { @apply font-display font-semibold; font-variation-settings: "wdth" 108; letter-spacing: -0.028em; }
   .num { font-variant-numeric: tabular-nums; }
+  .mono { @apply font-mono; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .input {
-    @apply w-full rounded-xl border border-cc-border bg-cc-surface px-3.5 py-2.5 text-sm text-cc-text placeholder:text-cc-faint
-           shadow-[0_1px_0_rgb(19_31_42/0.03)] transition-[border-color,box-shadow]
-           hover:border-cc-strong focus:border-cc-accent focus:outline-none focus:ring-4 focus:ring-cc-accent/10 disabled:opacity-60;
+    @apply w-full rounded-control border border-cc-border bg-cc-surface px-3.5 py-2.5 text-sm text-cc-text placeholder:text-cc-faint
+           transition-[border-color,box-shadow] duration-150
+           hover:border-cc-strong focus:border-cc-accent focus:outline-none focus:ring-4 focus:ring-cc-accent/15 disabled:opacity-60;
   }
   .label { @apply mb-1.5 block text-xs font-medium text-cc-muted; }
-  .table-cc { @apply w-full text-left text-sm; }
-  .table-cc thead th { @apply sticky top-0 z-[1] border-b border-cc-border bg-cc-raised px-4 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-cc-faint; }
-  .table-cc tbody td { @apply border-t border-cc-border/70 px-4 py-3 align-top; }
-  .table-cc tbody tr { @apply transition-colors; }
-  .table-cc tbody tr:hover { @apply bg-cc-hover/50; }
-  /* Hairline contour texture used behind hero areas (login, intro). */
+  .table-cc { @apply w-full text-left text-[13px]; }
+  .table-cc thead th { @apply sticky top-0 z-[1] border-b border-cc-border bg-cc-raised/95 px-4 py-2.5 text-[11px] font-medium text-cc-muted backdrop-blur; }
+  .table-cc tbody td { @apply border-t border-cc-border/70 px-4 py-2.5 align-middle; }
+  .table-cc tbody tr { @apply transition-colors duration-150; }
+  .table-cc tbody tr:hover { @apply bg-cc-hover/60; }
+  .hairline { @apply border-cc-border; }
+  /* Hatched fill: the provenance mark for reference / seeded / synthetic data. */
+  .hatch { background-image: repeating-linear-gradient(135deg, currentColor 0 1.5px, transparent 1.5px 4px); }
   .contours {
     background-size: 600px 120px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'%3E%3Cg fill='none' stroke='%230c6e96' stroke-opacity='0.08' stroke-width='1'%3E%3Cpath d='M0 20 Q37.5 11 75 20 T150 20 T225 20 T300 20 T375 20 T450 20 T525 20 T600 20'/%3E%3Cpath d='M0 60 Q37.5 51 75 60 T150 60 T225 60 T300 60 T375 60 T450 60 T525 60 T600 60'/%3E%3Cpath d='M0 100 Q37.5 91 75 100 T150 100 T225 100 T300 100 T375 100 T450 100 T525 100 T600 100'/%3E%3C/g%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'%3E%3Cg fill='none' stroke='%230a6896' stroke-opacity='0.07' stroke-width='1'%3E%3Cpath d='M0 20 Q37.5 11 75 20 T150 20 T225 20 T300 20 T375 20 T450 20 T525 20 T600 20'/%3E%3Cpath d='M0 60 Q37.5 51 75 60 T150 60 T225 60 T300 60 T375 60 T450 60 T525 60 T600 60'/%3E%3Cpath d='M0 100 Q37.5 91 75 100 T150 100 T225 100 T300 100 T375 100 T450 100 T525 100 T600 100'/%3E%3C/g%3E%3C/svg%3E");
   }
+  .skip-link { @apply sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-toast focus:rounded-control focus:bg-cc-ink focus:px-4 focus:py-2 focus:text-cc-on-ink; }
 }
 
 /* Scrollbars */
@@ -93,24 +170,63 @@
 
 /* MapLibre theming */
 .maplibregl-map { font-family: inherit; }
-.maplibregl-popup-content { background: rgb(var(--cc-surface)) !important; color: rgb(var(--cc-text)); border: 1px solid rgb(var(--cc-border)); border-radius: 14px !important; padding: 12px 14px !important; box-shadow: 0 18px 40px -16px rgb(19 31 42 / .35) !important; }
+.maplibregl-popup-content { background: rgb(var(--cc-surface)) !important; color: rgb(var(--cc-text)); border: 1px solid rgb(var(--cc-border)); border-radius: 12px !important; padding: 12px 14px !important; box-shadow: 0 18px 40px -16px rgb(var(--cc-shadow) / .4) !important; }
 .maplibregl-popup-tip { border-top-color: rgb(var(--cc-surface)) !important; border-bottom-color: rgb(var(--cc-surface)) !important; }
-.maplibregl-ctrl-group { background: rgb(var(--cc-surface)) !important; border: 1px solid rgb(var(--cc-border)); border-radius: 12px !important; box-shadow: 0 6px 18px -10px rgb(19 31 42 / .35) !important; overflow: hidden; }
-.maplibregl-ctrl-group button { width: 32px !important; height: 32px !important; }
+.maplibregl-ctrl-group { background: rgb(var(--cc-surface) / .92) !important; border: 1px solid rgb(var(--cc-border)); border-radius: 10px !important; box-shadow: 0 8px 24px -12px rgb(var(--cc-shadow) / .4) !important; overflow: hidden; backdrop-filter: blur(12px); }
+.maplibregl-ctrl-group button { width: 34px !important; height: 34px !important; }
 .maplibregl-ctrl-group button + button { border-top-color: rgb(var(--cc-border)) !important; }
+:root[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) brightness(1.4); }
 .maplibregl-ctrl-attrib { background: rgb(var(--cc-surface) / .8) !important; color: rgb(var(--cc-muted)); font-size: 10px; border-radius: 8px; }
 .maplibregl-ctrl-attrib a { color: rgb(var(--cc-muted)) !important; }
 .maplibregl-ctrl-scale { background: rgb(var(--cc-surface) / .85) !important; border-color: rgb(var(--cc-text) / .5) !important; color: rgb(var(--cc-text)); font-size: 10px; }
 
-/* Reduced motion: keep fades and short transitions (they carry meaning), drop looping pulses. Motion components
-   tone themselves down via useReducedMotion. */
-/* Landing headline ticker (duplicated row scrolls by half its width for a seamless loop). */
+/* Command centre: keep MapLibre's own controls clear of the docked rail */
+@media (min-width: 1024px) { .cc-map .maplibregl-ctrl-bottom-right { right: 420px; } .cc-map .maplibregl-ctrl-bottom-left { left: 96px; } }
+
+/* Vehicle markers (HTML markers; see components/map/VehicleMarker). Movement between two real fixes is a short
+   transform tween; nothing is extrapolated. */
+@keyframes live-ring { from { transform: scale(0.6); opacity: .55; } to { transform: scale(2.4); opacity: 0; } }
+.vm-ring { animation: live-ring 2.2s cubic-bezier(0.2, 0.9, 0.1, 1) infinite; }
+.vm { position: relative; width: 22px; height: 22px; cursor: pointer; outline: none; }
+.vm:focus-visible .vm-dot { box-shadow: 0 0 0 3px rgb(var(--cc-accent) / .5); }
+.vm .vm-ring { position: absolute; inset: 3px; border-radius: 999px; background: rgb(var(--cc-live)); pointer-events: none; }
+.vm .vm-dot { position: absolute; inset: 3px; border-radius: 999px; border: 2.5px solid rgb(var(--cc-surface));
+  background: rgb(var(--cc-live)); box-shadow: 0 2px 6px rgb(var(--cc-shadow) / .35);
+  transition: background-color .3s, border-color .3s, transform .35s cubic-bezier(0.32, 0.72, 0, 1), opacity .3s; }
+.vm .vm-head { position: absolute; left: 50%; top: -7px; width: 0; height: 0; margin-left: -5px; border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-bottom: 8px solid rgb(var(--cc-live)); transform-origin: 5px 18px; transition: opacity .3s; }
+.vm .vm-label { position: absolute; left: 50%; top: 25px; transform: translateX(-50%); white-space: nowrap; padding: 2px 7px; border-radius: 999px;
+  font: 600 10.5px/1.3 "Geist Variable", system-ui, sans-serif; color: rgb(var(--cc-text)); background: rgb(var(--cc-surface) / .92);
+  border: 1px solid rgb(var(--cc-border)); box-shadow: 0 2px 8px -2px rgb(var(--cc-shadow) / .3); font-variant-numeric: tabular-nums; }
+.vm .vm-label b { font-weight: 600; margin-left: 4px; }
+.vm[data-state="live"] .vm-label b { color: rgb(var(--p-green-700)); }
+/* stale: hollow ring, no pulse, heading hidden (direction is no longer current) */
+.vm[data-state="stale"] .vm-ring, .vm[data-state="offline"] .vm-ring { display: none; }
+.vm[data-state="stale"] .vm-dot { background: rgb(var(--cc-surface)); border: 4px solid rgb(var(--cc-stale)); }
+.vm[data-state="stale"] .vm-head, .vm[data-state="offline"] .vm-head, .vm[data-moving="0"] .vm-head { opacity: 0; }
+.vm[data-state="stale"] .vm-label b { color: rgb(var(--p-amber-800)); }
+/* offline: struck through and greyed: the marker is a last-known position, not a vehicle */
+.vm[data-state="offline"] .vm-dot { background: rgb(var(--cc-nosignal)); border-color: rgb(var(--cc-surface)); opacity: .85; }
+.vm[data-state="offline"] .vm-dot::after { content: ""; position: absolute; left: -4px; right: -4px; top: 50%; height: 2.5px; margin-top: -1.25px;
+  background: rgb(var(--cc-offline)); transform: rotate(-45deg); border-radius: 2px; }
+.vm[data-state="offline"] .vm-label { color: rgb(var(--cc-muted)); }
+.vm[data-state="offline"] .vm-label b { color: rgb(var(--p-red-700)); }
+.vm[data-selected="1"] .vm-dot { transform: scale(1.35); }
+.vm[data-selected="1"] .vm-label { background: rgb(var(--cc-ink)); color: rgb(var(--cc-on-ink)); border-color: rgb(var(--cc-ink)); }
+.vm[data-selected="1"] .vm-label b { color: inherit; opacity: .8; }
+.vm[data-dim="1"] { opacity: .35; }
+
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .ticker { animation: ticker 70s linear infinite; }
 .ticker:hover { animation-play-state: paused; }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.shimmer::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--cc-surface) / .6), transparent); animation: shimmer 1.4s ease-in-out infinite; }
 html { scroll-behavior: smooth; }
 
+/* Reduced motion: keep short fades (they carry meaning), drop loops, pulses and long travel. Motion components
+   also check useReducedMotion. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-ping, .animate-pulse, .ticker { animation: none !important; }
+  .animate-ping, .animate-pulse, .animate-spin, .ticker, .vm-ring, .shimmer::after { animation: none !important; }
   html { scroll-behavior: auto; }
 }
