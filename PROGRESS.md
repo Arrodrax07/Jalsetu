@@ -91,12 +91,13 @@ Last updated: 2026-10-03.
 - Leaflet removed.
 
 ## State at pause (2026-10-04)
-- Phase 1 complete except the **real phone GPS test**, which needs a person with a phone.
+- Phase 1 complete. Real phone GPS: user accepted the 2026-10-03 run (19 accepted fixes, 6–100 m accuracy, START + live
+  tracking on a real phone). Arrival/delivery on a physical phone not yet exercised (done with emulated GPS on a DB copy).
 - Running: API :8000, production preview :4173, Cloudflare tunnel (URL in `../tunnel.log`).
 - Next: real phone test (driver = kailash.mehra, tanker T-2045), then Phase 2 (full frontend transformation).
 
 ## Next steps
-1. Real phone GPS acceptance test (user + phone).
+1. (Optional) real-phone arrival + delivery run before the presentation.
 2. Phase 2: complete frontend transformation (design system, motion language, command centre, map, driver, citizen,
    analytics/impact, tables, responsive, accessibility), Playwright-iterated.
 
