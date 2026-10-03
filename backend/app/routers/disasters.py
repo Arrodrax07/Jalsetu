@@ -16,6 +16,7 @@ from ..ingestion.sachet import SEVERITY_RANK, is_active
 from ..models import Community, Depot, DisasterEvent, Recommendation, Tanker, Trip, User, WaterRequest, utcnow
 from ..schemas import AckIn
 from ..security import actor_from, require
+from ..services import supply
 from ..services.common import audit, get_setting, haversine_m
 from ..services.geo import contains, line_intersects
 from ..services.realtime import hub
@@ -136,7 +137,7 @@ def compute_impact(db: Session, e: DisasterEvent) -> dict:
     return {
         "eventId": e.id, "method": method, "radiusKm": radius_km,
         "communities": [{"id": c.id, "name": c.name, "population": c.population, "vulnerabilityScore": c.vulnerability_score,
-                         "dataOrigin": c.data_origin, "shortfall": max(0, c.daily_demand - c.allocated_water)} for c in comms],
+                         "dataOrigin": c.data_origin, "shortfall": supply.shortfall(c)} for c in comms],
         "populationInRecords": sum(c.population for c in comms),
         "openRequests": [{"id": r.code, "community": r.community.name, "litres": r.requested_amount, "status": r.status, "priority": r.priority_score} for r in reqs],
         "openRequestLitres": sum(r.requested_amount for r in reqs),

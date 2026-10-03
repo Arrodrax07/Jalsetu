@@ -6,7 +6,7 @@
  */
 import type {
   ActivityProfile, AIAssessment, AllocationPlan, Anomaly, CityForecast, Community, Complaint, ComplaintAnalysis, ComplaintCategory, ComplaintStatus,
-  DashboardStats, DeliveryRecord, Depot, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
+  CrisisSignal, DashboardStats, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
   OperationsSettings, Overview, PriorityWeights, RequestStatus, RouteOptimizationResult, SystemHealth, Trip, UrgencyLevel, UserProfile, UserRole,
   Vehicle, WaterRequest, OperationsMetrics,
 } from '../types';
@@ -50,8 +50,20 @@ function errorMessage(body: any, fallback: string): string {
   return fallback;
 }
 
-let refreshing: Promise<boolean> | null = null;
-export async function refreshSession(): Promise<{ accessToken: string; user: UserProfile } | null> {
+// Refresh tokens rotate and the server revokes the session if a rotated token is presented again,
+// so concurrent refreshes must never race: callers in this tab share one in-flight request, and the
+// Web Lock serialises refreshes across tabs (each tab then sends the cookie its predecessor rotated in).
+let refreshing: Promise<{ accessToken: string; user: UserProfile } | null> | null = null;
+export function refreshSession(): Promise<{ accessToken: string; user: UserProfile } | null> {
+  if (!refreshing) {
+    const run = () => doRefresh();
+    refreshing = (navigator.locks ? navigator.locks.request('jalsetu-auth-refresh', run) : run())
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+async function doRefresh(): Promise<{ accessToken: string; user: UserProfile } | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Device-Id': deviceId() } });
     if (!res.ok) return null;
@@ -64,8 +76,7 @@ export async function refreshSession(): Promise<{ accessToken: string; user: Use
 }
 
 async function tryRefresh(): Promise<boolean> {
-  if (!refreshing) refreshing = refreshSession().then(r => !!r).finally(() => { setTimeout(() => { refreshing = null; }, 0); });
-  return refreshing;
+  return !!(await refreshSession());
 }
 
 async function request<T>(path: string, init: RequestInit = {}, auth = true, retried = false): Promise<T> {
@@ -158,6 +169,15 @@ export const api = {
   breakdown: (id: string, note: string) => post<{ plan: AllocationPlan | null }>(`/tankers/${id}/breakdown`, { note, reallocate: true }),
   restoreTanker: (id: string) => post(`/tankers/${id}/restore`),
   depots: () => get<Depot[]>('/depots'),
+
+  // crisis intelligence & auto-dispatch
+  crisisSignals: () => get<CrisisSignal[]>('/crisis/signals'),
+  reviewSignal: (id: number, status: CrisisSignal['status']) => patch<{ status: string }>(`/crisis/signals/${id}`, { status }),
+  refreshCrisis: () => post<{ inCrisis: number; news: { created: number; error: string | null }; rainfall: { created: number; updated: number } }>('/crisis/refresh'),
+  proposals: () => get<DispatchProposal[]>('/dispatch/proposals'),
+  propose: () => post<{ batch: string; proposed: number; autoApproved: number[]; candidates: number; tankersAvailable: number }>('/dispatch/propose'),
+  approveProposal: (id: number) => post<{ proposal: DispatchProposal; trip: Trip }>(`/dispatch/proposals/${id}/approve`),
+  rejectProposal: (id: number, reason = '') => post<DispatchProposal>(`/dispatch/proposals/${id}/reject`, { reason }),
   createDepot: (d: { name: string; lat: number; lng: number; capacityLitres?: number }) => post<Depot>('/depots', d),
 
   // trips

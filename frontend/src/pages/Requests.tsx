@@ -8,7 +8,7 @@ import { dt, litres, timeAgo } from '../utils/format';
 
 export const FACTOR_LABELS: Record<keyof PriorityFactors, string> = {
   demand: 'Demand severity', vulnerability: 'Socio-economic vulnerability', unmetNeed: 'Unmet need / days without water',
-  previousCoverage: 'Coverage gap (last 7 days)', population: 'Population impacted',
+  previousCoverage: 'Coverage gap (last 7 days)', population: 'Population impacted', liveCrisis: 'Live crisis signals (news + rainfall)',
 };
 
 /** Level + the top reasons, never a bare number. */
@@ -28,7 +28,7 @@ export const AssessmentView: React.FC<{ a: AIAssessment }> = ({ a }) => (
     <div className="flex items-center justify-between"><p className="text-sm font-semibold">{a.urgency} priority · score {a.priorityScore}/100</p><KindLabel kind="rule-based" title="Weighted factors; weights are set by the administrator" /></div>
     {(Object.entries(a.contributions) as [keyof PriorityFactors, number][]).sort((x, y) => y[1] - x[1]).map(([k, pts]) => (
       <div key={k} className="text-xs">
-        <div className="flex justify-between text-cc-muted"><span>{FACTOR_LABELS[k]} <span className="text-cc-faint">({Math.round(a.factors[k])}/100 × {Math.round((a.weights as any)[k] * 100)}%)</span></span><span className="num text-cc-text">+{pts.toFixed(1)}</span></div>
+        <div className="flex justify-between text-cc-muted"><span>{FACTOR_LABELS[k]} <span className="text-cc-faint">({Math.round(a.factors[k] ?? 0)}/100 × {Math.round((a.weights as any)[k] * 100)}%)</span></span><span className="num text-cc-text">+{pts.toFixed(1)}</span></div>
         <div className="mt-0.5 h-1.5 rounded-full bg-cc-bg"><div className="h-full rounded-full bg-cc-accent" style={{ width: `${Math.min(100, pts * 2.5)}%` }} /></div>
       </div>
     ))}

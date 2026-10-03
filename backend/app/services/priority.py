@@ -7,10 +7,15 @@ S_vuln      community vulnerability score (0-100, from census/socio-economic sur
 S_unmet     100 * (demand - allocated) / demand  (a request's days-without-water can raise it)
 S_gap       100 - delivered coverage over the last 7 days (falls back to previous allocation)
 S_pop       100 * population / max population across active communities
+S_crisis    live crisis score 0-100 from news reports and measured rainfall deficit (services.crisis)
+
+"Demand" here is the tanker need: demand minus the estimated piped/municipal baseline (services.supply).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from . import supply
 
 FACTOR_LABELS = {
     "demand": "Demand severity",
@@ -18,6 +23,7 @@ FACTOR_LABELS = {
     "unmetNeed": "Unmet need",
     "previousCoverage": "Historical coverage gap",
     "population": "Population impacted",
+    "liveCrisis": "Live crisis signals",
 }
 
 
@@ -48,24 +54,27 @@ def vulnerability_level(score: float) -> str:
 
 def score_community(community, weights: dict[str, float], ctx: PriorityContext, days_without_water: int | None = None,
                     demand_override: float | None = None) -> PriorityResult:
-    demand = float(demand_override or community.daily_demand or 1)
+    need = float(supply.tanker_need(community, demand_override))
     allocated = float(community.allocated_water or 0)
-    unmet = max(0.0, min(100.0, 100 * (demand - allocated) / demand))
+    if need > 0:
+        unmet = max(0.0, min(100.0, 100 * (need - allocated) / need))
+        delivered = ctx.delivered_7d.get(community.id)
+        if delivered is not None:
+            coverage_7d = min(100.0, 100 * delivered / (7 * need))
+        else:
+            coverage_7d = min(100.0, 100 * float(community.previous_allocation or allocated) / need)
+    else:  # fully covered by the piped baseline
+        unmet, coverage_7d = 0.0, 100.0
     if days_without_water:
         unmet = max(unmet, min(100.0, 25.0 * days_without_water))
 
-    delivered = ctx.delivered_7d.get(community.id)
-    if delivered is not None:
-        coverage_7d = min(100.0, 100 * delivered / (7 * demand))
-    else:
-        coverage_7d = min(100.0, 100 * float(community.previous_allocation or allocated) / demand)
-
     sub = {
-        "demand": min(100.0, 100 * demand / max(ctx.max_demand, 1)),
+        "demand": min(100.0, 100 * need / max(ctx.max_demand, 1)),
         "vulnerability": float(community.vulnerability_score),
         "unmetNeed": unmet,
         "previousCoverage": 100 - coverage_7d,
         "population": min(100.0, 100 * community.population / max(ctx.max_population, 1)),
+        "liveCrisis": float(getattr(community, "crisis_score", 0.0) or 0.0),
     }
     wsum = sum(max(0.0, weights.get(k, 0.0)) for k in sub) or 1.0
     contrib = {k: max(0.0, weights.get(k, 0.0)) * v / wsum for k, v in sub.items()}

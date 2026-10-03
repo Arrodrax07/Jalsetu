@@ -18,7 +18,7 @@ export interface UserProfile {
   isActive: boolean; tankerId: string | null; mustChangePassword: boolean; permissions: string[];
 }
 
-export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number }
+export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis?: number }
 
 export interface Community {
   id: string; name: string; ward: string; population: number; dailyDemand: number; allocatedWater: number; availableWater: number;
@@ -26,6 +26,25 @@ export interface Community {
   lastDelivery: string | null; openComplaints: number; repeatedComplaints: number; priorityScore: number; priorityFactors: PriorityFactors;
   lat: number; lng: number; status: 'Normal' | 'High Demand' | 'Critical' | 'Recently Served'; contactOfficer: string; officerPhone: string;
   isActive: boolean; dataOrigin: DataOrigin; districtId: number | null; districtName: string | null; stateName: string | null;
+  /** Estimated piped/municipal supply (litres/day); tankers cover the rest. */
+  baselineSupply?: number; tankerNeed?: number;
+  /** 0-100 from live crisis signals (news + rainfall deficit). */
+  crisisScore?: number; settlementType?: string | null; source?: string | null; sourceUrl?: string | null; demandBasis?: string | null;
+}
+
+export interface CrisisSignal {
+  id: number; kind: 'news' | 'rainfall_deficit'; title: string; summary: string; url: string; publisher: string; publishedAt: string | null;
+  severity: 'Severe' | 'Moderate' | 'Minor'; metric: number | null; status: 'unverified' | 'confirmed' | 'dismissed';
+  communities: { id: string; name: string }[]; districts: { id: number; name: string }[];
+  matchedTerms: { term: string; scope: 'community' | 'district' | 'region' }[]; regionOnly: boolean;
+  reviewedBy: string | null; reviewedAt: string | null; expiresAt: string | null; active: boolean;
+}
+
+export interface DispatchProposal {
+  id: number; batch: string; status: 'Proposed' | 'Approved' | 'Rejected' | 'Expired'; auto: boolean; score: number;
+  tankerId: string; vehicleNumber: string; depot: string | null; stops: { communityId: string; name: string; litres: number }[];
+  estDistanceKm: number; reasons: string[]; tripId: number | null; tripCode: string | null;
+  createdAt: string; decidedAt: string | null; decidedBy: string | null;
 }
 
 export interface AIAssessment {
@@ -51,7 +70,7 @@ export interface Complaint {
   recommendedAction: string; labelVerified: boolean; source: 'officer' | 'citizen'; reporterName: string; dataOrigin: DataOrigin;
 }
 
-export interface Depot { id: number; name: string; lat: number; lng: number; dataOrigin: DataOrigin; stockLitres: number | null; stockUpdatedAt: string | null }
+export interface Depot { id: number; name: string; lat: number; lng: number; dataOrigin: DataOrigin; stockLitres: number | null; stockUpdatedAt: string | null; isActive?: boolean; placementNote?: string }
 
 export interface VehiclePosition {
   lat: number; lng: number; accuracyM: number | null; speedKmh: number | null; heading: number | null; headingLabel: string | null;
@@ -97,7 +116,7 @@ export interface DeliveryRecord {
   tripId: string | null; receiverName: string; receiverPhone: string; verifiedAt: string | null; verificationNotes: string; gpsDeviceTime: string | null;
 }
 
-export interface PriorityWeights { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number }
+export interface PriorityWeights { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis: number }
 export interface OperationsSettings {
   tripsPerDay: number; survivalLitresPerPerson: number; minCoveragePct: number; protectVulnerabilityAbove: number; dieselPricePerLitre: number;
   tankerKmPerLitre: number; co2KgPerLitreDiesel: number; fallbackSpeedKmh: number; roadCircuityFactor: number; geofenceRadiusM: number;

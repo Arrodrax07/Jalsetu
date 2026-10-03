@@ -3,6 +3,7 @@ import { Route as RouteIcon, Send, XCircle } from 'lucide-react';
 import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { OpsMap, MapRoute } from '../components/map/OpsMap';
+import { AutoDispatch } from '../components/AutoDispatch';
 import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, Panel, StatusChip } from '../components/ui';
 import type { RouteOptimizationResult, Trip } from '../types';
 import { dt, km, litres, minutes } from '../utils/format';
@@ -17,6 +18,7 @@ export const Trips: React.FC<{ tripRef?: string }> = ({ tripRef }) => {
     <div className="p-4 lg:p-6">
       <PageHeader title="Trips & dispatch" subtitle="Dispatch assigns a tanker and driver. The trip starts only when the driver presses START with a real GPS fix."
         actions={can('dispatch') && <Button variant="primary" icon={<Send className="h-4 w-4" />} onClick={() => setDispatchOpen(true)}>Dispatch trip</Button>} />
+      <AutoDispatch />
       <div className="mb-3 flex gap-1">
         {(['open', 'completed', 'all'] as const).map(f => <Button key={f} size="sm" variant={filter === f ? 'primary' : 'secondary'} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</Button>)}
       </div>

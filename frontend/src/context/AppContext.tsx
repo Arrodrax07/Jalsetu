@@ -1,13 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, refreshSession, session, setSessionLostHandler } from '../services/api';
 import type {
-  AllocationPlan, Anomaly, Community, Complaint, DeliveryRecord, Depot, DisasterEvent, Notification, OperationsSettings, Overview,
+  AllocationPlan, Anomaly, Community, Complaint, CrisisSignal, DeliveryRecord, Depot, DisasterEvent, DispatchProposal, Notification, OperationsSettings, Overview,
   PriorityWeights, SystemHealth, TrackingState, Trip, UserProfile, Vehicle, WaterRequest,
 } from '../types';
 
 export interface Toast { id: string; title: string; message: string; type: 'success' | 'warning' | 'error' | 'info' }
 type Slice = 'overview' | 'vehicles' | 'trips' | 'disasters' | 'notifications' | 'anomalies' | 'health' | 'communities' | 'depots'
-  | 'requests' | 'complaints' | 'deliveries' | 'plan' | 'settings' | 'drivers';
+  | 'requests' | 'complaints' | 'deliveries' | 'plan' | 'settings' | 'drivers' | 'signals' | 'proposals';
 
 interface Ctx {
   user: UserProfile | null;
@@ -31,6 +31,8 @@ interface Ctx {
   health: SystemHealth | null;
   communities: Community[];
   depots: Depot[];
+  signals: CrisisSignal[];
+  proposals: DispatchProposal[];
   requests: WaterRequest[];
   complaints: Complaint[];
   deliveries: DeliveryRecord[];
@@ -87,6 +89,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [depots, setDepots] = useState<Depot[]>([]);
+  const [signals, setSignals] = useState<CrisisSignal[]>([]);
+  const [proposals, setProposals] = useState<DispatchProposal[]>([]);
   const [requests, setRequests] = useState<WaterRequest[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
@@ -130,6 +134,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     health: async () => setHealth(await api.health()),
     communities: async () => setCommunities(await api.communities()),
     depots: async () => setDepots(await api.depots()),
+    signals: async () => setSignals(await api.crisisSignals()),
+    proposals: async () => setProposals(await api.proposals()),
     requests: async () => setRequests(await api.requests()),
     complaints: async () => setComplaints(await api.complaints()),
     deliveries: async () => setDeliveries(await api.deliveries()),
@@ -153,7 +159,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const clear = () => {
     setOverview(null); setVehicles([]); setTrips([]); setDisasters([]); setNotifications({ unread: 0, items: [] }); setAnomalies([]);
-    setHealth(null); setCommunities([]); setDepots([]); setRequests([]); setComplaints([]); setDeliveries([]); setPlan(null); setLoaded(new Set());
+    setHealth(null); setCommunities([]); setDepots([]); setSignals([]); setProposals([]); setRequests([]); setComplaints([]); setDeliveries([]); setPlan(null); setLoaded(new Set());
   };
 
   const logout = useCallback(async () => {
@@ -245,6 +251,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           case 'complaints.changed': schedule('complaints', 'overview'); break;
           case 'allocation.changed': schedule('plan', 'communities'); break;
           case 'communities.changed': schedule('communities'); break;
+          case 'crisis.changed': schedule('signals', 'communities'); break;
+          case 'dispatch.changed': schedule('proposals', 'trips', 'vehicles'); break;
           case 'settings.changed': schedule('settings', 'communities'); break;
           case 'ml.retrained': toast('Models retrained', `New ${evt.data?.target} model is live.`, 'success'); break;
         }
@@ -259,11 +267,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const value = useMemo<Ctx>(() => ({
     user, authChecked, login, logout, setUser: setUserState, can, route, navigate,
-    overview, vehicles, thresholds, trips, disasters, notifications, anomalies, health, communities, depots, requests, complaints, deliveries,
+    overview, vehicles, thresholds, trips, disasters, notifications, anomalies, health, communities, depots, signals, proposals, requests, complaints, deliveries,
     plan, fleetSupply, weights, operations, drivers, loaded, wsConnected, serverOffsetMs, refresh, toasts, toast, dismissToast, fail,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [user, authChecked, can, route, navigate, overview, vehicles, thresholds, trips, disasters, notifications, anomalies, health, communities,
-    depots, requests, complaints, deliveries, plan, fleetSupply, weights, operations, drivers, loaded, wsConnected, serverOffsetMs, refresh, toasts,
+    depots, signals, proposals, requests, complaints, deliveries, plan, fleetSupply, weights, operations, drivers, loaded, wsConnected, serverOffsetMs, refresh, toasts,
     toast, dismissToast, fail, logout]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

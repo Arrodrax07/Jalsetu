@@ -239,3 +239,11 @@ class DemandObservationIn(In):
     date: date
     litres: int = Field(ge=0)
     source: str = "manual"
+
+
+class SignalReviewIn(In):
+    status: Literal["confirmed", "dismissed", "unverified"]
+
+
+class ProposalRejectIn(In):
+    reason: str = Field(default="", max_length=500)

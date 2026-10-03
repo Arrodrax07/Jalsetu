@@ -13,6 +13,7 @@ from ..domain import TANKER_AVAILABLE, TANKER_MAINTENANCE
 from ..security import require
 from ..services import ml
 from ..services.allocation import AllocationInput, optimise
+from ..services import supply as supply_
 from ..services.common import audit, get_setting
 from ..services.priority import score_community
 from ..services.realtime import hub
@@ -49,9 +50,10 @@ def latest_plan(db: Session, statuses=("Proposed", "Approved")) -> AllocationPla
 
 
 def run_plan(db: Session, user: User | None, supply: int | None = None, use_forecast: bool = False, disruption: dict | None = None) -> AllocationPlan:
-    communities = list(db.scalars(select(Community).where(Community.is_active.is_(True))))
+    # Only communities with a tanker need take part: places fully covered by their piped baseline get no tanker water.
+    communities = [c for c in db.scalars(select(Community).where(Community.is_active.is_(True))) if supply_.tanker_need(c) > 0]
     if not communities:
-        raise HTTPException(400, "No active communities configured")
+        raise HTTPException(400, "No active community currently needs tanker water")
     weights = get_setting(db, "weights")
     ops = get_setting(db, "operations")
     supply = supply or fleet_supply(db, ops["tripsPerDay"])
@@ -59,8 +61,10 @@ def run_plan(db: Session, user: User | None, supply: int | None = None, use_fore
         raise HTTPException(400, "No supply available: add tankers or specify totalSupply")
 
     demands, demand_source = forecast_demands(communities) if use_forecast else ({c.id: c.daily_demand for c in communities}, "baseline")
+    full_demands = demands
+    demands = {c.id: supply_.tanker_need(c, full_demands[c.id]) for c in communities}  # minus the piped baseline
     ctx = priority_context(db, communities)
-    scores = {c.id: score_community(c, weights, ctx, demand_override=demands[c.id]) for c in communities}
+    scores = {c.id: score_community(c, weights, ctx, demand_override=full_demands[c.id]) for c in communities}
 
     reference = latest_plan(db, ("Approved",))
     ref_alloc = {it.community_id: it.recommended for it in reference.items} if reference else {}

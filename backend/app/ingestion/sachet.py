@@ -282,7 +282,7 @@ def match_districts_by_name(db: Session, e: DisasterEvent) -> bool:
     q = select(GeoDistrict)
     if states:
         q = q.where(GeoDistrict.state_id.in_([s.id for s in states]))
-    parts = {norm(p) for p in re.split(r",|and|districts? of|district", text)}
+    parts = {norm(p) for p in re.split(r",|\band\b|districts? of|district", text)}
     hits = [d for d in db.scalars(q) if norm(d.name) and norm(d.name) in parts]
     if not hits:
         return False

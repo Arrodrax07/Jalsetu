@@ -109,6 +109,10 @@ class Depot(Base):
     stock_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     capacity_litres: Mapped[int | None] = mapped_column(Integer, nullable=True)
     data_origin: Mapped[str] = mapped_column(String(16), default="manual")
+    # Auto-sited depots sit on a real water-infrastructure record; placement_note says why it was chosen.
+    water_source_id: Mapped[int | None] = mapped_column(ForeignKey("water_sources.id"), nullable=True)
+    placement_note: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class WaterSource(Base):
@@ -126,6 +130,7 @@ class WaterSource(Base):
     data_origin: Mapped[str] = mapped_column(String(16), default="manual")
     source: Mapped[str] = mapped_column(String(120), default="")
     source_url: Mapped[str] = mapped_column(String(500), default="")
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # e.g. osm:way/123
 
 
 class ReliefCenter(Base):
@@ -151,7 +156,10 @@ class Community(Base):
     district_id: Mapped[int | None] = mapped_column(ForeignKey("geo_districts.id"), index=True, nullable=True)
     population: Mapped[int] = mapped_column(Integer)
     daily_demand: Mapped[int] = mapped_column(Integer)  # baseline litres/day
-    allocated_water: Mapped[int] = mapped_column(Integer, default=0)  # current approved daily allocation
+    # Estimated litres/day already supplied by the piped/municipal system. Tankers cover only the rest.
+    # 0 for communities served entirely by tankers (the original single-city model).
+    baseline_supply: Mapped[int] = mapped_column(Integer, default=0)
+    allocated_water: Mapped[int] = mapped_column(Integer, default=0)  # current approved daily tanker allocation
     previous_allocation: Mapped[int] = mapped_column(Integer, default=0)
     vulnerability_score: Mapped[float] = mapped_column(Float)  # 0-100
     lat: Mapped[float] = mapped_column(Float)
@@ -161,6 +169,15 @@ class Community(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     data_origin: Mapped[str] = mapped_column(String(16), default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Provenance for imported settlements (OpenStreetMap) and the assumptions behind derived numbers.
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # e.g. osm:node/123
+    settlement_type: Mapped[str] = mapped_column(String(16), default="")  # city | town | village | suburb
+    source: Mapped[str] = mapped_column(String(120), default="")
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    demand_basis: Mapped[str] = mapped_column(String(200), default="")
+    # 0-100 from live crisis signals (services.crisis); drives baseline_supply for imported communities.
+    crisis_score: Mapped[float] = mapped_column(Float, default=0.0)
+    crisis_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     district: Mapped[GeoDistrict | None] = relationship()
     state: Mapped[GeoState | None] = relationship()
@@ -504,6 +521,56 @@ class DisasterEvent(Base):
     raw: Mapped[str] = mapped_column(Text, default="")
     acknowledged_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CrisisSignal(Base):
+    """Evidence that a place is in water stress right now: a news report or a measured rainfall deficit.
+
+    News is unverified until an operator confirms it; dismissed signals stop counting. Each signal names
+    the communities and/or districts it was matched to, and why."""
+    __tablename__ = "crisis_signals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(24), index=True)  # news | rainfall_deficit
+    external_id: Mapped[str] = mapped_column(String(200), unique=True)  # article URL hash / district+season
+    title: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    publisher: Mapped[str] = mapped_column(String(200), default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    severity: Mapped[str] = mapped_column(String(16), default="Moderate")  # Severe | Moderate | Minor
+    metric: Mapped[float | None] = mapped_column(Float, nullable=True)  # e.g. rainfall deviation %
+    community_ids: Mapped[list] = mapped_column(JSON, default=list)
+    district_ids: Mapped[list] = mapped_column(JSON, default=list)
+    matched_terms: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="unverified", index=True)  # unverified | confirmed | dismissed
+    reviewed_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class DispatchProposal(Base):
+    """A trip the auto-dispatcher recommends. Becomes a real Trip only when a dispatcher approves it."""
+    __tablename__ = "dispatch_proposals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch: Mapped[str] = mapped_column(String(32), index=True)
+    tanker_id: Mapped[str] = mapped_column(ForeignKey("tankers.id"), index=True)
+    depot_id: Mapped[int | None] = mapped_column(ForeignKey("depots.id"), nullable=True)
+    community_ids: Mapped[list] = mapped_column(JSON, default=list)
+    litres: Mapped[dict] = mapped_column(JSON, default=dict)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    est_distance_km: Mapped[float] = mapped_column(Float, default=0.0)
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="Proposed", index=True)  # Proposed | Approved | Rejected | Expired
+    auto: Mapped[bool] = mapped_column(Boolean, default=False)  # approved by the auto-approve policy
+    trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    tanker: Mapped[Tanker] = relationship()
 
 
 class Recommendation(Base):

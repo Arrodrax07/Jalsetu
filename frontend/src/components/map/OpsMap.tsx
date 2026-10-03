@@ -9,8 +9,20 @@ import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map as MLMap, StyleSpecifi
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Community, Depot, TrackingState, Vehicle } from '../../types';
 
-export const MAP_STYLE_URL: string = import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/dark';
-const INDIA: LngLatBoundsLike = [[67.5, 6.0], [97.8, 37.4]];
+// Basemaps (OpenFreeMap, no key). VITE_MAP_STYLE_URL overrides the default colour style.
+export const BASEMAPS = {
+  colour: { label: 'Colour', url: import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty', dark: false },
+  light: { label: 'Light', url: 'https://tiles.openfreemap.org/styles/positron', dark: false },
+  dark: { label: 'Dark', url: 'https://tiles.openfreemap.org/styles/dark', dark: true },
+} as const;
+type Basemap = keyof typeof BASEMAPS;
+const BASEMAP_KEY = 'jalsetu.basemap';
+function initialBasemap(): Basemap {
+  try { const v = localStorage.getItem(BASEMAP_KEY); if (v && v in BASEMAPS) return v as Basemap; } catch { /* storage unavailable */ }
+  return 'colour';
+}
+// Operating area: Maharashtra (communities, depots and crisis signals are imported for this state).
+const HOME: LngLatBoundsLike = [[72.6, 15.6], [80.9, 22.1]];
 
 const FALLBACK_STYLE: StyleSpecification = {
   version: 8,
@@ -57,13 +69,13 @@ function circle(lat: number, lng: number, radiusM: number): GeoJSON.Feature {
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [pts] }, properties: {} };
 }
 
-async function resolveStyle(): Promise<{ style: string | StyleSpecification; labels: boolean }> {
+async function resolveStyle(url: string): Promise<{ style: string | StyleSpecification; labels: boolean }> {
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 6000);
-    const r = await fetch(MAP_STYLE_URL, { signal: ctl.signal });
+    const r = await fetch(url, { signal: ctl.signal });
     clearTimeout(t);
-    if (r.ok) return { style: MAP_STYLE_URL, labels: true };
+    if (r.ok) return { style: url, labels: true };
   } catch { /* fall through */ }
   return { style: FALLBACK_STYLE, labels: false };
 }
@@ -73,25 +85,29 @@ export const OpsMap: React.FC<Props> = (p) => {
   const map = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
   const [basemapOk, setBasemapOk] = useState(true);
+  const [basemap, setBasemap] = useState<Basemap>(initialBasemap);
   const handlers = useRef(p);
   handlers.current = p;
 
   useEffect(() => {
     let cancelled = false;
-    resolveStyle().then(({ style, labels }) => {
+    const dark = BASEMAPS[basemap].dark;
+    const ink = dark ? { text: '#e6edf6', halo: '#060a11', muted: '#94a3bd', state: '#7b8ba6', district: '#475569' }
+      : { text: '#0f172a', halo: '#ffffff', muted: '#334155', state: '#1e3a8a', district: '#64748b' };
+    resolveStyle(BASEMAPS[basemap].url).then(({ style, labels }) => {
       if (cancelled || !el.current) return;
       setBasemapOk(labels);
-      const m = new maplibregl.Map({ container: el.current, style, bounds: INDIA, attributionControl: { compact: true }, maxPitch: 0, dragRotate: false });
+      const m = new maplibregl.Map({ container: el.current, style, bounds: HOME, fitBoundsOptions: { padding: 24 }, attributionControl: { compact: true }, maxPitch: 0, dragRotate: false });
       map.current = m;
       m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
       m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
       m.on('load', () => {
         const src = (id: string) => m.addSource(id, { type: 'geojson', data: empty });
         ['states', 'districts', 'alerts', 'routes', 'geofence', 'communities', 'depots', 'vehicles'].forEach(src);
-        m.addLayer({ id: 'states-fill', type: 'fill', source: 'states', paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.015 } });
-        m.addLayer({ id: 'states-line', type: 'line', source: 'states', paint: { 'line-color': '#5b6b84', 'line-width': 0.8, 'line-opacity': 0.7 } });
-        m.addLayer({ id: 'districts-line', type: 'line', source: 'districts', paint: { 'line-color': '#475569', 'line-width': 0.6, 'line-dasharray': [2, 2] } });
-        m.addLayer({ id: 'alerts-fill', type: 'fill', source: 'alerts', paint: { 'fill-color': SEV_COLOR as any, 'fill-opacity': 0.18 } });
+        m.addLayer({ id: 'states-fill', type: 'fill', source: 'states', paint: { 'fill-color': '#38bdf8', 'fill-opacity': dark ? 0.015 : 0.04 } });
+        m.addLayer({ id: 'states-line', type: 'line', source: 'states', paint: { 'line-color': ink.state, 'line-width': dark ? 0.8 : 1.1, 'line-opacity': 0.7 } });
+        m.addLayer({ id: 'districts-line', type: 'line', source: 'districts', paint: { 'line-color': ink.district, 'line-width': 0.6, 'line-dasharray': [2, 2] } });
+        m.addLayer({ id: 'alerts-fill', type: 'fill', source: 'alerts', paint: { 'fill-color': SEV_COLOR as any, 'fill-opacity': dark ? 0.18 : 0.3 } });
         m.addLayer({ id: 'alerts-line', type: 'line', source: 'alerts', paint: { 'line-color': SEV_COLOR as any, 'line-width': 1.2, 'line-opacity': 0.9 } });
         m.addLayer({ id: 'routes-planned', type: 'line', source: 'routes', filter: ['==', ['get', 'kind'], 'planned'],
           paint: { 'line-color': '#38bdf8', 'line-width': ['case', ['get', 'highlight'], 3, 2], 'line-dasharray': [2, 1.5], 'line-opacity': ['case', ['get', 'highlight'], 0.9, 0.45] } });
@@ -99,22 +115,27 @@ export const OpsMap: React.FC<Props> = (p) => {
         m.addLayer({ id: 'routes-actual', type: 'line', source: 'routes', filter: ['==', ['get', 'kind'], 'actual'], paint: { 'line-color': '#22c55e', 'line-width': 3.5, 'line-opacity': 0.95 } });
         m.addLayer({ id: 'geofence-fill', type: 'fill', source: 'geofence', paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.08 } });
         m.addLayer({ id: 'geofence-line', type: 'line', source: 'geofence', paint: { 'line-color': '#22c55e', 'line-width': 1.5, 'line-dasharray': [1, 1] } });
+        // Crisis glow under each community: size and colour scale with live crisis signals (news + rainfall deficit).
+        m.addLayer({ id: 'communities-crisis', type: 'circle', source: 'communities', filter: ['>=', ['get', 'crisis'], 20],
+          paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, ['interpolate', ['linear'], ['get', 'crisis'], 20, 4, 100, 13], 10, ['interpolate', ['linear'], ['get', 'crisis'], 20, 10, 100, 30]],
+            'circle-color': ['interpolate', ['linear'], ['get', 'crisis'], 20, '#f59e0b', 60, '#f97316', 85, '#ef4444'],
+            'circle-opacity': dark ? 0.32 : 0.28, 'circle-blur': 0.7 } });
         m.addLayer({ id: 'communities', type: 'circle', source: 'communities',
           paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7, 14, 10], 'circle-color': COMMUNITY_COLOR as any, 'circle-opacity': 0.9,
-            'circle-stroke-color': ['case', ['==', ['get', 'origin'], 'seeded'], '#a78bfa', '#0b1220'], 'circle-stroke-width': 1.5 } });
-        m.addLayer({ id: 'depots', type: 'circle', source: 'depots', paint: { 'circle-radius': 6, 'circle-color': '#0b1220', 'circle-stroke-color': '#e6edf6', 'circle-stroke-width': 2 } });
+            'circle-stroke-color': ['case', ['==', ['get', 'origin'], 'seeded'], '#a78bfa', dark ? '#0b1220' : '#ffffff'], 'circle-stroke-width': 1.5 } });
+        m.addLayer({ id: 'depots', type: 'circle', source: 'depots', paint: { 'circle-radius': 6, 'circle-color': dark ? '#0b1220' : '#1d4ed8', 'circle-stroke-color': dark ? '#e6edf6' : '#ffffff', 'circle-stroke-width': 2 } });
         m.addLayer({ id: 'vehicles-halo', type: 'circle', source: 'vehicles', filter: ['get', 'selected'], paint: { 'circle-radius': 16, 'circle-color': '#ffffff', 'circle-opacity': 0.12 } });
         m.addLayer({ id: 'vehicles-acc', type: 'circle', source: 'vehicles', filter: ['get', 'selected'],
           paint: { 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 10, ['/', ['get', 'acc'], 152.87], 20, ['/', ['get', 'acc'], 0.1493]], 'circle-color': '#38bdf8', 'circle-opacity': 0.08, 'circle-stroke-color': '#38bdf8', 'circle-stroke-width': 0.5 } });
         m.addLayer({ id: 'vehicles', type: 'circle', source: 'vehicles',
-          paint: { 'circle-radius': ['case', ['get', 'selected'], 9, 7], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#060a11', 'circle-stroke-width': 2.5 } });
+          paint: { 'circle-radius': ['case', ['get', 'selected'], 9, 7], 'circle-color': ['get', 'color'], 'circle-stroke-color': dark ? '#060a11' : '#ffffff', 'circle-stroke-width': 2.5 } });
         if (labels) {
           m.addLayer({ id: 'vehicles-label', type: 'symbol', source: 'vehicles',
             layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 11, 'text-offset': [0, 1.4], 'text-anchor': 'top', 'text-allow-overlap': true },
-            paint: { 'text-color': '#e6edf6', 'text-halo-color': '#060a11', 'text-halo-width': 1.5 } });
+            paint: { 'text-color': ink.text, 'text-halo-color': ink.halo, 'text-halo-width': 1.5 } });
           m.addLayer({ id: 'communities-label', type: 'symbol', source: 'communities', minzoom: 11,
             layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top' },
-            paint: { 'text-color': '#94a3bd', 'text-halo-color': '#060a11', 'text-halo-width': 1.2 } });
+            paint: { 'text-color': ink.muted, 'text-halo-color': ink.halo, 'text-halo-width': 1.2 } });
         }
         const click = (layer: string, fn: (f: maplibregl.MapGeoJSONFeature) => void) => {
           m.on('click', layer, e => { e.originalEvent.stopPropagation(); if (e.features?.[0]) fn(e.features[0]); });
@@ -132,8 +153,13 @@ export const OpsMap: React.FC<Props> = (p) => {
         setReady(true);
       });
     });
-    return () => { cancelled = true; map.current?.remove(); map.current = null; };
-  }, []);
+    return () => { cancelled = true; setReady(false); map.current?.remove(); map.current = null; };
+  }, [basemap]);
+
+  const pickBasemap = (b: Basemap) => {
+    setBasemap(b);
+    try { localStorage.setItem(BASEMAP_KEY, b); } catch { /* storage unavailable */ }
+  };
 
   const set = (id: string, data: GeoJSON.FeatureCollection) => {
     const s = map.current?.getSource(id) as GeoJSONSource | undefined;
@@ -155,7 +181,7 @@ export const OpsMap: React.FC<Props> = (p) => {
     if (!ready) return;
     set('communities', { type: 'FeatureCollection', features: (p.communities || []).map(c => ({
       type: 'Feature', geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
-      properties: { id: c.id, name: c.name, status: c.status, origin: c.dataOrigin } })) });
+      properties: { id: c.id, name: c.name, status: c.status, origin: c.dataOrigin, crisis: c.crisisScore ?? 0 } })) });
   }, [ready, p.communities]);
   useEffect(() => {
     if (!ready) return;
@@ -185,6 +211,14 @@ export const OpsMap: React.FC<Props> = (p) => {
           Basemap tiles unavailable. Operational layers are still accurate.
         </div>
       )}
+      <div role="radiogroup" aria-label="Basemap" className="absolute right-12 top-2.5 z-10 flex overflow-hidden rounded-lg border border-cc-border bg-cc-bg/85 p-0.5 text-2xs font-semibold shadow-pop backdrop-blur">
+        {(Object.keys(BASEMAPS) as Basemap[]).map(b => (
+          <button key={b} role="radio" aria-checked={basemap === b} onClick={() => pickBasemap(b)}
+            className={basemap === b ? 'rounded-md bg-cc-accent px-2.5 py-1 text-cc-bg' : 'rounded-md px-2.5 py-1 text-cc-muted hover:text-cc-text'}>
+            {BASEMAPS[b].label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     AllocationPlan, Community, Complaint, Delivery, Depot, Tanker, WaterRequest, utcnow,
 )
+from . import supply
 from .common import get_setting
 from .priority import PriorityContext, score_community, vulnerability_level
 
@@ -30,7 +31,7 @@ def priority_context(db: Session, communities: list[Community]) -> PriorityConte
         .group_by(Delivery.community_id)
     ).all()
     return PriorityContext(
-        max_demand=max((c.daily_demand for c in communities), default=1),
+        max_demand=max((supply.tanker_need(c) for c in communities), default=1),
         max_population=max((c.population for c in communities), default=1),
         delivered_7d={cid: int(total or 0) for cid, total in rows},
     )
@@ -59,7 +60,7 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
     out = []
     now = utcnow()
     for c in communities:
-        coverage = min(100, round(100 * c.allocated_water / c.daily_demand)) if c.daily_demand else 0
+        coverage = supply.coverage_pct(c)
         last = last_delivery.get(c.id)
         if coverage < 65 or critical_req[c.id]:
             status = "Critical"
@@ -77,8 +78,10 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "population": c.population,
             "dailyDemand": c.daily_demand,
             "allocatedWater": c.allocated_water,
-            "availableWater": c.allocated_water,
-            "shortfall": max(0, c.daily_demand - c.allocated_water),
+            "availableWater": supply.available(c),
+            "baselineSupply": c.baseline_supply,
+            "tankerNeed": supply.tanker_need(c),
+            "shortfall": supply.shortfall(c),
             "vulnerability": vulnerability_level(c.vulnerability_score),
             "vulnerabilityScore": round(c.vulnerability_score),
             "previousAllocation": c.previous_allocation,
@@ -98,6 +101,11 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "districtId": c.district_id,
             "districtName": c.district.name if c.district else None,
             "stateName": c.state.name if c.state else None,
+            "crisisScore": round(c.crisis_score or 0),
+            "settlementType": c.settlement_type or None,
+            "source": c.source or None,
+            "sourceUrl": c.source_url or None,
+            "demandBasis": c.demand_basis or None,
         })
     return out
 
@@ -156,7 +164,8 @@ def complaint_view(c: Complaint) -> dict:
 
 def depot_view(d: Depot | None) -> dict | None:
     return {"id": d.id, "name": d.name, "lat": d.lat, "lng": d.lng, "dataOrigin": d.data_origin,
-            "stockLitres": d.stock_litres, "stockUpdatedAt": iso(d.stock_updated_at)} if d else None
+            "stockLitres": d.stock_litres, "stockUpdatedAt": iso(d.stock_updated_at),
+            "isActive": d.is_active, "placementNote": d.placement_note} if d else None
 
 
 def tanker_views(db: Session) -> list[dict]:

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import INSECURE_JWT_SECRETS, get_settings
 from .db import SessionLocal, init_db
-from .routers import allocation, analytics, auth, communities, complaints, disasters, fleet, ops, requests, system, tracking, trips
+from .routers import allocation, analytics, auth, communities, complaints, disasters, fleet, intel, ops, requests, system, tracking, trips
 from .security import user_from_token
 from .services import ml
 from .services.realtime import hub
@@ -65,7 +65,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-for r in (auth, communities, requests, complaints, allocation, fleet, trips, tracking, disasters, ops, analytics, system):
+for r in (auth, communities, requests, complaints, allocation, fleet, trips, tracking, disasters, ops, analytics, system, intel):
     app.include_router(r.router, prefix="/api")
 
 

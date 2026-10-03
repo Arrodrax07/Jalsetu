@@ -60,7 +60,7 @@ def update_tanker(tanker_id: str, body: TankerUpdate, request: Request, db: Sess
 
 @router.get("/depots")
 def list_depots(db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
-    return [depot_view(d) for d in db.scalars(select(Depot))]
+    return [depot_view(d) for d in db.scalars(select(Depot).where(Depot.is_active.is_(True)))]
 
 
 @router.post("/depots", status_code=201)

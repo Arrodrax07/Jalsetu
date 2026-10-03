@@ -202,6 +202,11 @@ def _check_driver(db: Session, driver_id: int, exclude_trip: int | None = None) 
 
 @router.post("/trips", status_code=201)
 def create_trip(body: DispatchIn, request: Request, db: Session = Depends(get_db), user: User = Depends(require("dispatch"))):
+    return dispatch_trip(db, body, actor_from(request, user), user)
+
+
+def dispatch_trip(db: Session, body: DispatchIn, actor, user: User | None):
+    """Create and (optionally) assign a trip. Shared by manual dispatch and approved auto-dispatch proposals."""
     tanker, depot, plan, litres, result = plan_route(db, body)
     if tanker.status != TANKER_AVAILABLE:
         raise HTTPException(409, f"{tanker.vehicle_number} is {tanker.status}; only Available tankers can be assigned")
@@ -210,7 +215,7 @@ def create_trip(body: DispatchIn, request: Request, db: Session = Depends(get_db
     trip = Trip(tanker_id=tanker.id, driver_user_id=driver.id if driver else None, status=T_ASSIGNED if driver else T_PLANNED,
                 origin_depot_id=depot.id, route_geometry=plan.geometry, dispatch_route_geometry=plan.geometry,
                 distance_km=plan.distance_km, duration_min=plan.duration_min, baseline_distance_km=plan.baseline_distance_km,
-                baseline_duration_min=plan.baseline_duration_min, routing_source=plan.source, created_by=user.id,
+                baseline_duration_min=plan.baseline_duration_min, routing_source=plan.source, created_by=user.id if user else None,
                 assigned_at=now if driver else None)
     for seq, p in enumerate(plan.sequence, start=1):
         trip.stops.append(TripStop(seq=seq, community_id=p.key, allocated_litres=litres[p.key]))
@@ -222,7 +227,7 @@ def create_trip(body: DispatchIn, request: Request, db: Session = Depends(get_db
     db.execute(update(WaterRequest).where(WaterRequest.status == "Allocated", WaterRequest.community_id.in_(list(litres)))
                .values(status="Dispatched", updated_at=now))
     db.flush()
-    audit(db, actor_from(request, user), "trip.create", "trip", trip.code,
+    audit(db, actor, "trip.create", "trip", trip.code,
           {"tanker": tanker.id, "driver": driver.email if driver else None, "stops": [p.key for p in plan.sequence], "km": plan.distance_km},
           before={"tanker": before}, after={"tanker": snapshot(tanker, ("status", "driver_user_id")), "trip": snapshot(trip, TRIP_FIELDS)})
     if driver:

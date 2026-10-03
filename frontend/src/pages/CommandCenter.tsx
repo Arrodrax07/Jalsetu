@@ -4,6 +4,7 @@ import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { OpsMap, MapRoute } from '../components/map/OpsMap';
 import { AlertPanel, VehiclePanel } from '../components/panels';
+import { CrisisSignals } from '../components/CrisisSignals';
 import { Button, Chip, cx, Empty, formatAge, Kpi, SeverityChip, StatusChip, Tabs, TrackingBadge } from '../components/ui';
 import { timeAgo } from '../utils/format';
 
@@ -33,7 +34,12 @@ export const CommandCenter: React.FC = () => {
   const [fit, setFit] = useState<{ bbox?: number[]; center?: [number, number]; zoom?: number; key: string } | null>(null);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [alertId, setAlertId] = useState<number | null>(null);
-  const [tab, setTab] = useState('alerts');
+  const [tab, setTab] = useState('crisis');
+  const crisis = useMemo(() => ({
+    high: communities.filter(c => (c.crisisScore ?? 0) >= 30).length,
+    critical: communities.filter(c => (c.crisisScore ?? 0) >= 70).length,
+  }), [communities]);
+  const focusCommunity = (id: string) => { const c = communities.find(x => x.id === id); if (c) setFit({ center: [c.lat, c.lng], zoom: 12, key: `c${id}${Date.now()}` }); };
 
   const mapVehicles = useMemo(() => vehicles.map(v => ({ v, state: liveState(v, thresholds, now).state })), [vehicles, thresholds, now]);
   const routes: MapRoute[] = useMemo(() => trips.filter(t => ['Assigned', 'Accepted', 'En Route', 'Arrived', 'Delivering'].includes(t.status))
@@ -46,7 +52,7 @@ export const CommandCenter: React.FC = () => {
     setFit({ bbox, key: `s${id}` });
     setDistricts(await api.districts(id).catch(() => null));
   };
-  const reset = () => { setScope({}); setDistricts(null); setFit({ bbox: [67.5, 6, 97.8, 37.4], key: `india${Date.now()}` }); };
+  const reset = () => { setScope({}); setDistricts(null); setFit({ bbox: [72.6, 15.6, 80.9, 22.1], key: `home${Date.now()}` }); };
 
   const o = overview;
   const feed = health?.sources.find(s => s.key === 'ndma_sachet');
@@ -55,45 +61,51 @@ export const CommandCenter: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col gap-3 p-3">
       {/* KPI strip — every number is a count of real backend records */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
-        <Kpi label="Active emergencies" value={o?.activeEmergencies ?? '—'} sub={`${o?.activeAlerts ?? 0} official alerts active`} tone={o?.activeEmergencies ? 'danger' : 'default'} icon={<AlertOctagon className="h-4 w-4" />} onClick={() => navigate('disasters')} />
-        <Kpi label="Water requests" value={o?.activeRequests ?? '—'} sub={`${o?.criticalRequests ?? 0} critical, unassigned`} tone={o?.criticalRequests ? 'warn' : 'default'} icon={<Droplets className="h-4 w-4" />} onClick={() => navigate('requests')} />
+        <Kpi label="Active emergencies" value={o?.activeEmergencies ?? '—'} sub={`${o?.activeAlerts ?? 0} official alerts active`} tone={o?.activeEmergencies ? 'danger' : 'ok'} icon={<AlertOctagon className="h-4 w-4" />} onClick={() => navigate('disasters')} />
+        <Kpi label="Water requests" value={o?.activeRequests ?? '—'} sub={`${o?.criticalRequests ?? 0} critical, unassigned`} tone={o?.criticalRequests ? 'warn' : 'accent'} icon={<Droplets className="h-4 w-4" />} onClick={() => navigate('requests')} />
         <Kpi label="Tankers on road" value={o?.tankersOnRoad ?? '—'} sub={`${o?.vehiclesLive ?? 0} live · ${o?.vehiclesStale ?? 0} stale · ${o?.vehiclesOffline ?? 0} offline`} tone="accent" icon={<Truck className="h-4 w-4" />} onClick={() => navigate('live')} />
         <Kpi label="Tankers available" value={o ? `${o.tankersAvailable}/${o.tankersTotal}` : '—'} sub="ready for assignment" tone="ok" icon={<Warehouse className="h-4 w-4" />} onClick={() => navigate('fleet')} />
-        <Kpi label="Deliveries today" value={o?.deliveriesToday ?? '—'} sub={o ? `${o.litresDeliveredToday.toLocaleString('en-IN')} L · IST day` : ''} icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => navigate('verification')} />
-        <Kpi label="Communities affected" value={o?.communitiesAffected ?? '—'} sub={`of ${o?.communitiesTotal ?? 0} registered, inside active alerts`} tone={o?.communitiesAffected ? 'warn' : 'default'} icon={<Building2 className="h-4 w-4" />} onClick={() => navigate('disasters')} />
-        <Kpi label="Open complaints" value={o?.openComplaints ?? '—'} icon={<MessageSquareWarning className="h-4 w-4" />} onClick={() => navigate('complaints')} />
-        <Kpi label="Open anomalies" value={o?.openAnomalies ?? '—'} sub={`${o?.pendingVerifications ?? 0} deliveries to verify`} tone={o?.openAnomalies ? 'warn' : 'default'} icon={<RadioTower className="h-4 w-4" />} onClick={() => navigate('live')} />
+        <Kpi label="Deliveries today" value={o?.deliveriesToday ?? '—'} sub={o ? `${o.litresDeliveredToday.toLocaleString('en-IN')} L · IST day` : ''} tone="teal" icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => navigate('verification')} />
+        <Kpi label="Communities in crisis" value={loaded.has('communities') ? crisis.high : '—'} sub={`${crisis.critical} critical · of ${communities.length.toLocaleString('en-IN')} · news + rainfall`} tone={crisis.critical ? 'danger' : crisis.high ? 'warn' : 'violet'} icon={<Building2 className="h-4 w-4" />} onClick={() => setTab('crisis')} />
+        <Kpi label="Open complaints" value={o?.openComplaints ?? '—'} tone={o?.openComplaints ? 'violet' : 'ok'} icon={<MessageSquareWarning className="h-4 w-4" />} onClick={() => navigate('complaints')} />
+        <Kpi label="Open anomalies" value={o?.openAnomalies ?? '—'} sub={`${o?.pendingVerifications ?? 0} deliveries to verify`} tone={o?.openAnomalies ? 'warn' : 'ok'} icon={<RadioTower className="h-4 w-4" />} onClick={() => navigate('live')} />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className="panel relative min-h-[420px] overflow-hidden">
           <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-cc-border bg-cc-bg/85 px-2 py-1 text-xs backdrop-blur">
-            <button className="font-medium text-cc-accent hover:underline" onClick={reset}>India</button>
+            <button className="font-medium text-cc-accent hover:underline" onClick={reset}>Maharashtra</button>
             {scope.state && <><ChevronRight className="h-3 w-3 text-cc-faint" /><span>{scope.state.name}</span></>}
-            {!scope.state && <span className="ml-1 text-cc-faint">· click a state to drill down</span>}
+            {!scope.state && <span className="ml-1 text-cc-faint">· click the state to show district borders</span>}
           </div>
           <div className="absolute bottom-8 left-3 z-10 hidden flex-col gap-1 rounded-lg border border-cc-border bg-cc-bg/85 p-2 text-2xs text-cc-muted backdrop-blur sm:flex">
             <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#22c55e]" />Vehicle LIVE</span>
             <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#f59e0b]" />Vehicle STALE</span>
             <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#ef4444]" />Vehicle OFFLINE</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full border-2 border-[#a78bfa]" />Seeded reference community</span>
+            <span className="mt-1 flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#ef4444]" />Community: critical</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#f59e0b]" />Community: high demand</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]" />Community: normal</span>
+            <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-full bg-[#ef4444]/30 ring-2 ring-[#ef4444]/40" />Crisis signals (glow = strength)</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full border-2 border-white bg-[#1d4ed8]" />Depot</span>
             <span className="flex items-center gap-1.5"><i className="h-2.5 w-3 bg-[#f97316]/40 border border-[#f97316]" />Official alert area</span>
             <span className="flex items-center gap-1.5"><i className="h-0 w-3 border-t-2 border-dashed border-[#38bdf8]" />Planned route</span>
           </div>
           <OpsMap vehicles={mapVehicles} communities={communities} depots={depots} alerts={alerts} states={states} districts={districts} routes={routes}
             selectedVehicleId={vehicleId} onVehicle={setVehicleId} onAlert={setAlertId} onState={pickState}
-            onCommunity={(id) => { const c = communities.find(x => x.id === id); if (c) setFit({ center: [c.lat, c.lng], zoom: 14, key: `c${id}${Date.now()}` }); }}
+            onCommunity={focusCommunity}
             fit={fit} />
         </section>
 
         <aside className="panel flex min-h-[420px] flex-col overflow-hidden">
           <Tabs value={tab} onChange={setTab} tabs={[
+            { id: 'crisis', label: 'Crisis signals' },
             { id: 'alerts', label: `Alerts (${disasters.length})` },
             { id: 'fleet', label: `Fleet (${vehicles.length})` },
             { id: 'anomalies', label: `Anomalies (${anomalies.length})` },
             { id: 'feeds', label: 'Feeds' },
           ]} />
           <div className="min-h-0 flex-1 overflow-y-auto">
+            {tab === 'crisis' && <CrisisSignals compact onPlace={focusCommunity} />}
             {tab === 'alerts' && (
               <>
                 <div className="flex items-center justify-between border-b border-cc-border px-3 py-2 text-2xs text-cc-muted">

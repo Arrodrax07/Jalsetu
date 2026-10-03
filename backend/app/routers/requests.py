@@ -8,6 +8,7 @@ from ..db import get_db
 from ..models import Community, User, WaterRequest
 from ..schemas import RequestIn, RequestStatusIn
 from ..security import require
+from ..services import supply
 from ..services.common import audit, get_setting
 from ..services.priority import level_from_subscore, score_community, urgency_from_score, vulnerability_level
 from ..services.realtime import hub
@@ -34,11 +35,11 @@ def assess(db: Session, body: RequestIn) -> dict:
     pr = score_community(community, weights, ctx, days_without_water=body.days_without_water)
 
     unserved_people = max(0, community.population - body.people_currently_served)
-    shortfall = max(0, community.daily_demand - community.allocated_water)
+    shortfall = supply.shortfall(community)
     reasoning = (
         f"{pr.explanation} {community.name} ({community.ward}) has {community.population:,} residents, "
         f"{unserved_people:,} not currently served; current allocation covers "
-        f"{min(100, round(100 * community.allocated_water / community.daily_demand))}% of baseline demand "
+        f"{supply.coverage_pct(community)}% of baseline demand "
         f"({shortfall:,} L/day shortfall)."
     )
     if body.days_without_water >= 3:

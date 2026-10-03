@@ -29,6 +29,7 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "unmetNeed": 0.20,
         "previousCoverage": 0.10,
         "population": 0.05,
+        "liveCrisis": 0.25,
     },
     "operations": {
         "tripsPerDay": 5,                 # refills per tanker per day -> daily supply capacity
@@ -58,6 +59,16 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "maxBufferedAgeHours": 24,        # oldest offline-buffered fix accepted
         "requireReceiverName": True,      # delivery verification policy
         "requireProofForVerification": False,
+    },
+    "dispatch": {                         # auto-dispatch proposals (services.dispatch)
+        "maxDistanceKm": 150,             # straight-line reach from a tanker's depot
+        "clusterRadiusKm": 15,            # extra stops must be this close to the first stop
+        "maxStops": 3,
+        "minPriority": 40,
+        "autoApproveCritical": False,     # True: proposals whose first stop is Critical become trips immediately
+        "autoProposeMinutes": 30,         # background re-proposal interval (0 = only on demand)
+        "proposalTtlMinutes": 60,         # background runs leave a fresh batch alone this long
+        "crisisRefreshMinutes": 180,      # news + rainfall signals refresh (0 = only on demand)
     },
 }
 

@@ -4,6 +4,9 @@
     python -m app.ingestion geography       # import state + district boundaries (geoBoundaries)
     python -m app.ingestion lgd FILE.csv    # attach official LGD district codes from an LGD export
     python -m app.ingestion probes          # refresh health of credential-gated sources
+    python -m app.ingestion maharashtra     # import Maharashtra settlements + water infrastructure (OpenStreetMap)
+    python -m app.ingestion crisis          # refresh rainfall-deficit + news crisis signals and re-score communities
+    python -m app.ingestion depots [K] [--keep T-1,T-2]  # site K depots on real water infrastructure near the greatest need
     python -m app.ingestion worker          # run background jobs forever (separate worker container)
 """
 from __future__ import annotations
@@ -15,7 +18,9 @@ from pathlib import Path
 
 from ..db import SessionLocal, init_db
 from .geoboundaries import import_lgd_csv, run_geoboundaries
+from .crisis import run_crisis
 from .jobs import run_forever
+from .maharashtra import run_maharashtra
 from .probes import probe_imd, probe_static
 from .sachet import run_sachet
 
@@ -36,10 +41,20 @@ def main() -> None:
             probe_imd(db)
             print("probes updated")
             return
+        if cmd == "crisis":
+            print(json.dumps(run_crisis(db), indent=2, ensure_ascii=False))
+            return
+        if cmd == "depots":
+            from ..services.depots import site_depots
+            args = sys.argv[2:]
+            keep = tuple(args[args.index("--keep") + 1].split(",")) if "--keep" in args else ()
+            k = next((int(x) for x in args if x.isdigit()), None)
+            print(json.dumps(site_depots(db, k, keep), indent=2, ensure_ascii=False))
+            return
         if cmd == "lgd":
             print(json.dumps(import_lgd_csv(db, Path(sys.argv[2])), indent=2, ensure_ascii=False))
             return
-        runner = {"sachet": run_sachet, "geography": run_geoboundaries}.get(cmd)
+        runner = {"sachet": run_sachet, "geography": run_geoboundaries, "maharashtra": run_maharashtra}.get(cmd)
         if runner is None:
             print(__doc__)
             sys.exit(2)

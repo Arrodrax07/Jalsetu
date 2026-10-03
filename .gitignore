@@ -38,3 +38,4 @@ ml/data/processed/
 *.sw?
 logs
 *.log
+backend/var/
