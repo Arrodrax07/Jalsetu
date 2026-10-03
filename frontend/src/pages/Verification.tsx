@@ -1,41 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, FileImage, MapPin, PenLine, SearchCheck } from '../components/icons';
 import { useApp } from '../context/AppContext';
+import { DataTable } from '../components/DataTable';
 import { api } from '../services/api';
 import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, PageHeader, Panel, StatusChip } from '../components/ui';
 import type { DeliveryRecord } from '../types';
 import { dt, litres } from '../utils/format';
 
-const FILTERS = ['To verify', 'Verified', 'All'] as const;
 
 export const Verification: React.FC = () => {
   const { deliveries, operations, can } = useApp();
-  const [f, setF] = useState<(typeof FILTERS)[number]>('To verify');
   const [sel, setSel] = useState<DeliveryRecord | null>(null);
-  const rows = deliveries.filter(d => f === 'All' ? true : f === 'Verified' ? d.status === 'Verified' : d.status !== 'Verified');
   return (
     <div className="p-4 lg:p-6">
       <PageHeader title="Delivery verification"
         subtitle={<>A trip completes only when every delivery is verified. Automatic checks: GPS-detected arrival, vehicle within {operations ? 2 * operations.geofenceRadiusM : '…'} m when recorded, volume within ±{operations?.varianceTolerancePct ?? '…'}%, receiver named.</>} />
-      <div className="mb-3 flex gap-1">{FILTERS.map(x => <Button key={x} size="sm" variant={f === x ? 'primary' : 'secondary'} onClick={() => setF(x)}>{x}</Button>)}</div>
-      <Panel bodyClassName="overflow-x-auto">
-        {rows.length === 0 ? <Empty title={f === 'To verify' ? 'Nothing waiting for verification' : 'No deliveries'} hint="Deliveries are recorded by drivers at the destination." /> : (
-          <table className="table-cc">
-            <thead><tr><th>Delivery</th><th>Trip</th><th>Community</th><th className="text-right">Delivered</th><th className="text-right">Variance</th><th>GPS</th><th>Receiver</th><th>Recorded</th><th>Status</th><th /></tr></thead>
-            <tbody>{rows.map(d => (
-              <tr key={d.id}>
-                <td className="font-medium">{d.id}</td><td className="text-cc-muted">{d.tripId}</td><td>{d.communityName}</td>
-                <td className="num text-right">{litres(d.deliveredAmount)}</td>
-                <td className={`num text-right ${d.varianceAmount !== 0 ? 'text-amber-800' : 'text-cc-muted'}`}>{d.varianceAmount.toLocaleString('en-IN')} L</td>
-                <td>{d.gpsVerified ? <Chip tone="ok" icon={<MapPin className="h-3 w-3" />}>Arrived</Chip> : <Chip tone="danger">No GPS arrival</Chip>}</td>
-                <td>{d.receiverName || <span className="text-cc-faint">—</span>}</td>
-                <td className="num text-cc-muted">{dt(d.deliveryTime)}</td>
-                <td><StatusChip status={d.status} /></td>
-                <td className="text-right"><Button size="sm" onClick={() => setSel(d)}>{d.status !== 'Verified' && can('verify_delivery') ? 'Review' : 'View'}</Button></td>
-              </tr>))}</tbody>
-          </table>
-        )}
-      </Panel>
+      <DataTable label="Deliveries" rows={deliveries} rowKey={d => d.id} onRowClick={setSel}
+        filters={[
+          { id: 'todo', label: 'To verify', test: d => d.status !== 'Verified' },
+          { id: 'flagged', label: 'Flagged', test: d => d.status === 'Mismatch' || d.status === 'Under Investigation' },
+          { id: 'done', label: 'Verified', test: d => d.status === 'Verified' },
+          { id: 'all', label: 'All', test: () => true },
+        ]}
+        defaultSort={{ id: 'when', dir: 'desc' }}
+        search={d => `${d.id} ${d.tripId ?? ''} ${d.communityName} ${d.receiverName}`} searchPlaceholder="Search deliveries, trips, places"
+        emptyTitle="Nothing in this view" emptyHint="Deliveries are recorded by drivers at the destination and checked here."
+        rowClassName={d => (d.status === 'Mismatch' || d.status === 'Under Investigation') ? 'bg-cc-danger/[0.03]' : undefined}
+        columns={[
+          { id: 'id', header: 'Delivery', sort: d => d.dbId, cell: d => <span className="mono font-medium">{d.id}</span> },
+          { id: 'trip', header: 'Trip', sort: d => d.tripId ?? '', hideBelow: 'lg', cell: d => <span className="mono text-cc-muted">{d.tripId}</span> },
+          { id: 'place', header: 'Place', sort: d => d.communityName, cell: d => d.communityName },
+          { id: 'litres', header: 'Delivered', align: 'right', sort: d => d.deliveredAmount, cell: d => <span className="mono">{litres(d.deliveredAmount)}</span> },
+          { id: 'var', header: 'Variance', align: 'right', sort: d => d.varianceAmount, hideBelow: 'md', cell: d => <span className={`mono ${d.varianceAmount !== 0 ? 'text-amber-800' : 'text-cc-muted'}`}>{d.varianceAmount.toLocaleString('en-IN')} L</span> },
+          { id: 'gps', header: 'GPS', hideBelow: 'md', cell: d => d.gpsVerified ? <Chip tone="ok" icon={<MapPin className="h-3.5 w-3.5" />}>Arrived</Chip> : <Chip tone="danger">No GPS arrival</Chip> },
+          { id: 'rcv', header: 'Receiver', hideBelow: 'xl', cell: d => d.receiverName || <span className="text-cc-faint">—</span> },
+          { id: 'when', header: 'Recorded', sort: d => Date.parse(d.deliveryTime), hideBelow: 'lg', cell: d => <span className="mono text-[12px] text-cc-muted">{dt(d.deliveryTime)}</span> },
+          { id: 'status', header: 'Status', sort: d => d.status, cell: d => <StatusChip status={d.status} /> },
+          { id: 'act', header: <span className="sr-only">Action</span>, align: 'right', cell: d => <Button size="sm" onClick={e => { e.stopPropagation(); setSel(d); }}>{d.status !== 'Verified' && can('verify_delivery') ? 'Review' : 'View'}</Button> },
+        ]} />
       {sel && <ReviewDialog d={sel} onClose={() => setSel(null)} />}
     </div>
   );

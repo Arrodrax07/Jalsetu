@@ -180,6 +180,17 @@
 .maplibregl-ctrl-attrib a { color: rgb(var(--cc-muted)) !important; }
 .maplibregl-ctrl-scale { background: rgb(var(--cc-surface) / .85) !important; border-color: rgb(var(--cc-text) / .5) !important; color: rgb(var(--cc-text)); font-size: 10px; }
 
+/* Citizen portal: same system, friendlier register. Brighter sky-water surfaces, larger type, softer corners. */
+.citizen { --cc-bg: 238 245 249; --cc-surface: 253 254 255; --cc-raised: 243 248 251; --cc-hover: 228 238 244; --cc-border: 214 228 236;
+  --cc-accent: 8 112 150; --cc-accent-strong: 4 84 114; font-size: 15px; }
+:root[data-theme="dark"] .citizen { --cc-bg: 7 17 24; --cc-surface: 12 26 35; --cc-raised: 15 31 42; --cc-hover: 22 42 56; --cc-border: 30 52 67;
+  --cc-accent: 40 150 200; --cc-accent-strong: 130 205 240; }
+.citizen .panel { border-radius: 20px; }
+.citizen .input { border-radius: 14px; font-size: 15px; }
+.citizen-sky { background:
+  radial-gradient(120% 60% at 80% -10%, rgb(var(--cc-accent) / .14), transparent 60%),
+  radial-gradient(90% 50% at -10% 10%, rgb(var(--cc-accent) / .08), transparent 55%), rgb(var(--cc-bg)); }
+
 /* Charts follow the theme (CSS overrides recharts' presentation attributes). */
 .recharts-cartesian-grid line { stroke: rgb(var(--cc-border)); }
 .recharts-cartesian-axis-tick-value, .recharts-cartesian-axis-tick text { fill: rgb(var(--cc-faint)); font-size: 11px; font-variant-numeric: tabular-nums; }

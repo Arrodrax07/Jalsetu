@@ -2,8 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { RefreshCw } from '../components/icons';
 import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
+import { DataTable } from '../components/DataTable';
 import { AlertPanel } from '../components/panels';
-import { Button, Chip, Empty, KindLabel, PageHeader, Panel, SeverityChip, StatusChip } from '../components/ui';
+import { Button, Chip, Empty, KindLabel, PageHeader, Panel, SeverityChip, StatusChip, Provenance } from '../components/ui';
 import { dt, timeAgo } from '../utils/format';
 
 const SEV: Record<string, number> = { Extreme: 4, Severe: 3, Moderate: 2, Minor: 1, Unknown: 0 };
@@ -56,24 +57,19 @@ export const Disasters: React.FC = () => {
         <span className="text-xs text-cc-muted">{rows.length} active alert(s)</span>
       </div>
 
-      <Panel bodyClassName="overflow-x-auto">
-        {rows.length === 0 ? <Empty title="No active alerts match" /> : (
-          <table className="table-cc">
-            <thead><tr><th>Severity</th><th>Hazard</th><th>Area</th><th>Issuer</th><th>Onset</th><th>Expires</th><th>Area data</th><th>Published</th></tr></thead>
-            <tbody>{rows.map(d => (
-              <tr key={d.id} className="cursor-pointer" onClick={() => setSel(d.id)}>
-                <td><SeverityChip severity={d.severity} /></td>
-                <td className="capitalize">{TYPE_LABEL(d.eventType)}<div className="text-2xs text-cc-faint">{d.eventRaw}</div></td>
-                <td className="max-w-md"><p className="line-clamp-2">{d.areaDesc}</p></td>
-                <td className="text-cc-muted">{d.provider}</td>
-                <td className="num text-cc-muted">{dt(d.onsetAt)}</td>
-                <td className="num text-cc-muted">{dt(d.expiresAt)}</td>
-                <td>{d.geometryStatus === 'ok' ? <Chip tone="external">Official polygon</Chip> : d.geometryStatus === 'district_names' ? <Chip tone="estimated">District match</Chip> : <Chip>None</Chip>}</td>
-                <td className="num text-cc-muted">{timeAgo(d.publishedAt, now)}</td>
-              </tr>))}</tbody>
-          </table>
-        )}
-      </Panel>
+      <DataTable label="Official alerts" rows={rows} rowKey={d => String(d.id)} onRowClick={d => setSel(d.id)} selectedKey={sel != null ? String(sel) : null}
+        defaultSort={{ id: 'sev', dir: 'desc' }} search={d => `${d.headline} ${d.areaDesc} ${d.provider} ${d.eventRaw}`} searchPlaceholder="Search area, issuer, hazard"
+        emptyTitle="No active alerts match" emptyHint={sachet?.status === 'connected' ? 'The official feed is connected and reports nothing for these filters.' : 'The alert feed is not connected; absence of alerts is not confirmed.'}
+        columns={[
+          { id: 'sev', header: 'Severity', sort: d => ({ Extreme: 4, Severe: 3, Moderate: 2, Minor: 1 } as Record<string, number>)[d.severity] ?? 0, cell: d => <SeverityChip severity={d.severity} /> },
+          { id: 'hazard', header: 'Hazard', sort: d => d.eventType, cell: d => <><span className="capitalize">{TYPE_LABEL(d.eventType)}</span><div className="text-[11.5px] text-cc-faint">{d.eventRaw}</div></> },
+          { id: 'area', header: 'Area', cell: d => <p className="line-clamp-2 max-w-md">{d.areaDesc}</p> },
+          { id: 'issuer', header: 'Issuer', sort: d => d.provider, hideBelow: 'lg', cell: d => <span className="text-cc-muted">{d.provider}</span> },
+          { id: 'onset', header: 'Onset', sort: d => Date.parse(d.onsetAt || ''), hideBelow: 'xl', cell: d => <span className="mono text-[12px] text-cc-muted">{dt(d.onsetAt)}</span> },
+          { id: 'exp', header: 'Expires', sort: d => Date.parse(d.expiresAt || ''), hideBelow: 'xl', cell: d => <span className="mono text-[12px] text-cc-muted">{dt(d.expiresAt)}</span> },
+          { id: 'geo', header: 'Area data', hideBelow: 'md', cell: d => d.geometryStatus === 'ok' ? <Provenance kind="external" label="Official polygon" /> : d.geometryStatus === 'district_names' ? <Provenance kind="estimated" label="District match" /> : <Chip>None</Chip> },
+          { id: 'pub', header: 'Published', sort: d => Date.parse(d.publishedAt || ''), hideBelow: 'lg', cell: d => <span className="text-cc-muted">{timeAgo(d.publishedAt, now)}</span> },
+        ]} />
       <AlertPanel id={sel} onClose={() => setSel(null)} />
     </div>
   );

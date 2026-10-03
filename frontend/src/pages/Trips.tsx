@@ -4,6 +4,8 @@ import { liveState, useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { OpsMap, MapRoute } from '../components/map/OpsMap';
 import { AutoDispatch } from '../components/AutoDispatch';
+import { DataTable } from '../components/DataTable';
+import { TripProgress } from '../components/live';
 import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, Panel, StatusChip } from '../components/ui';
 import type { RouteOptimizationResult, Trip } from '../types';
 import { dt, km, litres, minutes } from '../utils/format';
@@ -11,34 +13,33 @@ import { dt, km, litres, minutes } from '../utils/format';
 export const Trips: React.FC<{ tripRef?: string }> = ({ tripRef }) => {
   const { trips, can, navigate } = useApp();
   const [dispatchOpen, setDispatchOpen] = useState(false);
-  const [filter, setFilter] = useState<'open' | 'all' | 'completed'>('open');
   if (tripRef) return <TripRecord ref_={tripRef} />;
-  const rows = trips.filter(t => filter === 'all' ? true : filter === 'completed' ? t.status === 'Completed' : !['Completed', 'Cancelled'].includes(t.status));
   return (
     <div className="p-4 lg:p-6">
       <PageHeader title="Trips & dispatch" subtitle="Dispatch assigns a tanker and driver. The trip starts only when the driver presses START with a real GPS fix."
         actions={can('dispatch') && <Button variant="primary" icon={<Send className="h-4 w-4" />} onClick={() => setDispatchOpen(true)}>Dispatch trip</Button>} />
       <AutoDispatch />
-      <div className="mb-3 flex gap-1">
-        {(['open', 'completed', 'all'] as const).map(f => <Button key={f} size="sm" variant={filter === f ? 'primary' : 'secondary'} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</Button>)}
-      </div>
-      <Panel bodyClassName="overflow-x-auto">
-        {rows.length === 0 ? <Empty title="No trips" hint={filter === 'open' ? 'Dispatch a trip to begin.' : undefined} /> : (
-          <table className="table-cc">
-            <thead><tr><th>Trip</th><th>Vehicle</th><th>Driver</th><th>Stops</th><th>Status</th><th>Started</th><th>Completed</th><th className="text-right">Distance (GPS)</th></tr></thead>
-            <tbody>
-              {rows.map(t => (
-                <tr key={t.id} className="cursor-pointer" onClick={() => navigate(`trips/${t.id}`)}>
-                  <td className="font-medium text-cc-accent">{t.id}</td><td>{t.vehicleNumber}</td><td>{t.driverName || <span className="text-cc-faint">unassigned</span>}</td>
-                  <td className="max-w-xs truncate text-cc-muted">{t.stops.map(s => s.communityName).join(' → ')}</td>
-                  <td><StatusChip status={t.status} /></td><td className="num text-cc-muted">{dt(t.startedAt)}</td><td className="num text-cc-muted">{dt(t.completedAt)}</td>
-                  <td className="num text-right">{t.status === 'Completed' ? km(t.distanceTravelledKm) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Panel>
+      <h2 className="mb-3 mt-8 text-[15px] font-semibold">Trips</h2>
+      <DataTable label="Trips" rows={trips} rowKey={t => t.id} onRowClick={t => navigate(`trips/${t.id}`)}
+        filters={[
+          { id: 'open', label: 'Open', test: t => !['Completed', 'Cancelled'].includes(t.status) },
+          { id: 'completed', label: 'Completed', test: t => t.status === 'Completed' },
+          { id: 'cancelled', label: 'Cancelled', test: t => t.status === 'Cancelled' },
+          { id: 'all', label: 'All', test: () => true },
+        ]}
+        defaultSort={{ id: 'created', dir: 'desc' }}
+        search={t => `${t.id} ${t.vehicleNumber} ${t.driverName ?? ''} ${t.stops.map(s => s.communityName).join(' ')}`} searchPlaceholder="Search trips, vehicles, drivers, places"
+        emptyTitle="No trips in this view" emptyHint={can('dispatch') ? 'Approve a proposal above or dispatch a trip.' : undefined}
+        columns={[
+          { id: 'id', header: 'Trip', sort: t => t.dbId, cell: t => <span className="mono font-medium text-cc-accent">{t.id}</span> },
+          { id: 'vehicle', header: 'Vehicle', sort: t => t.vehicleNumber, cell: t => <span className="mono">{t.vehicleNumber}</span> },
+          { id: 'driver', header: 'Driver', sort: t => t.driverName ?? '', hideBelow: 'md', cell: t => t.driverName || <span className="text-cc-faint">unassigned</span> },
+          { id: 'stops', header: 'Stops', hideBelow: 'lg', cell: t => <span className="block max-w-[260px] truncate text-cc-muted">{t.stops.map(s => s.communityName).join(' → ')}</span> },
+          { id: 'progress', header: 'Progress', sort: t => ['Planned', 'Assigned', 'Accepted', 'En Route', 'Arrived', 'Delivering', 'Delivered', 'Completed', 'Cancelled'].indexOf(t.status),
+            cell: t => <div className="flex min-w-[170px] items-center gap-3"><TripProgress status={t.status} compact className="w-24" /><StatusChip status={t.status} /></div> },
+          { id: 'created', header: 'Created', sort: t => Date.parse(t.createdAt), hideBelow: 'xl', cell: t => <span className="mono text-[12px] text-cc-muted">{dt(t.createdAt)}</span> },
+          { id: 'km', header: 'GPS km', align: 'right', sort: t => t.distanceTravelledKm, hideBelow: 'md', cell: t => <span className="mono">{t.distanceTravelledKm ? km(t.distanceTravelledKm) : '—'}</span> },
+        ]} />
       <DispatchDialog open={dispatchOpen} onClose={() => setDispatchOpen(false)} />
     </div>
   );

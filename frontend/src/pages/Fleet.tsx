@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, RotateCcw, Wrench } from '../components/icons';
 import { liveState, useApp, useNow } from '../context/AppContext';
+import { DataTable } from '../components/DataTable';
 import { api } from '../services/api';
 import { VehiclePanel } from '../components/panels';
 import { Button, Chip, Dialog, Empty, Field, OriginLabel, PageHeader, Panel, StatusChip, TrackingBadge } from '../components/ui';
@@ -20,6 +21,7 @@ export const Fleet: React.FC = () => {
     try { await api.breakdown(breakId!, note || 'Breakdown reported'); toast('Vehicle out of service', 'Allocation re-planned with protected communities held.', 'warning'); setBreakId(null); setNote(''); refresh('vehicles', 'plan', 'overview'); }
     catch (e) { fail(e); }
   };
+  const rows = vehicles.map(v => ({ v, ls: liveState(v, thresholds, now) }));
   const create = async () => {
     try { await api.createTanker({ id: form.id, vehicleNumber: form.vehicleNumber, capacity: form.capacity, depotId: form.depotId || undefined }); setAdding(false); refresh('vehicles'); }
     catch (e) { fail(e, 'Could not add vehicle'); }
@@ -30,35 +32,33 @@ export const Fleet: React.FC = () => {
     <div className="p-4 lg:p-6">
       <PageHeader title="Fleet" subtitle="Status and live tracking state of every vehicle. Positions come only from received telemetry."
         actions={can('manage_master_data') && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add vehicle</Button>} />
-      <Panel bodyClassName="overflow-x-auto">
-        {vehicles.length === 0 ? <Empty title="No vehicles registered" /> : (
-          <table className="table-cc">
-            <thead><tr><th>Vehicle</th><th>Status</th><th>Tracking</th><th>GPS source</th><th>Default driver</th><th>Trip</th><th className="text-right">Capacity</th><th>Record</th><th /></tr></thead>
-            <tbody>{vehicles.map(v => {
-              const ls = liveState(v, thresholds, now);
-              return (
-                <tr key={v.vehicleId}>
-                  <td><button className="font-medium text-cc-accent hover:underline" onClick={() => setSel(v.vehicleId)}>{v.registration}</button><div className="text-2xs text-cc-faint">{v.vehicleId}</div></td>
-                  <td><StatusChip status={v.status} /></td>
-                  <td><TrackingBadge state={ls.state} ageSeconds={ls.age} /></td>
-                  <td><Chip>{SOURCE[v.position?.source || v.trackingSource] || v.trackingSource}</Chip></td>
-                  <td>{can('manage_master_data') ? (
-                    <select className="input py-1 text-xs" value={v.driverUserId ?? ''} onChange={e => e.target.value && setDriver(v.vehicleId, Number(e.target.value))}>
-                      <option value="">—</option>{drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>) : (v.driverName || '—')}</td>
-                  <td>{v.trip ? <button className="text-cc-accent hover:underline" onClick={() => navigate(`trips/${v.trip!.id}`)}>{v.trip.id}</button> : <span className="text-cc-faint">—</span>}</td>
-                  <td className="num text-right">{v.capacity?.toLocaleString('en-IN')} L</td>
-                  <td><OriginLabel origin={v.dataOrigin} /></td>
-                  <td className="text-right">
-                    {can('report_breakdown') && v.status !== 'Maintenance' && <Button size="sm" variant="ghost" icon={<Wrench className="h-3.5 w-3.5" />} onClick={() => setBreakId(v.vehicleId)}>Breakdown</Button>}
-                    {can('report_breakdown') && v.status === 'Maintenance' && <Button size="sm" variant="ghost" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={async () => { try { await api.restoreTanker(v.vehicleId); refresh('vehicles', 'overview'); } catch (e) { fail(e); } }}>Restore</Button>}
-                  </td>
-                </tr>
-              );
-            })}</tbody>
-          </table>
-        )}
-      </Panel>
+      <DataTable label="Fleet" rows={rows} rowKey={r => r.v.vehicleId} onRowClick={r => setSel(r.v.vehicleId)} selectedKey={sel}
+        filters={[
+          { id: 'all', label: 'All', test: () => true },
+          { id: 'live', label: 'Live GPS', test: r => r.ls.state === 'live' },
+          { id: 'trip', label: 'On a trip', test: r => !!r.v.trip },
+          { id: 'free', label: 'Available', test: r => r.v.status === 'Available' },
+          { id: 'maint', label: 'Maintenance', test: r => r.v.status === 'Maintenance' },
+        ]}
+        defaultSort={{ id: 'tracking', dir: 'asc' }}
+        search={r => `${r.v.registration} ${r.v.vehicleId} ${r.v.driverName ?? ''}`} searchPlaceholder="Search vehicles or drivers"
+        emptyTitle="No vehicles in this view"
+        columns={[
+          { id: 'vehicle', header: 'Vehicle', sort: r => r.v.registration, cell: r => <><span className="mono font-medium text-cc-accent">{r.v.registration}</span><div className="text-[11.5px] text-cc-faint">{r.v.vehicleId}{r.v.depot ? ` · ${r.v.depot.name}` : ''}</div></> },
+          { id: 'status', header: 'Status', sort: r => r.v.status, cell: r => <StatusChip status={r.v.status} /> },
+          { id: 'tracking', header: 'Tracking', sort: r => ['live', 'stale', 'offline', 'no_signal'].indexOf(r.ls.state) * 1e7 + (r.ls.age ?? 9e6), cell: r => <TrackingBadge state={r.ls.state} ageSeconds={r.ls.age} /> },
+          { id: 'src', header: 'Source', hideBelow: 'xl', cell: r => <span className="text-[12.5px] text-cc-muted">{SOURCE[r.v.position?.source || r.v.trackingSource] || r.v.trackingSource}</span> },
+          { id: 'driver', header: 'Default driver', hideBelow: 'md', cell: r => can('manage_master_data') ? (
+            <select className="input h-8 py-0 text-[12.5px]" value={r.v.driverUserId ?? ''} onClick={e => e.stopPropagation()} onChange={e => e.target.value && setDriver(r.v.vehicleId, Number(e.target.value))} aria-label={`Default driver for ${r.v.registration}`}>
+              <option value="">—</option>{drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>) : (r.v.driverName || '—') },
+          { id: 'trip', header: 'Trip', hideBelow: 'lg', cell: r => r.v.trip ? <button className="mono text-cc-accent hover:underline" onClick={e => { e.stopPropagation(); navigate(`trips/${r.v.trip!.id}`); }}>{r.v.trip.id}</button> : <span className="text-cc-faint">—</span> },
+          { id: 'cap', header: 'Capacity', align: 'right', sort: r => r.v.capacity ?? 0, hideBelow: 'lg', cell: r => <span className="mono">{r.v.capacity?.toLocaleString('en-IN')} L</span> },
+          { id: 'act', header: <span className="sr-only">Actions</span>, align: 'right', cell: r => <>
+            {can('report_breakdown') && r.v.status !== 'Maintenance' && <Button size="sm" variant="ghost" icon={<Wrench className="h-3.5 w-3.5" />} onClick={e => { e.stopPropagation(); setBreakId(r.v.vehicleId); }}>Breakdown</Button>}
+            {can('report_breakdown') && r.v.status === 'Maintenance' && <Button size="sm" variant="ghost" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={async e => { e.stopPropagation(); try { await api.restoreTanker(r.v.vehicleId); refresh('vehicles', 'overview'); } catch (x) { fail(x); } }}>Restore</Button>}
+          </> },
+        ]} />
       <VehiclePanel id={sel} onClose={() => setSel(null)} onOpenTrip={r => navigate(`trips/${r}`)} />
       <Dialog open={!!breakId} onClose={() => setBreakId(null)} title={`Report breakdown: ${breakId}`} subtitle="The vehicle is taken out of service and the allocation plan is recomputed.">
         <Field label="What happened?"><input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. axle failure near depot" /></Field>

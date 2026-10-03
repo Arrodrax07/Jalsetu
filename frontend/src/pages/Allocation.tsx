@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Cpu, Download, Info } from '../components/icons';
+import { DataTable } from '../components/DataTable';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, Empty, Field, KindLabel, PageHeader, Panel, StatusChip } from '../components/ui';
@@ -57,32 +58,34 @@ export const Allocation: React.FC = () => {
         <>
           {plan.scopeLabel && <p className="mb-2 text-xs text-cc-muted">Scope: {plan.scopeLabel} · {plan.items.length} places</p>}
           {plan.notes.length > 0 && <p className="mb-3 flex gap-2 rounded-lg border border-cc-border bg-cc-raised p-3 text-sm text-cc-muted"><Info className="h-4 w-4 flex-shrink-0" />{plan.notes.join(' ')}</p>}
-          <div className="mb-4 grid gap-3 md:grid-cols-5">
+          <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-cc-border bg-cc-border md:grid-cols-5">
             {mb && ma && ([['Need-weighted equity', mb.needWeightedEquity, ma.needWeightedEquity], ['Coverage equality', mb.coverageEquality, ma.coverageEquality],
               ['Worst-off coverage', mb.minCoveragePct, ma.minCoveragePct], ['Vulnerable coverage', mb.vulnerableCoveragePct, ma.vulnerableCoveragePct], ['Average coverage', mb.avgCoveragePct, ma.avgCoveragePct]] as [string, number, number][])
               .map(([k, b, a]) => (
-                <div key={k} className="panel p-3"><p className="eyebrow">{k}</p><p className="num mt-1 text-lg font-semibold">{pct(b, 1)} → <span className={a >= b ? 'text-green-700' : 'text-amber-800'}>{pct(a, 1)}</span></p><p className="text-2xs text-cc-muted">current → plan</p></div>
+                <div key={k} className="bg-cc-surface px-4 py-3.5"><p className="text-[12px] font-medium text-cc-muted">{k}</p>
+                  <p className="mt-1.5 flex items-baseline gap-2"><span className="mono text-[13px] text-cc-faint">{pct(b, 1)}</span><span className="text-cc-faint">→</span>
+                    <span className={`display text-[24px] leading-none ${a >= b ? 'text-green-700' : 'text-amber-800'}`}>{pct(a, 1)}</span></p>
+                  <p className="mt-1 text-[11.5px] text-cc-faint">current → this plan</p></div>
               ))}
           </div>
-          <Panel title={<span className="flex items-center gap-2">Plan #{plan.id} <StatusChip status={plan.status} /></span>}
-            actions={<span className="text-xs text-cc-muted">{dt(plan.createdAt)} · demand: {plan.demandSource.startsWith('PREDICTED') ? 'forecast (PREDICTED)' : 'recorded baseline'} · supply {litres(plan.totalSupply)} / demand {litres(plan.totalDemand)}</span>}
-            bodyClassName="overflow-x-auto">
-            <table className="table-cc">
-              <thead><tr><th>Community</th><th className="text-right">Demand</th><th className="text-right">Current</th><th className="text-right">Floor</th><th>Priority</th><th className="text-right">Recommended</th><th>Coverage</th><th>Justification</th></tr></thead>
-              <tbody>{plan.items.map(it => {
-                const delta = it.recommendedAllocation - it.previousAllocation;
-                return (
-                  <tr key={it.communityId}>
-                    <td className="font-medium">{it.communityName}</td><td className="num text-right">{litres(it.demand)}</td><td className="num text-right text-cc-muted">{litres(it.previousAllocation)}</td>
-                    <td className="num text-right text-cc-muted">{litres(it.survivalFloor)}</td><td className="num">{it.priorityScore}</td>
-                    <td className="num text-right font-semibold">{litres(it.recommendedAllocation)}<div className={`text-2xs ${delta >= 0 ? 'text-green-700' : 'text-amber-800'}`}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('en-IN')}</div></td>
-                    <td><div className="flex items-center gap-2"><div className="h-1.5 w-16 rounded-full bg-cc-bg"><div className="h-full rounded-full bg-cc-accent" style={{ width: `${Math.min(100, it.coveragePct)}%` }} /></div><span className="num text-xs">{it.coveragePct}%</span></div></td>
-                    <td className="max-w-md text-xs text-cc-muted">{it.reason}</td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
-          </Panel>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-[15px] font-semibold">Plan #{plan.id} <StatusChip status={plan.status} /></p>
+            <span className="text-[12px] text-cc-muted">{dt(plan.createdAt)} · demand: {plan.demandSource.startsWith('PREDICTED') ? 'forecast (ML prediction)' : 'recorded baseline'} · supply <span className="mono">{litres(plan.totalSupply)}</span> / demand <span className="mono">{litres(plan.totalDemand)}</span></span>
+          </div>
+          <DataTable label="Allocation plan" rows={plan.items} rowKey={it => it.communityId} defaultSort={{ id: 'priority', dir: 'desc' }} pageSize={40}
+            search={it => it.communityName} searchPlaceholder="Find a place in the plan"
+            expand={it => <p className="max-w-3xl text-[13px] leading-relaxed text-cc-muted">{it.reason}</p>}
+            columns={[
+              { id: 'name', header: 'Place', sort: it => it.communityName, cell: it => <span className="font-medium">{it.communityName}</span> },
+              { id: 'priority', header: 'Priority', align: 'right', sort: it => it.priorityScore, cell: it => <span className="mono">{it.priorityScore}</span> },
+              { id: 'demand', header: 'Tanker need', align: 'right', sort: it => it.demand, hideBelow: 'md', cell: it => <span className="mono whitespace-nowrap">{litres(it.demand)}</span> },
+              { id: 'floor', header: 'Survival floor', align: 'right', sort: it => it.survivalFloor, hideBelow: 'lg', cell: it => <span className="mono whitespace-nowrap text-cc-muted">{litres(it.survivalFloor)}</span> },
+              { id: 'current', header: 'Current', align: 'right', sort: it => it.previousAllocation, hideBelow: 'xl', cell: it => <span className="mono whitespace-nowrap text-cc-muted">{litres(it.previousAllocation)}</span> },
+              { id: 'rec', header: 'Recommended', align: 'right', sort: it => it.recommendedAllocation, cell: it => { const d = it.recommendedAllocation - it.previousAllocation; return (
+                <span className="whitespace-nowrap"><span className="mono font-semibold">{litres(it.recommendedAllocation)}</span>
+                  <span className={`mono ml-2 text-[11.5px] ${d >= 0 ? 'text-green-700' : 'text-amber-800'}`}>{d >= 0 ? '+' : ''}{d.toLocaleString('en-IN')}</span></span>); } },
+              { id: 'cov', header: 'Coverage', sort: it => it.coveragePct, cell: it => <div className="flex items-center gap-2"><div className="h-1.5 w-16 overflow-hidden rounded-full bg-cc-hover"><div className="h-full rounded-full bg-cc-accent" style={{ width: `${Math.min(100, it.coveragePct)}%` }} /></div><span className="mono text-[12px]">{it.coveragePct}%</span></div> },
+            ]} />
         </>
       )}
     </div>

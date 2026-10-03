@@ -4,15 +4,16 @@ import { MobileNav, NavRail, Toasts, TopBar } from './components/shell/Shell';
 import { FadeSwap, Loading } from './components/ui';
 import { Intro, useIntro } from './components/Intro';
 import { ChangePassword, Login } from './pages/Auth';
-import { CommandCenter } from './pages/CommandCenter';
-import { DriverApp } from './driver/DriverApp';
 import { CitizenPortal } from './pages/CitizenPortal';
-import { Landing } from './pages/Landing';
 import { LangProvider } from './i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lazyPage = (load: () => Promise<any>, name: string) =>
   React.lazy(() => load().then(m => ({ default: m[name] as React.ComponentType<any> })));
+// Heavy screens load on demand so the public portal stays small on phones (no map library, no 3D).
+const CommandCenter = lazyPage(() => import('./pages/CommandCenter'), 'CommandCenter');
+const DriverApp = lazyPage(() => import('./driver/DriverApp'), 'DriverApp');
+const Landing = lazyPage(() => import('./pages/Landing'), 'Landing');
 const LiveOperations = lazyPage(() => import('./pages/LiveOperations'), 'LiveOperations');
 const Trips = lazyPage(() => import('./pages/Trips'), 'Trips');
 const Verification = lazyPage(() => import('./pages/Verification'), 'Verification');
@@ -56,11 +57,11 @@ const Root: React.FC = () => {
   // Every page load starts on the landing page (it lives only in memory, so a refresh resets it).
   // "Open the control room" enters the app; an existing session goes straight in, otherwise sign-in.
   const [entered, setEntered] = React.useState(() => window.location.pathname.startsWith('/login'));
-  if (!entered) return <Landing onEnter={() => { window.history.replaceState(null, '', '/#overview'); setEntered(true); }} />;
+  if (!entered) return <React.Suspense fallback={<Loading className="h-full" />}><Landing onEnter={() => { window.history.replaceState(null, '', '/#overview'); setEntered(true); }} /></React.Suspense>;
   if (!authChecked) return <Loading label="Restoring session…" className="h-full" />;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword />;
-  if (user.role === 'driver') return <LangProvider><DriverApp /></LangProvider>;
+  if (user.role === 'driver') return <LangProvider><React.Suspense fallback={<Loading className="h-full" />}><DriverApp /></React.Suspense></LangProvider>;
   const fullBleed = ['overview', '', 'live'].includes(route.split('/')[0]);
   return (
     <div className="flex h-full">
@@ -90,7 +91,7 @@ export function App() {
   if (path === '/water') return <CitizenPortal initial="water" />;
   if (path === '/track') return <CitizenPortal initial="track" />;
   // Public story page, also reachable while signed in (e.g. to show visitors).
-  if (window.location.pathname.replace(/\/$/, '') === '/welcome') return <Landing />;
+  if (window.location.pathname.replace(/\/$/, '') === '/welcome') return <React.Suspense fallback={<Loading className="h-full" />}><Landing /></React.Suspense>;
   // Dev-only design preview of the sign-in screen without ending the current session (stripped from production builds).
   if (import.meta.env.DEV && window.location.pathname === '/__login') return <AppProvider><Login /></AppProvider>;
   return (

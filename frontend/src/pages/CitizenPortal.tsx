@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { CheckCircle2, CloudOff, Droplets, Loader2, LocateFixed, MapPin, Search, Send, Ticket, Truck } from '../components/icons';
+import { CheckCircle2, CloudOff, Droplets, Loader2, LocateFixed, MapPin, MessageSquareWarning, Search, Send, Ticket, Truck } from '../components/icons';
 import { api, ApiError } from '../services/api';
 import { Button, cx, EASE, ErrorBox, SPRING } from '../components/ui';
 import { Mark } from '../components/shell/Shell';
@@ -184,7 +184,10 @@ const Report: React.FC<{ places: Place[]; fromCache: boolean; place: Place | nul
                 {result.kind === 'sent' ? <CheckCircle2 className="h-7 w-7" aria-hidden /> : <CloudOff className="h-7 w-7" aria-hidden />}
               </motion.span>
               <p className="eyebrow mt-4">{result.kind === 'sent' ? t('report.done') : t('report.queued')}</p>
-              {result.kind === 'sent' && <p className="display mt-1 text-5xl">{result.id}</p>}
+              {result.kind === 'sent' && (
+                <button type="button" onClick={() => navigator.clipboard?.writeText(result.id).catch(() => undefined)} title="Copy"
+                  className="mono mx-auto mt-2 block rounded-[14px] border border-dashed border-cc-ok/50 px-5 py-2 text-[34px] font-semibold tracking-wide">{result.id}</button>
+              )}
             </div>
             <div className="space-y-3 p-6">
               <p className="text-[15px] leading-relaxed text-cc-muted">{result.kind === 'sent' ? t('report.keep') : t('report.queuedBody')}</p>
@@ -270,7 +273,7 @@ const WaterInfo: React.FC<{ places: Place[]; fromCache: boolean; place: Place | 
             {stale && <p className="flex items-center gap-2 text-xs text-amber-800"><CloudOff className="h-3.5 w-3.5" aria-hidden />{t('water.offlineCopy')}</p>}
             <section className={cx('panel overflow-hidden', next?.running && 'border-cc-accent/40')}>
               <div className={cx('px-5 py-6', next?.running ? 'bg-cc-accent text-white' : 'bg-cc-raised')}>
-                <p className={cx('eyebrow', next?.running && '!text-white/80')}>{data.community.name}{data.community.district ? ` · ${districtName(data.community.district)}` : ''}</p>
+                <p className={cx('eyebrow', next?.running && '!text-white/80')}>{data.community.name}{data.community.district && districtName(data.community.district) !== data.community.name ? ` · ${districtName(data.community.district)}` : ''}</p>
                 {next ? (
                   <>
                     <p className="display mt-2 text-[34px] leading-tight sm:text-[40px]">{next.running ? t('water.now') : fmtTime(next.startsAt, lang)}</p>
@@ -375,8 +378,10 @@ const Track: React.FC<{ tickets: { id: string; placeName: string; sentAt: string
 };
 
 // ------------------------------------------------------------------------------------------------ shell
-const TABS: { id: Tab; path: string; key: string }[] = [
-  { id: 'report', path: '/report', key: 'tab.report' }, { id: 'water', path: '/water', key: 'tab.water' }, { id: 'track', path: '/track', key: 'tab.track' },
+const TABS: { id: Tab; path: string; key: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'report', path: '/report', key: 'tab.report', icon: MessageSquareWarning },
+  { id: 'water', path: '/water', key: 'tab.water', icon: Droplets },
+  { id: 'track', path: '/track', key: 'tab.track', icon: Ticket },
 ];
 
 const Portal: React.FC<{ initial: Tab }> = ({ initial }) => {
@@ -397,7 +402,7 @@ const Portal: React.FC<{ initial: Tab }> = ({ initial }) => {
   }, []);
   const go = (id: Tab) => { setTab(id); window.history.pushState(null, '', TABS.find(x => x.id === id)!.path); };
   return (
-    <div className="contours min-h-full bg-cc-bg">
+    <div className="citizen citizen-sky min-h-full">
       <header className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 px-5 pt-5">
         <a href="/report" className="flex items-center gap-2.5" onClick={e => { e.preventDefault(); go('report'); }}>
           <Mark className="h-8 w-8 text-cc-accent" />
@@ -406,17 +411,26 @@ const Portal: React.FC<{ initial: Tab }> = ({ initial }) => {
         <div className="flex items-center gap-2"><InstallButton /><LangSwitch /></div>
       </header>
       <main className="mx-auto max-w-xl px-5 pb-16 pt-6">
-        <p className="eyebrow">{t('report.eyebrow')}</p>
-        <h1 className="display mt-2 text-[40px] leading-[1.03] sm:text-[48px]">{tab === 'report' ? t('report.title') : tab === 'water' ? t('water.title') : t('track.title')}</h1>
+        <p className="text-[13px] font-medium text-cc-accent">{t('report.eyebrow')}</p>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.h1 key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }}
+            className="display mt-2 text-[34px] leading-[1.06] sm:text-[42px]">{tab === 'report' ? t('report.title') : tab === 'water' ? t('water.title') : t('track.title')}</motion.h1>
+        </AnimatePresence>
         {tab === 'water' && <p className="mt-1 text-[15px] text-cc-muted">{t('water.sub')}</p>}
-        <nav className="mt-6 grid grid-cols-3 gap-1 rounded-2xl bg-cc-hover p-1" aria-label="Sections">
-          {TABS.map(x => (
-            <button key={x.id} type="button" onClick={() => go(x.id)} aria-current={tab === x.id ? 'page' : undefined}
-              className={cx('relative min-h-[44px] rounded-xl px-2 text-[13px] font-medium leading-tight transition-colors sm:text-sm', tab === x.id ? 'text-cc-text' : 'text-cc-muted hover:text-cc-text')}>
-              {tab === x.id && <motion.span layoutId="portal-tab" className="absolute inset-0 rounded-xl bg-cc-surface shadow-[0_1px_3px_rgb(19_31_42/0.15)]" transition={SPRING} />}
-              <span className="relative">{t(x.key)}</span>
-            </button>
-          ))}
+        <nav className="mt-6 grid grid-cols-3 gap-2" aria-label="Sections">
+          {TABS.map(x => {
+            const Icon = x.icon;
+            const on = tab === x.id;
+            return (
+              <motion.button key={x.id} type="button" onClick={() => go(x.id)} aria-current={on ? 'page' : undefined} whileTap={{ scale: 0.97 }} transition={SPRING}
+                className={cx('relative flex min-h-[88px] flex-col items-start justify-between rounded-[18px] border p-3 text-left transition-colors duration-200',
+                  on ? 'border-cc-accent/40 bg-cc-surface shadow-lift' : 'border-cc-border/70 bg-cc-surface/60 hover:bg-cc-surface')}>
+                {on && <motion.span layoutId="portal-tab" className="absolute inset-x-3 -bottom-px h-[3px] rounded-full bg-cc-accent" transition={SPRING} />}
+                <span className={cx('flex h-9 w-9 items-center justify-center rounded-[12px] transition-colors', on ? 'bg-cc-accent text-white' : 'bg-cc-hover text-cc-muted')}><Icon className="h-5 w-5" /></span>
+                <span className={cx('text-[13px] font-semibold leading-tight sm:text-[14px]', on ? 'text-cc-text' : 'text-cc-muted')}>{t(x.key)}</span>
+              </motion.button>
+            );
+          })}
         </nav>
         <div className="mt-4 space-y-4">
           <OfflineBanner online={online} />
