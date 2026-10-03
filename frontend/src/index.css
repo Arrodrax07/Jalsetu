@@ -7,17 +7,19 @@
    Contrast: text on surface >= 12:1, muted >= 5:1 (WCAG AA for body text).
    --------------------------------------------------------------------------- */
 :root {
-  --cc-bg: 6 10 17;
-  --cc-surface: 12 18 29;
-  --cc-raised: 17 25 39;
-  --cc-hover: 23 33 51;
-  --cc-border: 30 42 61;
-  --cc-border-strong: 46 62 88;
-  --cc-text: 230 237 246;
-  --cc-muted: 148 163 189;
-  --cc-faint: 100 116 139;
+  --cc-bg: 7 12 24;
+  --cc-surface: 13 21 38;
+  --cc-raised: 21 32 55;
+  --cc-hover: 29 44 72;
+  --cc-border: 38 54 86;
+  --cc-border-strong: 62 84 124;
+  --cc-text: 243 246 252;
+  --cc-muted: 174 188 212;
+  --cc-faint: 128 146 176;
   --cc-accent: 56 189 248;
   --cc-accent-strong: 14 165 233;
+  --cc-violet: 167 139 250;
+  --cc-teal: 45 212 191;
 
   /* tracking state */
   --cc-live: 34 197 94;
@@ -49,6 +51,10 @@
   html, body, #root { height: 100%; }
   body {
     @apply bg-cc-bg text-cc-text font-sans antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 10% -10%, rgb(var(--cc-accent) / 0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgb(var(--cc-violet) / 0.08), transparent 60%);
+    background-attachment: fixed;
     font-feature-settings: "cv11", "ss01";
   }
   #root { display: flex; flex-direction: column; }
@@ -57,7 +63,7 @@
 }
 
 @layer components {
-  .panel { @apply bg-cc-surface border border-cc-border rounded-xl shadow-panel; }
+  .panel { @apply bg-cc-surface/90 border border-cc-border rounded-xl shadow-panel backdrop-blur-sm; }
   .panel-header { @apply flex items-center justify-between gap-3 px-4 py-3 border-b border-cc-border; }
   .eyebrow { @apply text-2xs font-semibold uppercase tracking-[0.12em] text-cc-muted; }
   .num { font-variant-numeric: tabular-nums; }

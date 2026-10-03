@@ -23,6 +23,9 @@ export const NAV: { id: string; label: string; icon: React.ComponentType<{ class
   { id: 'admin', label: 'Administration', icon: Settings2, group: 'System' },
 ];
 
+// Group colours make the rail scannable; the active item always switches to the accent.
+const NAV_ICON_COLOR: Record<string, string> = { Operations: 'text-sky-400/80', Intelligence: 'text-orange-400/80', Demand: 'text-teal-400/80', Insight: 'text-violet-400/80', System: 'text-cc-faint' };
+
 const IstClock: React.FC = () => {
   const { serverOffsetMs } = useApp();
   const now = useNow(serverOffsetMs);
@@ -92,11 +95,12 @@ const Notifications: React.FC = () => {
 export const TopBar: React.FC = () => {
   const { user, logout, wsConnected, overview, navigate } = useApp();
   return (
-    <header className="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-cc-border bg-cc-surface px-4">
+    <header className="relative flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-cc-border bg-cc-surface/95 px-4 backdrop-blur">
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-cc-accent/0 via-cc-accent/60 to-cc-violet/0" aria-hidden />
       <div className="flex items-center gap-3 min-w-0">
         <button onClick={() => navigate('overview')} className="flex items-center gap-2" aria-label="JalSetu home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cc-accent-strong/20 text-cc-accent"><Droplets className="h-4.5 w-4.5 h-[18px] w-[18px]" /></span>
-          <span className="text-sm font-semibold tracking-tight">JalSetu <span className="text-cc-muted font-normal">Operations</span></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-indigo-500 text-white shadow-[0_0_18px_-2px_rgb(56_189_248/0.6)]"><Droplets className="h-[18px] w-[18px]" /></span>
+          <span className="text-[15px] font-bold tracking-tight text-cc-text">JalSetu <span className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text font-semibold text-transparent">Operations</span></span>
         </button>
         {wsConnected
           ? <Chip tone="ok" icon={<Radio className="h-3 w-3" />} title="Realtime channel connected">Live feed</Chip>
@@ -110,7 +114,7 @@ export const TopBar: React.FC = () => {
         <HealthPill />
         <Notifications />
         <div className="hidden text-right sm:block">
-          <p className="text-xs font-medium leading-tight">{user?.name}</p>
+          <p className="text-xs font-semibold leading-tight text-cc-text">{user?.name}</p>
           <p className="text-2xs capitalize text-cc-muted">{user?.role}</p>
         </div>
         <Button variant="ghost" size="sm" aria-label="Sign out" onClick={logout}><LogOut className="h-4 w-4" /></Button>
@@ -129,7 +133,7 @@ export const NavRail: React.FC = () => {
   };
   const groups = useMemo(() => [...new Set(NAV.map(n => n.group))], []);
   return (
-    <nav aria-label="Primary" className="hidden w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-cc-border bg-cc-surface py-3 md:flex">
+    <nav aria-label="Primary" className="hidden w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-cc-border bg-cc-surface/95 py-3 md:flex">
       {groups.map(g => (
         <div key={g} className="mb-2">
           <p className="eyebrow px-4 py-1.5">{g}</p>
@@ -139,10 +143,11 @@ export const NavRail: React.FC = () => {
             return (
               <button key={n.id} onClick={() => navigate(n.id)} aria-current={active ? 'page' : undefined}
                 className={cx('mx-2 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
-                  active ? 'bg-cc-accent/10 text-cc-text' : 'text-cc-muted hover:bg-cc-hover hover:text-cc-text')}>
-                <Icon className={cx('h-4 w-4', active ? 'text-cc-accent' : '')} />
+                  active ? 'relative bg-gradient-to-r from-cc-accent/20 to-cc-accent/5 font-medium text-white ring-1 ring-cc-accent/30' : 'text-cc-muted hover:bg-cc-hover hover:text-cc-text')}>
+                {active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-1 rounded-r bg-cc-accent shadow-[0_0_10px_rgb(56_189_248/0.8)]" aria-hidden />}
+                <Icon className={cx('h-4 w-4', active ? 'text-cc-accent' : NAV_ICON_COLOR[n.group])} />
                 <span className="flex-1 text-left">{n.label}</span>
-                {badges[n.id] ? <span className="num rounded-full bg-cc-raised px-1.5 text-2xs text-cc-muted">{badges[n.id]}</span> : null}
+                {badges[n.id] ? <span className="num rounded-full bg-cc-danger/20 px-1.5 text-2xs font-semibold text-red-200 ring-1 ring-cc-danger/40">{badges[n.id]}</span> : null}
               </button>
             );
           })}

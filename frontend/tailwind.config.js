@@ -19,6 +19,8 @@ export default {
           faint: v('cc-faint'),
           accent: v('cc-accent'),
           'accent-strong': v('cc-accent-strong'),
+          violet: v('cc-violet'),
+          teal: v('cc-teal'),
           live: v('cc-live'),
           stale: v('cc-stale'),
           offline: v('cc-offline'),
@@ -41,7 +43,7 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        panel: '0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6)',
+        panel: '0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 10px 30px -12px rgb(0 0 0 / 0.55)',
         pop: '0 20px 40px -12px rgb(0 0 0 / 0.7)',
       },
       fontSize: {

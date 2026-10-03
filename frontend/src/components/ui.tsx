@@ -166,18 +166,29 @@ export const ErrorBox: React.FC<{ message: string; onRetry?: () => void }> = ({ 
 );
 
 // ---------------------------------------------------------------------------- KPI
-export const Kpi: React.FC<{ label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: 'default' | 'danger' | 'warn' | 'ok' | 'accent'; icon?: React.ReactNode; onClick?: () => void }> =
+export type KpiTone = 'default' | 'danger' | 'warn' | 'ok' | 'accent' | 'violet' | 'teal';
+const KPI_TONE: Record<KpiTone, { bar: string; wash: string; badge: string; value: string }> = {
+  default: { bar: 'from-cc-strong to-cc-strong/0', wash: 'from-cc-raised/70', badge: 'bg-cc-raised text-cc-muted ring-cc-border', value: 'text-cc-text' },
+  danger: { bar: 'from-cc-danger to-cc-danger/0', wash: 'from-cc-danger/15', badge: 'bg-cc-danger/15 text-red-300 ring-cc-danger/40', value: 'text-red-200' },
+  warn: { bar: 'from-cc-warn to-cc-warn/0', wash: 'from-cc-warn/15', badge: 'bg-cc-warn/15 text-amber-300 ring-cc-warn/40', value: 'text-amber-100' },
+  ok: { bar: 'from-cc-ok to-cc-ok/0', wash: 'from-cc-ok/15', badge: 'bg-cc-ok/15 text-green-300 ring-cc-ok/40', value: 'text-green-100' },
+  accent: { bar: 'from-cc-accent to-cc-accent/0', wash: 'from-cc-accent/15', badge: 'bg-cc-accent/15 text-sky-300 ring-cc-accent/40', value: 'text-sky-100' },
+  violet: { bar: 'from-cc-violet to-cc-violet/0', wash: 'from-cc-violet/15', badge: 'bg-cc-violet/15 text-violet-300 ring-cc-violet/40', value: 'text-violet-100' },
+  teal: { bar: 'from-cc-teal to-cc-teal/0', wash: 'from-cc-teal/15', badge: 'bg-cc-teal/15 text-teal-300 ring-cc-teal/40', value: 'text-teal-100' },
+};
+export const Kpi: React.FC<{ label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: KpiTone; icon?: React.ReactNode; onClick?: () => void }> =
   ({ label, value, sub, tone = 'default', icon, onClick }) => {
-    const bar = { default: 'bg-cc-border-strong', danger: 'bg-cc-danger', warn: 'bg-cc-warn', ok: 'bg-cc-ok', accent: 'bg-cc-accent' }[tone];
+    const t = KPI_TONE[tone];
     const Tag = onClick ? 'button' : 'div';
     return (
-      <Tag onClick={onClick} className={cx('panel relative overflow-hidden px-3.5 py-3 text-left', onClick && 'hover:border-cc-strong transition-colors')}>
-        <span className={cx('absolute inset-y-0 left-0 w-0.5', bar)} aria-hidden />
-        <div className="flex items-center justify-between gap-2">
-          <p className="eyebrow truncate">{label}</p>
-          <span className="text-cc-faint">{icon}</span>
+      <Tag onClick={onClick} className={cx('panel group relative overflow-hidden bg-gradient-to-br to-transparent px-3.5 py-3 text-left', t.wash,
+        onClick && 'transition-all hover:-translate-y-0.5 hover:border-cc-strong hover:shadow-pop')}>
+        <span className={cx('absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r', t.bar)} aria-hidden />
+        <div className="flex items-start justify-between gap-2">
+          <p className="eyebrow truncate pt-0.5">{label}</p>
+          {icon && <span className={cx('flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ring-1', t.badge)}>{icon}</span>}
         </div>
-        <p className="num mt-1 text-2xl font-semibold text-cc-text">{value}</p>
+        <p className={cx('num -mt-0.5 text-2xl font-bold tracking-tight', t.value)}>{value}</p>
         {sub && <p className="mt-0.5 truncate text-2xs text-cc-muted">{sub}</p>}
       </Tag>
     );

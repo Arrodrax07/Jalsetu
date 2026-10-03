@@ -8,6 +8,8 @@ export default defineConfig({
   build: { chunkSizeWarningLimit: 1500 },
   server: {
     port: 5173,
+    // Phones need HTTPS for GPS; a Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:5173`) provides it.
+    allowedHosts: ['.trycloudflare.com'],
     proxy: {
       '/api': { target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8000', changeOrigin: true, ws: true },
     },
