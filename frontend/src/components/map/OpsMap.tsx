@@ -178,7 +178,8 @@ export const OpsMap: React.FC<Props> = (p) => {
 
   return (
     <div className={p.className || 'relative h-full w-full'}>
-      <div ref={el} className="absolute inset-0" />
+      {/* h-full/w-full: maplibre-gl.css sets .maplibregl-map{position:relative}, which overrides `absolute` and would collapse inset-0 to 0px. */}
+      <div ref={el} className="absolute inset-0 h-full w-full" />
       {!basemapOk && (
         <div className="absolute left-3 top-3 z-10 rounded-md border border-cc-warn/40 bg-cc-bg/90 px-2.5 py-1.5 text-2xs text-amber-200">
           Basemap tiles unavailable. Operational layers are still accurate.
