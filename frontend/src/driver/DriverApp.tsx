@@ -70,7 +70,7 @@ export const DriverApp: React.FC = () => {
     const u = new TelemetryUploader(vehicle.vehicleId, trip.id, (s, resp) => {
       setUpload(s);
       if (resp && resp.tripStatus !== trip.status) load();   // server-side transition (e.g. GPS arrival)
-      if (resp?.arrivedAt) toast('Arrival detected', `GPS confirms you are at ${resp.arrivedAt}.`, 'success');
+      if (resp?.arrivedAt) toast(t('drv.arrivalToast'), t('drv.arrivalToastBody', { p: resp.arrivedAt }), 'success');
     });
     uploader.current = u;
     u.start();
@@ -108,7 +108,7 @@ export const DriverApp: React.FC = () => {
       throw new Error(`GPS accuracy ${f.accuracyM ?? '?'} m — need ≤ ${th?.startMaxAccuracyM} m. Move to open sky and wait a moment.`);
     }
     await api.startTrip(trip.id, { lat: f.lat, lng: f.lng, accuracyM: f.accuracyM, speedKmh: f.speedKmh, heading: f.heading, deviceTime: f.deviceTime });
-    toast('Trip started', 'Live tracking is on. Keep this screen open.', 'success');
+    toast(t('drv.started'), t('drv.startedBody'), 'success');
   });
 
   const runCommand = (heard: string) => {
@@ -151,7 +151,7 @@ export const DriverApp: React.FC = () => {
               <div>
                 <p className="eyebrow">{t('drv.vehicle')}</p>
                 <p className="text-lg font-semibold">{vehicle.registration}</p>
-                <p className="text-xs text-cc-muted">Tracking source: Phone GPS (this device)</p>
+                <p className="text-xs text-cc-muted">{t('drv.source')}</p>
               </div>
               <Truck className="h-6 w-6 text-cc-faint" aria-hidden />
             </div>
@@ -258,8 +258,8 @@ const GpsPanel: React.FC<{ fix: Fix | null; fixAge: number | null; error: GpsErr
     {fix && (
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <dt className="text-cc-muted">{t('drv.accuracy')}</dt><dd className="num text-right">± {fix.accuracyM ?? '?'} m</dd>
-        <dt className="text-cc-muted">Position</dt><dd className="num text-right">{fix.lat.toFixed(5)}, {fix.lng.toFixed(5)}</dd>
-        <dt className="text-cc-muted">Fix time</dt><dd className="num text-right">{new Date(fix.deviceTime).toLocaleTimeString('en-IN')} ({fixAge}s ago)</dd>
+        <dt className="text-cc-muted">{t('drv.position')}</dt><dd className="num text-right">{fix.lat.toFixed(5)}, {fix.lng.toFixed(5)}</dd>
+        <dt className="text-cc-muted">{t('drv.fixTime')}</dt><dd className="num text-right">{new Date(fix.deviceTime).toLocaleTimeString('en-IN')} ({t('drv.ago', { s: fixAge ?? 0 })})</dd>
         {fix.speedKmh != null && <><dt className="text-cc-muted">Speed</dt><dd className="num text-right">{fix.speedKmh} km/h</dd></>}
       </dl>
     )}
@@ -306,11 +306,13 @@ const Journey: React.FC<{ status: string; ended: boolean }> = ({ status, ended }
   );
 };
 
-const TripCard: React.FC<{ trip: Trip }> = ({ trip }) => (
+const TripCard: React.FC<{ trip: Trip }> = ({ trip }) => {
+  const { t } = useLang();
+  return (
   <section className="panel p-4">
     <div className="flex items-center justify-between">
-      <div><p className="eyebrow">Trip</p><p className="text-lg font-semibold">{trip.id}</p></div>
-      <Chip tone={trip.status === 'Completed' ? 'ok' : 'accent'}>{trip.status}</Chip>
+      <div><p className="eyebrow">{t('drv.trip')}</p><p className="text-lg font-semibold">{trip.id}</p></div>
+      <Chip tone={trip.status === 'Completed' ? 'ok' : 'accent'}>{t(`tripStatus.${trip.status}`)}</Chip>
     </div>
     <ol className="mt-3 space-y-2">
       {trip.stops.map(s => (
@@ -325,7 +327,8 @@ const TripCard: React.FC<{ trip: Trip }> = ({ trip }) => (
       ))}
     </ol>
   </section>
-);
+  );
+};
 
 const DeliveryForm: React.FC<{ trip: Trip; litres: number; onDone: () => void }> = ({ trip, litres, onDone }) => {
   const { fail, toast } = useApp();

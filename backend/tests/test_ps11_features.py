@@ -144,3 +144,24 @@ def test_synthetic_history_never_reaches_live_queues(client, operator):
     assert set(replay["fcfs"]) == set(replay["jalsetu"])
     with SessionLocal() as db:
         assert remove(db)["requests"] == made["requests"]
+
+
+def test_allocation_scope_keeps_plans_actionable(client, operator):
+    everyone = client.post("/api/allocation/run", headers=operator, json={"scope": "all"}).json()
+    assert everyone["scope"] == "all" and len(everyone["items"]) >= 1
+    from app.db import SessionLocal
+    from app.routers.allocation import plan_candidates
+
+    from app.models import Community, WaterRequest
+
+    with SessionLocal() as db:
+        city = db.query(Community).filter(Community.is_active.is_(True)).first()
+        city.settlement_type, city.crisis_score = "city", 90.0  # a city in severe crisis...
+        db.query(WaterRequest).filter(WaterRequest.community_id == city.id).update({WaterRequest.status: "Rejected"})
+        db.commit()
+        ids = {c.id for c in plan_candidates(db, "crisis_reach")}
+        assert city.id not in ids  # ...is still not a tanker-plan place unless it has an open request
+        requested = {c.id for c in plan_candidates(db, "requests")}
+        assert requested <= ids and requested <= {c.id for c in plan_candidates(db, "all")}
+        city.settlement_type, city.crisis_score = "", 0.0
+        db.commit()

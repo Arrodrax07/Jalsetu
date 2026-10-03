@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import secrets
 from pathlib import Path
@@ -118,7 +119,7 @@ def seed(sample_users: bool, staff_password: str | None) -> None:
         db.commit()
     if printed:
         # Never echo secrets to the console/logs: write them to a git-ignored local file.
-        cred = Path(__file__).resolve().parent.parent / ".seed-credentials.txt"
+        cred = Path(os.environ.get("SEED_CREDENTIALS_FILE") or Path(__file__).resolve().parent.parent / ".seed-credentials.txt")
         with open(cred, "a", encoding="utf-8") as fh:
             fh.write("\n".join(printed) + "\nAll seeded accounts must change their password at first sign-in.\n")
         try:

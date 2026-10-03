@@ -226,6 +226,9 @@ def ingest(db: Session, user: User, vehicle_id: str, trip_code: str | None, sour
         if "out_of_order" in flags:
             continue  # history only; the live position never moves backwards in time
 
+        if tanker.lat is not None and tanker.last_device_time and trip.started_at and tanker.last_device_time >= trip.started_at:
+            # Running total for the live view; recomputed from the full accepted trace when the trip completes.
+            trip.distance_travelled_km = round((trip.distance_travelled_km or 0) + haversine_m(tanker.lat, tanker.lng, f.lat, f.lng) / 1000, 3)
         tanker.lat, tanker.lng, tanker.accuracy_m = f.lat, f.lng, f.accuracy_m
         tanker.speed_kmh, tanker.heading = speed, f.heading
         tanker.last_device_time, tanker.last_ping_at, tanker.last_source = f.device_time, now, source

@@ -13,6 +13,7 @@ os.environ["ADMIN_EMAIL"] = "admin@test.local"
 os.environ["ADMIN_PASSWORD"] = "AdminPass!12345"
 os.environ["ROUTING_TIMEOUT_S"] = "0.3"
 os.environ["RUN_BACKGROUND_JOBS"] = "false"
+os.environ["SEED_CREDENTIALS_FILE"] = str(_tmp / "seed-credentials.txt")  # never touch the developer's real file
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402

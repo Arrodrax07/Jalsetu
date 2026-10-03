@@ -20,8 +20,39 @@ services:
     command: ["sh", "-c", "test -f artifacts/complaint_classifier.joblib && test -f artifacts/demand_forecaster.joblib || python -m jalsetu_ml.train all"]
     volumes: [models:/app/ml/artifacts]
 
+  # One-shot: brings the schema to the latest Alembic revision and seeds the admin + reference data (idempotent).
+  migrate:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["python", "-m", "scripts.seed"]
+    environment: &backend_env
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://jalsetu:${POSTGRES_PASSWORD}@db:5432/jalsetu
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@jalsetu.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
+      DATA_GOV_IN_API_KEY: ${DATA_GOV_IN_API_KEY:-}
+      RUN_BACKGROUND_JOBS: "false"
+    depends_on:
+      db: { condition: service_healthy }
+
+  # Background jobs (tracking sweep, SACHET alerts, crisis signals, auto-dispatch) run here, exactly once.
+  worker:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["python", "-m", "app.ingestion", "worker"]
+    environment: *backend_env
+    volumes:
+      - models:/app/ml/artifacts
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      train: { condition: service_completed_successfully }
+
   backend:
     build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    restart: unless-stopped
     environment:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+psycopg://jalsetu:${POSTGRES_PASSWORD}@db:5432/jalsetu
@@ -30,11 +61,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
+      DATA_GOV_IN_API_KEY: ${DATA_GOV_IN_API_KEY:-}
+      RUN_BACKGROUND_JOBS: "false"   # the worker service runs them
     volumes:
       - models:/app/ml/artifacts
       - uploads:/app/backend/uploads
     depends_on:
-      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
       train: { condition: service_completed_successfully }
 
   frontend:

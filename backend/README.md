@@ -1,140 +1,107 @@
 # JalSetu API (backend)
 
-FastAPI + SQLAlchemy service that holds all JalSetu data and business logic: authentication,
-communities, requests, complaints, allocation optimisation, routing, dispatch, live GPS,
-proof of delivery, analytics and reports. Interactive API docs: **http://localhost:8000/docs**.
+FastAPI + SQLAlchemy 2 + Alembic. Holds all data and decision logic: auth and roles, communities,
+requests, complaints, allocation, dispatch, the GPS trip lifecycle, delivery verification, disaster and
+crisis intelligence, tap schedules, analytics and the impact replay. Interactive docs: **http://localhost:8000/docs**.
 
 ## Run locally
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt     # also installs ../ml in editable mode
-copy .env.example .env                             # then set JWT_SECRET and ADMIN_PASSWORD
+copy .env.example .env                             # set JWT_SECRET and ADMIN_PASSWORD
 cd ..\ml; ..\backend\.venv\Scripts\python -m jalsetu_ml.train all; cd ..\backend   # once
-.venv\Scripts\python -m scripts.seed --sample-users
+.venv\Scripts\python -m scripts.seed --sample-users   # migrates (alembic upgrade head) + seeds
 .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
-(`..\setup.ps1` does all of the above.)
+`..\setup.ps1` does all of this. The schema is managed by Alembic (`migrations/`); `init_db()` runs
+`alembic upgrade head` at startup, so the API and every script always see the latest schema.
 
-### Seeding
+### Data commands
 
-| Command | Creates |
+| Command | What it does |
 |---|---|
-| `python -m scripts.seed` | schema, admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD`, depot/communities/fleet from `seed_data/master.json` |
-| `--sample-users [--staff-password X]` | `officer@jalsetu.local` and one driver account per tanker (`firstname.lastname@drivers.jalsetu.local`) |
-| `--sample-activity` | a few requests and multilingual complaints pushed through the real API + models |
-
-Re-running is safe: only missing rows are added. Replace `seed_data/master.json` with your
-municipality's clusters, depots and fleet (or manage them in the UI).
+| `python -m scripts.seed [--sample-users]` | migrate, admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD`, reference master data (`data_origin=seeded`); staff + one driver per tanker. Credentials go to git-ignored `.seed-credentials.txt` |
+| `python -m app.ingestion geography` | geoBoundaries states + districts |
+| `python -m app.ingestion maharashtra` | OSM settlements (with population) + water infrastructure |
+| `python -m app.ingestion crisis` | rainfall deficit + news crisis signals, re-score communities |
+| `python -m app.ingestion depots 6 --keep T-2045` | site depots on real water sites, move Available tankers |
+| `python -m app.ingestion sachet` / `probes` / `lgd FILE.csv` | NDMA alerts / source health / LGD district codes |
+| `python -m app.ingestion worker` | all background jobs, forever (separate process/container) |
+| `python -m scripts.demo_history [--days 28] [--pressure 1.3] [--remove]` | labelled synthetic history (see below) |
 
 ### Tests
 
 ```powershell
-.venv\Scripts\python -m pytest tests -q
+.venv\Scripts\python -m pytest -q
 ```
 
-24 tests: optimiser properties, routing (exact + urgency + OSRM fallback), and a full API
-workflow (auth/roles → request scoring → complaint triage & label feedback → citizen portal →
-allocation → approval → disruption re-plan → route → dispatch → GPS → POD with geofence/variance
-→ verification → analytics → CSV). Tests use a throwaway SQLite DB and an unreachable OSRM URL.
-Complaint tests need the trained model in `../ml/artifacts`.
+Throwaway SQLite database, unreachable OSRM (exercises the fallback), no background jobs. Covers auth and
+refresh-token rotation, permissions, priority and allocation properties, routing, the full GPS trip lifecycle
+(start accuracy gate, geofenced arrival, jumps, buffering, deviation, POD, verification), disasters, crisis
+signals, auto-dispatch, request dedupe, distance factor, tap schedules and public supply info, offline-safe
+citizen complaints, the impact replay, synthetic-history isolation and `/api/public/summary`.
 
-### Fleet simulator (no physical devices)
+## Decision logic
 
-```powershell
-.venv\Scripts\python -m scripts.simulate_fleet --email admin@jalsetu.local --password <pw>
-```
+**Priority** (`services/priority.py`): weighted mean of 0–100 sub-scores, each shown with its point contribution:
+demand, vulnerability, unmet need (raised by days without water), 7-day coverage gap, population, live crisis
+signals, and **distance to the nearest water source** (`services/access.py`: straight-line km to the nearest
+recorded water site or active depot, 100 at ≥ 30 km; remote places have no fallback). Weights are admin-tunable.
 
-Drives every dispatched trip along its real OSRM road geometry, posting GPS pings and proof of
-delivery through the same API the driver app uses (15% of stops short-delivered by default, to
-exercise variance detection).
+**Allocation** (`services/allocation.py`, `routers/allocation.py`): survival floor (3 L/person/day) → protected
+vulnerable places during disruptions → minimum coverage → remaining supply split by KKT water-filling so
+coverage is proportional to priority. Jain's index reported before/after. Default scope: towns and villages in
+crisis (score ≥ 40) within tanker reach plus any place with an open request; cities are excluded because a
+tanker fleet cannot cover them (they need piped supply restored). Supply = operational capacity × trips/day.
 
-## Code map
+**Request dedupe** (`routers/requests.py`): a request for a place that has an open request raised within
+`requestDuplicateHours` (48) is stored as *Merged* into it, keeping the larger amount. Operators can override
+("separate need") or split a merged request back out. Complaints have their own semantic duplicate detection.
 
-```
-app/
-├── main.py              app, CORS, lifespan (create tables, warm models), WebSocket /api/ws
-├── config.py            settings from env / .env
-├── db.py, models.py     SQLAlchemy engine + ORM (SQLite dev, PostgreSQL prod)
-├── security.py          bcrypt passwords, JWT, role dependencies (admin / officer / driver)
-├── schemas.py           request bodies (camelCase on the wire)
-├── routers/             auth, communities, requests, complaints, allocation, fleet, analytics, system
-└── services/
-    ├── priority.py      explainable 0–100 priority score
-    ├── allocation.py    floors + weighted proportional-fairness optimiser, fairness metrics
-    ├── routing.py       OSRM table/route + priority-aware stop sequencing
-    ├── ml.py            model loading, complaint triage glue, weather-driven forecasts
-    ├── views.py         ORM → JSON, all derived fields computed live
-    ├── realtime.py      WebSocket hub
-    └── common.py        haversine, runtime settings store, audit log
-scripts/                 seed.py, simulate_fleet.py
-seed_data/master.json    initial depot / communities / fleet
-tests/
-```
+**Auto-dispatch** (`services/dispatch.py`): scores tanker→place pairs by priority × crisis × how much one load
+helps ÷ distance, combines nearby places, waits for a dispatcher (optional auto-approve for Critical).
 
-## How the decision logic works
+**Trip lifecycle** (`routers/trips.py`, `services/tracking.py`): Planned → Assigned → Accepted → START (fresh
+accurate fix) → En Route → Arrived (N consecutive fixes inside the geofence) → Delivering → Delivered (POD) →
+Completed after an operator verifies every stop. LIVE / STALE / OFFLINE from real timestamps; jumps rejected;
+distance travelled accumulated live and recomputed from the accepted trace at completion.
 
-**Priority score** (`services/priority.py`) — weighted mean of five 0–100 sub-scores, each shown
-to users with its point contribution:
-demand (vs largest community) · vulnerability (census/survey score) · unmet need (shortfall %,
-raised by consecutive days without water) · coverage gap (delivered litres over the last 7 days)
-· population. Weights are admin-tunable and normalised.
+**Impact replay** (`services/impact.py`, `GET /api/analytics/impact-replay`): the same request stream, fleet,
+depots and daily limits (trips per day, driving hours, km/h, minutes per stop) served two ways: first come
+first served (arrival order, whole loads, one place per trip, repeat calls served again) vs JalSetu (repeats
+merged, the live auto-dispatch planner). Reports unmet need, waits, Jain fairness, vulnerable places, km, fuel,
+load utilisation and water spent on repeat calls, with every assumption in the response.
 
-**Allocation** (`services/allocation.py`) — exact, deterministic convex optimisation:
+**Synthetic demo history** (`scripts/demo_history.py`): requests from real places within a tanker's service area,
+served by the impact replay's JalSetu policy with the real fleet. Rows are `data_origin=synthetic`, closed
+(never in live queues), have no GPS, and are excluded from priority, dispatch, overview counts and lists.
+Analytics endpoints take `origin=all|real`.
 
-1. Floors in order of priority, each kept only if supply allows: survival
-   (default 3 L/person/day, Sphere drinking+cooking minimum) → protected vulnerable communities
-   held at their approved allocation during disruptions → policy minimum coverage (default 50%).
-2. The remaining supply maximises Σ pᵢ·dᵢ·log xᵢ subject to Σx = S, floor ≤ x ≤ demand. KKT gives
-   xᵢ = clip(pᵢ·dᵢ/ν, floorᵢ, dᵢ): coverage proportional to priority. ν is found by bisection.
-3. Demand dᵢ comes from the ML forecast for today (live weather) unless disabled.
-4. Fairness: Jain's index of allocation per unit of priority-weighted need (headline), plus plain
-   coverage equality, worst-off coverage, vulnerable-community coverage, average coverage — all
-   reported before vs after.
+## API overview (all under `/api`, camelCase JSON)
 
-Supply defaults to Σ(operational tanker capacity) × trips/day. A breakdown removes the tanker and
-immediately re-plans.
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/login`, `/auth/refresh` (httpOnly cookie, rotating), `/auth/logout`, `/auth/change-password`, `GET /auth/me`, users (admin) |
+| Communities & requests | `GET /communities`, `POST/PATCH /communities`, `GET /requests`, `POST /requests/assess`, `POST /requests`, `PATCH /requests/{id}/status` |
+| Complaints | `GET/POST /complaints`, `POST /complaints/analyze`, `PATCH /complaints/{id}` |
+| Allocation | `GET /allocation/current`, `POST /allocation/run` (`scope`), `POST /allocation/{id}/approve`, `POST /tankers/{id}/breakdown`, `/restore` |
+| Dispatch & trips | `GET /dispatch/proposals`, `POST /dispatch/propose`, approve/reject, `POST /routes/optimize`, `POST /trips`, driver actions, `GET /deliveries`, verify/investigate |
+| Tracking | `POST /tracking/telemetry`, `GET /tracking/vehicles`, history, ETA, anomalies |
+| Intelligence | `GET /disasters`, impact, recommendations, `GET /crisis/signals`, `POST /crisis/refresh` |
+| Schedules | `GET/POST /schedules`, `PUT/DELETE /schedules/{id}`, `POST /supply-notices`, `/supply-notices/{id}/end` |
+| Analytics | `GET /analytics/dashboard`, `/activity`, `/operations`, `/forecast`, `/impact`, `/impact-replay` |
+| Public (no login) | `GET /public/summary`, `/public/communities`, `/public/schedules`, `/public/supply/{id}`, `POST /public/complaints`, `GET /public/complaints/{code}` |
+| System | `GET /overview`, `/system/health`, `/notifications`, `/settings`, `/audit`, `/reports/{kind}.csv`, WebSocket `/ws?token=` |
 
-**Routing** (`services/routing.py`) — OSRM `/table` matrix (real road durations/distances) →
-minimise trip time + 0.5 × priority-weighted mean arrival time; exhaustive for ≤ 8 stops,
-nearest-neighbour + 2-opt beyond. Baseline for the reported savings is the order the dispatcher
-entered, on the same matrix. Fuel/CO₂ from configurable mileage, diesel price and 2.68 kg CO₂/L.
-
-**Proof of delivery** — driver submits litres (+ optional photo) with phone GPS; the server
-computes distance to the community (geofence, default 150 m) and variance vs allocated (default
-±5%). Clean → *Pending Verification* for officer sign-off; otherwise *Mismatch* with reasons.
-
-## API overview
-
-All routes are under `/api`; JSON is camelCase. Auth: `Authorization: Bearer <token>` from
-`POST /auth/login`. Full schema at `/docs`.
-
-| Area | Endpoints | Roles |
-|---|---|---|
-| Auth & users | `POST /auth/login`, `GET /auth/me`, `GET/POST /users`, `PATCH /users/{id}` | users: admin |
-| Communities | `GET /communities`, `POST`, `PATCH /communities/{id}`, `GET /communities/{id}/forecast`, `GET /depots`, `POST /demand-observations` | write: admin |
-| Requests | `GET /requests`, `POST /requests/assess`, `POST /requests`, `PATCH /requests/{id}/status` | write: admin, officer |
-| Complaints | `GET /complaints`, `POST /complaints/analyze`, `POST /complaints`, `PATCH /complaints/{id}` | write: admin, officer |
-| Citizen (public) | `GET /public/communities`, `POST /public/complaints` (rate-limited) | none |
-| Allocation | `GET /allocation/current`, `GET /allocation/history`, `POST /allocation/run`, `POST /allocation/{id}/approve` | approve: admin |
-| Fleet | `GET/POST /tankers`, `PATCH /tankers/{id}`, `POST /tankers/{id}/breakdown`, `POST /tankers/{id}/restore` | |
-| Routing & trips | `POST /routes/optimize`, `POST /trips`, `GET /trips`, `POST /trips/{id}/cancel`, `GET /driver/trip` | |
-| Tracking | `POST /tracking/ping`, `GET /tracking/{tankerId}/trail`, WebSocket `/ws?token=` | ping: driver (or staff for a tanker) |
-| Deliveries | `GET /deliveries`, `POST /deliveries` (multipart, photo), `POST /deliveries/{id}/verify`, `/investigate`, `GET /deliveries/{id}/photo` | |
-| Analytics | `GET /analytics/dashboard`, `/activity?range=`, `/forecast?days=`, `/impact` | any |
-| Settings & ML | `GET /settings`, `PUT /settings/weights`, `PUT /settings/operations`, `GET /ml/status`, `POST/GET /ml/retrain`, `GET /audit` | write: admin |
-| Reports | `GET /reports/{communities,requests,complaints,deliveries,allocation}.csv` | admin, officer |
-
-WebSocket events: `tanker.position`, `tankers.changed`, `communities.changed`, `requests.changed`,
-`complaints.changed`, `deliveries.changed`, `allocation.changed`, `settings.changed`, `ml.retrained`.
+Permissions are by capability (`app/domain.py`), not role name: e.g. `dispatch` (admin, dispatcher),
+`verify_delivery` / `manage_schedules` (admin, operator), `drive` (driver).
 
 ## Production notes
 
-* Set `ENVIRONMENT=production` and a strong `JWT_SECRET` (startup refuses the default).
-* Use PostgreSQL (`DATABASE_URL=postgresql+psycopg://…`). Tables are created on startup;
-  introduce Alembic migrations before the first schema change in production.
-* The WebSocket hub and the login / citizen-portal rate limits are in-process: run one worker,
-  or move them to Redis before scaling horizontally.
-* Self-host OSRM for production traffic; the public demo server has a fair-use limit.
-* Every state-changing action is written to `audit_logs`.
+* `ENVIRONMENT=production` refuses a weak `JWT_SECRET`. Use PostgreSQL (`DATABASE_URL=postgresql+psycopg://…`).
+* Run background jobs in exactly one place: the API (`RUN_BACKGROUND_JOBS=true`) or the worker
+  (`python -m app.ingestion worker` with `RUN_BACKGROUND_JOBS=false` on the API).
+* WebSocket hub and rate limits are in-process: one API process, or add Redis before scaling out.
+* Self-host OSRM for production volume. Every state change is written to `audit_logs` with before/after, IP and device.
