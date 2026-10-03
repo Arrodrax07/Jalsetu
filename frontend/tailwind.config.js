@@ -39,12 +39,14 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        sans: ['Geist', 'system-ui', 'sans-serif'],
+        display: ['"Instrument Serif"', 'Georgia', 'serif'],
+        mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        panel: '0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 10px 30px -12px rgb(0 0 0 / 0.55)',
-        pop: '0 20px 40px -12px rgb(0 0 0 / 0.7)',
+        panel: '0 1px 2px rgb(19 31 42 / 0.04), 0 8px 24px -16px rgb(19 31 42 / 0.12)',
+        pop: '0 24px 60px -24px rgb(19 31 42 / 0.35), 0 2px 6px rgb(19 31 42 / 0.06)',
+        lift: '0 2px 4px rgb(19 31 42 / 0.04), 0 16px 32px -16px rgb(19 31 42 / 0.22)',
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }],

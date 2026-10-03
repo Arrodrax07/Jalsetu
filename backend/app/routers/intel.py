@@ -108,3 +108,48 @@ def reject_proposal(pid: int, body: ProposalRejectIn, request: Request, db: Sess
     audit(db, actor_from(request, user), "dispatch.reject", "dispatch_proposal", pid, {"reason": body.reason})
     db.commit()
     return dispatch.proposal_view(db, row)
+
+
+# ---------------------------------------------------------------------------
+# Public situation summary (landing page; no auth). Aggregates only: place names, coordinates, populations
+# and crisis scores are already public (OpenStreetMap / Census / published news). Cached for 5 minutes.
+# ---------------------------------------------------------------------------
+_PUBLIC_CACHE: dict = {"at": None, "data": None}
+
+
+@router.get("/public/summary")
+def public_summary(db: Session = Depends(get_db)):
+    from datetime import timedelta
+
+    from ..models import Depot, Tanker
+
+    now = utcnow()
+    if _PUBLIC_CACHE["at"] and now - _PUBLIC_CACHE["at"] < timedelta(minutes=5):
+        return _PUBLIC_CACHE["data"]
+    comms = list(db.scalars(select(Community).where(Community.is_active.is_(True))))
+    high = [c for c in comms if (c.crisis_score or 0) >= 30]
+    critical = [c for c in comms if (c.crisis_score or 0) >= 70]
+    districts = dict(db.execute(select(GeoDistrict.id, GeoDistrict.name)).all())
+    signals = crisis.active_signals(db)
+    rain = sorted((s for s in signals if s.kind == "rainfall_deficit" and s.metric is not None), key=lambda s: s.metric)
+    news = sorted((s for s in signals if s.kind == "news"), key=lambda s: s.published_at or now, reverse=True)
+    names = {c.id: c.name for c in comms}
+    data = {
+        "generatedAt": iso(now),
+        "places": len(comms),
+        "people": sum(c.population for c in comms),
+        "inCrisis": len(high),
+        "critical": len(critical),
+        "peopleInCrisis": sum(c.population for c in high),
+        "newsReports": len(news),
+        "tankers": db.query(Tanker).count(),
+        "depots": db.query(Depot).filter(Depot.is_active.is_(True)).count(),
+        # [lng, lat, crisis 0-100, population] for every place (3D map)
+        "points": [[round(c.lng, 3), round(c.lat, 3), round(c.crisis_score or 0), c.population] for c in comms],
+        "criticalPlaces": [{"name": c.name, "district": c.ward, "crisis": round(c.crisis_score)} for c in sorted(critical, key=lambda c: -c.crisis_score)[:12]],
+        "rainfall": [{"district": districts.get(s.district_ids[0], "") if s.district_ids else "", "deviation": s.metric, "severity": s.severity} for s in rain[:10]],
+        "headlines": [{"title": s.title, "publisher": s.publisher, "url": s.url, "publishedAt": iso(s.published_at),
+                       "places": [names.get(c, c) for c in (s.community_ids or [])][:3]} for s in news[:12]],
+    }
+    _PUBLIC_CACHE.update(at=now, data=data)
+    return data

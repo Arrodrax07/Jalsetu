@@ -81,7 +81,7 @@ export const AutoDispatch: React.FC = () => {
                 <ol className="mt-2 space-y-1">
                   {p.stops.map(s => (
                     <li key={s.communityId} className="flex items-center gap-1.5 text-sm">
-                      <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-red-300" aria-hidden />
+                      <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-red-700" aria-hidden />
                       <span className="truncate font-medium">{s.name}</span>
                       <span className="num ml-auto text-xs text-cc-muted">{litres(s.litres)}</span>
                     </li>

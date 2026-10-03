@@ -41,7 +41,7 @@ export const Disasters: React.FC = () => {
       </div>
 
       {sachet && sachet.status !== 'connected' && (
-        <p className="mb-3 rounded-lg border border-cc-warn/40 bg-cc-warn/10 p-3 text-sm text-amber-100">
+        <p className="mb-3 rounded-lg border border-cc-warn/40 bg-cc-warn/10 p-3 text-sm text-amber-800">
           Alert feed is <b>{sachet.status}</b>. The list below may be incomplete; absence of alerts is not confirmation that none are active.
         </p>
       )}

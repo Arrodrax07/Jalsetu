@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, Droplets, LogOut, Navigation, PenLine, RefreshCw, Satellite, Truck, WifiOff } from 'lucide-react';
+import { Camera, CheckCircle2, LogOut, Navigation, PenLine, RefreshCw, Satellite, Truck, WifiOff } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import type { DriverAssignment, Trip } from '../types';
-import { Button, Chip, cx } from '../components/ui';
+import { Button, Chip, cx, EASE, SPRING } from '../components/ui';
+import { Mark } from '../components/shell/Shell';
 import { currentFix, Fix, geoErrorText, GpsError, GpsWatcher, haversineM, keepAwake, TelemetryUploader, UploadStatus } from './telemetry';
 
 const MOVING = ['En Route', 'Arrived', 'Delivering', 'Delivered'];
@@ -92,10 +94,10 @@ export const DriverApp: React.FC = () => {
 
   return (
     <div className="min-h-full bg-cc-bg pb-10">
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-cc-border bg-cc-surface px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Droplets className="h-5 w-5 text-cc-accent" aria-hidden />
-          <div><p className="text-sm font-semibold">JalSetu Driver</p><p className="text-2xs text-cc-muted">{user.name}</p></div>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-cc-border bg-cc-bg/85 px-4 py-3 backdrop-blur-md">
+        <div className="flex items-center gap-2.5">
+          <Mark className="h-8 w-8 text-cc-accent" />
+          <div className="leading-none"><p className="display text-[22px]">JalSetu <span className="text-cc-muted">Driver</span></p><p className="mt-0.5 text-[11px] text-cc-muted">{user.name}</p></div>
         </div>
         <div className="flex items-center gap-2">
           {online ? <Chip tone="ok">Online</Chip> : <Chip tone="danger" icon={<WifiOff className="h-3 w-3" />}>Offline</Chip>}
@@ -104,7 +106,7 @@ export const DriverApp: React.FC = () => {
       </header>
 
       <main className="mx-auto max-w-lg space-y-4 p-4">
-        {loadError && <p role="alert" className="rounded-lg border border-cc-danger/40 bg-cc-danger/10 p-3 text-sm text-red-200">Server unreachable: {loadError}. Your GPS fixes are kept on this phone and will be sent when the connection returns.</p>}
+        {loadError && <p role="alert" className="rounded-lg border border-cc-danger/40 bg-cc-danger/10 p-3 text-sm text-red-700">Server unreachable: {loadError}. Your GPS fixes are kept on this phone and will be sent when the connection returns.</p>}
 
         {vehicle && (
           <section className="panel p-4">
@@ -129,17 +131,18 @@ export const DriverApp: React.FC = () => {
           </section>
         )}
 
+        {trip && <Journey status={trip.status} ended={!!trip.driverEndedAt} />}
         {trip && <TripCard trip={trip} />}
 
         {trip && stop && MOVING.includes(trip.status) && (
           <section className="panel p-4">
             <p className="eyebrow">Destination · stop {stop.seq} of {trip.stops.length}</p>
-            <p className="text-lg font-semibold">{stop.communityName}</p>
+            <p className="display mt-0.5 text-3xl leading-tight">{stop.communityName}</p>
             <div className="mt-3 grid grid-cols-2 gap-3 text-center">
-              <div className="rounded-lg bg-cc-raised p-3"><p className="eyebrow">Distance (GPS)</p><p className="num text-xl font-semibold">{fmtDist(distLocal)}</p></div>
-              <div className="rounded-lg bg-cc-raised p-3"><p className="eyebrow">Deliver</p><p className="num text-xl font-semibold">{stop.allocatedLitres.toLocaleString('en-IN')} L</p></div>
+              <div className="rounded-2xl bg-cc-raised p-4"><p className="eyebrow">Distance (GPS)</p><p className="display num mt-1 text-4xl leading-none">{fmtDist(distLocal)}</p></div>
+              <div className="rounded-2xl bg-cc-raised p-4"><p className="eyebrow">Deliver</p><p className="display num mt-1 text-4xl leading-none">{stop.allocatedLitres.toLocaleString('en-IN')}<span className="text-lg text-cc-faint"> L</span></p></div>
             </div>
-            <a className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-cc-border py-3 text-sm font-medium text-cc-accent"
+            <a className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-cc-border bg-cc-surface py-3.5 text-sm font-medium text-cc-accent-strong transition hover:border-cc-strong"
               href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`} target="_blank" rel="noreferrer">
               <Navigation className="h-4 w-4" /> Open navigation
             </a>
@@ -189,7 +192,7 @@ const GpsPanel: React.FC<{ fix: Fix | null; fixAge: number | null; error: GpsErr
       <p className="eyebrow flex items-center gap-1.5"><Satellite className="h-3.5 w-3.5" /> GPS</p>
       {error ? <Chip tone="danger">Error</Chip> : fix ? (fixAge != null && fixAge <= 30 ? <Chip tone="ok">Fix OK</Chip> : <Chip tone="warn">Old fix</Chip>) : <Chip tone="neutral">Searching…</Chip>}
     </div>
-    {error && <p role="alert" className="mt-2 text-sm text-red-200">{geoErrorText(error)}</p>}
+    {error && <p role="alert" className="mt-2 text-sm text-red-700">{geoErrorText(error)}</p>}
     {fix && (
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <dt className="text-cc-muted">Accuracy</dt><dd className="num text-right">± {fix.accuracyM ?? '?'} m</dd>
@@ -201,12 +204,44 @@ const GpsPanel: React.FC<{ fix: Fix | null; fixAge: number | null; error: GpsErr
     {active && upload && (
       <div className="mt-3 border-t border-cc-border pt-2 text-xs text-cc-muted space-y-0.5">
         <p>Last sent: {upload.lastSentAt ? new Date(upload.lastSentAt).toLocaleTimeString('en-IN') : 'not yet'} · Buffered: <span className="num">{upload.queued}</span></p>
-        {!upload.online && <p className="text-amber-300">No connection — fixes are kept on this phone and sent when back online.</p>}
-        {upload.error && <p className="text-amber-300">{upload.error}</p>}
+        {!upload.online && <p className="text-amber-800">No connection — fixes are kept on this phone and sent when back online.</p>}
+        {upload.error && <p className="text-amber-800">{upload.error}</p>}
       </div>
     )}
   </section>
 );
+
+const STEPS = ['Assigned', 'Accepted', 'En Route', 'Arrived', 'Delivering', 'Delivered'] as const;
+const STEP_LABEL: Record<string, string> = { Assigned: 'Accept', Accepted: 'Start', 'En Route': 'On the way', Arrived: 'Arrived', Delivering: 'Delivering', Delivered: 'Done' };
+
+/** Where the driver is in the trip, at a glance. */
+const Journey: React.FC<{ status: string; ended: boolean }> = ({ status, ended }) => {
+  const idx = Math.max(0, STEPS.indexOf((status === 'Planned' ? 'Assigned' : status) as typeof STEPS[number]));
+  const pct = ended ? 100 : (idx / (STEPS.length - 1)) * 100;
+  return (
+    <section className="panel px-4 pb-4 pt-5">
+      <div className="relative mx-3">
+        <div className="absolute left-0 right-0 top-[11px] h-[3px] rounded-full bg-cc-hover" />
+        <motion.div className="absolute left-0 top-[11px] h-[3px] rounded-full bg-cc-accent" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.9, ease: EASE }} />
+        <ol className="relative flex justify-between">
+          {STEPS.map((s, i) => {
+            const done = i < idx || ended, here = i === idx && !ended;
+            return (
+              <li key={s} className="flex w-0 flex-col items-center">
+                <motion.span initial={false} animate={{ scale: here ? 1.15 : 1 }} transition={SPRING}
+                  className={cx('flex h-[25px] w-[25px] items-center justify-center rounded-full border-2 text-[10px] font-semibold',
+                    done ? 'border-cc-accent bg-cc-accent text-white' : here ? 'border-cc-accent bg-cc-surface text-cc-accent shadow-[0_0_0_5px_rgb(12_110_150/0.12)]' : 'border-cc-border bg-cc-surface text-cc-faint')}>
+                  {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                </motion.span>
+                <span className={cx('mt-1.5 whitespace-nowrap text-[10.5px]', here ? 'font-semibold text-cc-text' : 'text-cc-muted')}>{STEP_LABEL[s]}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
+  );
+};
 
 const TripCard: React.FC<{ trip: Trip }> = ({ trip }) => (
   <section className="panel p-4">
@@ -218,7 +253,7 @@ const TripCard: React.FC<{ trip: Trip }> = ({ trip }) => (
       {trip.stops.map(s => (
         <li key={s.id} className="flex items-center gap-3 text-sm">
           <span className={cx('flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold',
-            s.status === 'Delivered' || s.status === 'Verified' ? 'bg-emerald-600 text-white' : s.status === 'Arrived' ? 'bg-cc-accent-strong text-white' : 'bg-cc-raised text-cc-muted')}>
+            s.status === 'Delivered' || s.status === 'Verified' ? 'bg-cc-ok text-white' : s.status === 'Arrived' ? 'bg-cc-accent-strong text-white' : 'bg-cc-raised text-cc-muted')}>
             {s.status === 'Delivered' || s.status === 'Verified' ? <CheckCircle2 className="h-4 w-4" /> : s.seq}
           </span>
           <span className="flex-1">{s.communityName}</span>

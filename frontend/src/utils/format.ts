@@ -30,3 +30,10 @@ export const pct = (n: number | null | undefined, digits = 0) => (n == null ? 'â
 
 export const minutes = (a: string | null | undefined, b: string | null | undefined) =>
   a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 60000) : null;
+
+/** District names as people say them today (the boundary dataset uses older / transliterated forms). */
+const DISTRICT_DISPLAY: Record<string, string> = {
+  Bid: 'Beed', Osmanabad: 'Dharashiv', Aurangabad: 'Chh. Sambhajinagar', Ahmadnagar: 'Ahilyanagar', Raigarh: 'Raigad',
+  Gondiya: 'Gondia', Buldana: 'Buldhana',
+};
+export const districtName = (n: string | null | undefined) => (n ? DISTRICT_DISPLAY[n] ?? n : '');

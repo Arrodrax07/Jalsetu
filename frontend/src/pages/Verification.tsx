@@ -26,7 +26,7 @@ export const Verification: React.FC = () => {
               <tr key={d.id}>
                 <td className="font-medium">{d.id}</td><td className="text-cc-muted">{d.tripId}</td><td>{d.communityName}</td>
                 <td className="num text-right">{litres(d.deliveredAmount)}</td>
-                <td className={`num text-right ${d.varianceAmount !== 0 ? 'text-amber-300' : 'text-cc-muted'}`}>{d.varianceAmount.toLocaleString('en-IN')} L</td>
+                <td className={`num text-right ${d.varianceAmount !== 0 ? 'text-amber-800' : 'text-cc-muted'}`}>{d.varianceAmount.toLocaleString('en-IN')} L</td>
                 <td>{d.gpsVerified ? <Chip tone="ok" icon={<MapPin className="h-3 w-3" />}>Arrived</Chip> : <Chip tone="danger">No GPS arrival</Chip>}</td>
                 <td>{d.receiverName || <span className="text-cc-faint">—</span>}</td>
                 <td className="num text-cc-muted">{dt(d.deliveryTime)}</td>
@@ -82,8 +82,8 @@ const ReviewDialog: React.FC<{ d: DeliveryRecord; onClose: () => void }> = ({ d,
           <KV k="Receiver" v={`${d.receiverName || '—'}${d.receiverPhone ? ` (${d.receiverPhone})` : ''}`} />
           <KV k="Recorded by / at" v={`${d.recordedBy} · ${dt(d.deliveryTime)}`} />
           <KV k="Status" v={<StatusChip status={d.status} />} />
-          {d.notes && <p className="mt-2 rounded-md border border-cc-warn/40 bg-cc-warn/10 p-2 text-xs text-amber-100">{d.notes}</p>}
-          {d.verifiedBy && <p className="mt-2 text-xs text-green-300">Verified by {d.verifiedBy}, {dt(d.verifiedAt)} {d.verificationNotes && `— ${d.verificationNotes}`}</p>}
+          {d.notes && <p className="mt-2 rounded-md border border-cc-warn/40 bg-cc-warn/10 p-2 text-xs text-amber-800">{d.notes}</p>}
+          {d.verifiedBy && <p className="mt-2 text-xs text-green-700">Verified by {d.verifiedBy}, {dt(d.verifiedAt)} {d.verificationNotes && `— ${d.verificationNotes}`}</p>}
         </div>
         <div className="space-y-3">
           <div><p className="label flex items-center gap-1"><FileImage className="h-3.5 w-3.5" /> Photo</p>{photo ? <img src={photo} alt="Delivery photo" className="max-h-56 w-full rounded-lg border border-cc-border object-contain" /> : <p className="text-xs text-cc-faint">{d.photoUrl ? 'Loading…' : 'No photo attached'}</p>}</div>

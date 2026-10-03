@@ -61,18 +61,18 @@ export const CrisisSignals: React.FC<{ onPlace?: (communityId: string) => void; 
               {rows.slice(0, compact ? 60 : 300).map(s => (
                 <li key={s.id} className="px-3 py-2.5">
                   <div className="flex items-center gap-1.5">
-                    {s.kind === 'news' ? <Newspaper className="h-3.5 w-3.5 text-sky-300" aria-label="News" /> : <CloudRain className="h-3.5 w-3.5 text-cyan-300" aria-label="Rainfall" />}
+                    {s.kind === 'news' ? <Newspaper className="h-3.5 w-3.5 text-sky-700" aria-label="News" /> : <CloudRain className="h-3.5 w-3.5 text-cyan-700" aria-label="Rainfall" />}
                     <Chip tone={SEV_TONE[s.severity]}>{s.severity}</Chip>
                     {s.kind === 'news' && <Chip tone={STATUS_TONE[s.status]} icon={s.status === 'confirmed' ? <CheckCircle2 className="h-3 w-3" /> : undefined}>{s.status}</Chip>}
                     <span className="ml-auto whitespace-nowrap text-2xs text-cc-faint">{timeAgo(s.publishedAt)}</span>
                   </div>
-                  <a href={s.url} target="_blank" rel="noreferrer noopener" className="group mt-1 block text-sm leading-snug text-cc-text hover:text-sky-200">
+                  <a href={s.url} target="_blank" rel="noreferrer noopener" className="group mt-1 block text-sm leading-snug text-cc-text hover:text-sky-700">
                     {s.title} <ExternalLink className="inline h-3 w-3 opacity-50 group-hover:opacity-100" aria-hidden />
                   </a>
                   <p className="mt-0.5 truncate text-2xs text-cc-muted">{s.publisher}{s.metric != null ? ` · ${s.metric > 0 ? '+' : ''}${s.metric}% vs 10-yr mean` : ''}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {s.communities.slice(0, 4).map(c => (
-                      <button key={c.id} onClick={() => onPlace?.(c.id)} className="rounded bg-cc-danger/15 px-1.5 py-0.5 text-2xs font-medium text-red-200 ring-1 ring-cc-danger/30 hover:bg-cc-danger/25">{c.name}</button>
+                      <button key={c.id} onClick={() => onPlace?.(c.id)} className="rounded bg-cc-danger/15 px-1.5 py-0.5 text-2xs font-medium text-red-700 ring-1 ring-cc-danger/30 hover:bg-cc-danger/25">{c.name}</button>
                     ))}
                     {s.districts.slice(0, s.regionOnly ? 3 : 4).map(d => (
                       <span key={d.id} className="rounded bg-cc-raised px-1.5 py-0.5 text-2xs text-cc-muted ring-1 ring-cc-border">{d.name} district</span>
@@ -81,7 +81,7 @@ export const CrisisSignals: React.FC<{ onPlace?: (communityId: string) => void; 
                   </div>
                   {s.kind === 'news' && can('acknowledge') && (
                     <div className="mt-1.5 flex gap-1">
-                      {s.status !== 'confirmed' && <Button size="sm" variant="ghost" loading={busy === s.id} className="-ml-2 text-green-300" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => review(s, 'confirmed')}>Confirm</Button>}
+                      {s.status !== 'confirmed' && <Button size="sm" variant="ghost" loading={busy === s.id} className="-ml-2 text-green-700" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => review(s, 'confirmed')}>Confirm</Button>}
                       <Button size="sm" variant="ghost" disabled={busy === s.id} className="text-cc-muted" icon={<XCircle className="h-3.5 w-3.5" />} onClick={() => review(s, 'dismissed')}>Not relevant</Button>
                     </div>
                   )}

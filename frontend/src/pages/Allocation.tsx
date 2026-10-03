@@ -43,7 +43,7 @@ export const Allocation: React.FC = () => {
             {can('approve_allocation') && <Button variant="success" icon={<CheckCircle2 className="h-4 w-4" />} disabled={plan?.status !== 'Proposed'} loading={busy === 'approve'} onClick={approve}>Approve plan</Button>}
           </div>
         </div>
-        {useForecast && <p className="mt-2 text-xs text-pink-200">The forecast is an ML prediction trained on real weather with a simulated demand response. Use only as a planning aid until real metered observations are recorded.</p>}
+        {useForecast && <p className="mt-2 text-xs text-pink-700">The forecast is an ML prediction trained on real weather with a simulated demand response. Use only as a planning aid until real metered observations are recorded.</p>}
       </Panel>
       {!plan ? <Panel><Empty title="No allocation plan yet" hint="Compute a plan from recorded demand and available supply." /></Panel> : (
         <>
@@ -52,7 +52,7 @@ export const Allocation: React.FC = () => {
             {mb && ma && ([['Need-weighted equity', mb.needWeightedEquity, ma.needWeightedEquity], ['Coverage equality', mb.coverageEquality, ma.coverageEquality],
               ['Worst-off coverage', mb.minCoveragePct, ma.minCoveragePct], ['Vulnerable coverage', mb.vulnerableCoveragePct, ma.vulnerableCoveragePct], ['Average coverage', mb.avgCoveragePct, ma.avgCoveragePct]] as [string, number, number][])
               .map(([k, b, a]) => (
-                <div key={k} className="panel p-3"><p className="eyebrow">{k}</p><p className="num mt-1 text-lg font-semibold">{pct(b, 1)} → <span className={a >= b ? 'text-green-300' : 'text-amber-300'}>{pct(a, 1)}</span></p><p className="text-2xs text-cc-muted">current → plan</p></div>
+                <div key={k} className="panel p-3"><p className="eyebrow">{k}</p><p className="num mt-1 text-lg font-semibold">{pct(b, 1)} → <span className={a >= b ? 'text-green-700' : 'text-amber-800'}>{pct(a, 1)}</span></p><p className="text-2xs text-cc-muted">current → plan</p></div>
               ))}
           </div>
           <Panel title={<span className="flex items-center gap-2">Plan #{plan.id} <StatusChip status={plan.status} /></span>}
@@ -66,7 +66,7 @@ export const Allocation: React.FC = () => {
                   <tr key={it.communityId}>
                     <td className="font-medium">{it.communityName}</td><td className="num text-right">{litres(it.demand)}</td><td className="num text-right text-cc-muted">{litres(it.previousAllocation)}</td>
                     <td className="num text-right text-cc-muted">{litres(it.survivalFloor)}</td><td className="num">{it.priorityScore}</td>
-                    <td className="num text-right font-semibold">{litres(it.recommendedAllocation)}<div className={`text-2xs ${delta >= 0 ? 'text-green-300' : 'text-amber-300'}`}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('en-IN')}</div></td>
+                    <td className="num text-right font-semibold">{litres(it.recommendedAllocation)}<div className={`text-2xs ${delta >= 0 ? 'text-green-700' : 'text-amber-800'}`}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('en-IN')}</div></td>
                     <td><div className="flex items-center gap-2"><div className="h-1.5 w-16 rounded-full bg-cc-bg"><div className="h-full rounded-full bg-cc-accent" style={{ width: `${Math.min(100, it.coveragePct)}%` }} /></div><span className="num text-xs">{it.coveragePct}%</span></div></td>
                     <td className="max-w-md text-xs text-cc-muted">{it.reason}</td>
                   </tr>

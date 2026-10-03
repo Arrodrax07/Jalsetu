@@ -5,6 +5,7 @@ real records rather than stored, so it can never drift from the underlying data.
 """
 from __future__ import annotations
 
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
@@ -17,6 +18,11 @@ from ..models import (
 from . import supply
 from .common import get_setting
 from .priority import PriorityContext, score_community, vulnerability_level
+
+
+def plain_name(s: str) -> str:
+    """Boundary datasets carry transliteration marks ("Mahārāshtra"); show the everyday spelling."""
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
 
 def iso(dt: datetime | None) -> str | None:
@@ -100,7 +106,7 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "dataOrigin": c.data_origin,
             "districtId": c.district_id,
             "districtName": c.district.name if c.district else None,
-            "stateName": c.state.name if c.state else None,
+            "stateName": plain_name(c.state.name) if c.state else None,
             "crisisScore": round(c.crisis_score or 0),
             "settlementType": c.settlement_type or None,
             "source": c.source or None,

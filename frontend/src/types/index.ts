@@ -211,3 +211,14 @@ export interface OperationsMetrics {
   avgRequestToFulfilmentHours: number | null; fleetUtilisationPct: number | null; anomaliesByKind: Record<string, number>; routeDeviations: number;
   daily: { date: string; trips: number; litres: number }[];
 }
+
+/** Public situation summary (landing page, no auth). */
+export interface PublicSummary {
+  generatedAt: string; places: number; people: number; inCrisis: number; critical: number; peopleInCrisis: number;
+  newsReports: number; tankers: number; depots: number;
+  /** [lng, lat, crisis 0-100, population] */
+  points: [number, number, number, number][];
+  criticalPlaces: { name: string; district: string; crisis: number }[];
+  rainfall: { district: string; deviation: number; severity: string }[];
+  headlines: { title: string; publisher: string; url: string; publishedAt: string | null; places: string[] }[];
+}

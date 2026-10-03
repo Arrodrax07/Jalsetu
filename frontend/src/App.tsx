@@ -1,11 +1,13 @@
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { MobileNav, NavRail, Toasts, TopBar } from './components/shell/Shell';
-import { Loading } from './components/ui';
+import { FadeSwap, Loading } from './components/ui';
+import { Intro, useIntro } from './components/Intro';
 import { ChangePassword, Login } from './pages/Auth';
 import { CommandCenter } from './pages/CommandCenter';
 import { DriverApp } from './driver/DriverApp';
 import { CitizenPortal } from './pages/CitizenPortal';
+import { Landing } from './pages/Landing';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lazyPage = (load: () => Promise<any>, name: string) =>
@@ -45,6 +47,10 @@ const Routed: React.FC = () => {
 
 const Root: React.FC = () => {
   const { user, authChecked, route } = useApp();
+  // Every page load starts on the landing page (it lives only in memory, so a refresh resets it).
+  // "Open the control room" enters the app; an existing session goes straight in, otherwise sign-in.
+  const [entered, setEntered] = React.useState(() => window.location.pathname.startsWith('/login'));
+  if (!entered) return <Landing onEnter={() => { window.history.replaceState(null, '', '/#overview'); setEntered(true); }} />;
   if (!authChecked) return <Loading label="Restoring session…" className="h-full" />;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword />;
@@ -57,18 +63,29 @@ const Root: React.FC = () => {
       <div className="flex min-h-0 flex-1">
         <NavRail />
         <main className={fullBleed ? 'min-w-0 flex-1 overflow-hidden' : 'min-w-0 flex-1 overflow-y-auto'}>
-          <React.Suspense fallback={<Loading />}><Routed /></React.Suspense>
+          <React.Suspense fallback={<Loading />}>
+            <FadeSwap k={route.split('/')[0] || 'overview'} className={fullBleed ? 'h-full' : 'mx-auto w-full max-w-[1600px]'}><Routed /></FadeSwap>
+          </React.Suspense>
         </main>
       </div>
     </div>
   );
 };
 
+const WithIntro: React.FC = () => {
+  const [intro, done] = useIntro();
+  return <>{<Root />}{intro && <Intro onDone={done} />}</>;
+};
+
 export function App() {
   if (window.location.pathname.replace(/\/$/, '') === '/report') return <CitizenPortal />;
+  // Public story page, also reachable while signed in (e.g. to show visitors).
+  if (window.location.pathname.replace(/\/$/, '') === '/welcome') return <Landing />;
+  // Dev-only design preview of the sign-in screen without ending the current session (stripped from production builds).
+  if (import.meta.env.DEV && window.location.pathname === '/__login') return <AppProvider><Login /></AppProvider>;
   return (
     <AppProvider>
-      <Root />
+      <WithIntro />
       <Toasts />
     </AppProvider>
   );

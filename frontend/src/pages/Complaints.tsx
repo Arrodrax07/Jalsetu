@@ -41,9 +41,9 @@ export const Complaints: React.FC = () => {
               <thead><tr><th>Ticket</th><th>Community</th><th>Category</th><th>Severity</th><th>Status</th><th>Received</th></tr></thead>
               <tbody>{rows.map(c => (
                 <tr key={c.id} className="cursor-pointer" onClick={() => setSel(c.id)}>
-                  <td className="font-medium">{c.id} {c.duplicateOf && <Link2 className="inline h-3 w-3 text-amber-300" aria-label="possible duplicate" />}</td>
+                  <td className="font-medium">{c.id} {c.duplicateOf && <Link2 className="inline h-3 w-3 text-amber-800" aria-label="possible duplicate" />}</td>
                   <td>{c.communityName}</td>
-                  <td>{c.category} {c.labelVerified ? <CheckCircle2 className="inline h-3 w-3 text-green-400" aria-label="officer verified" /> : <Conf v={c.categoryConfidence} />}</td>
+                  <td>{c.category} {c.labelVerified ? <CheckCircle2 className="inline h-3 w-3 text-green-700" aria-label="officer verified" /> : <Conf v={c.categoryConfidence} />}</td>
                   <td><StatusChip status={c.severity} /></td><td><StatusChip status={c.status} /></td><td className="text-cc-muted">{timeAgo(c.submittedAt)}</td>
                 </tr>))}</tbody>
             </table>
@@ -114,7 +114,7 @@ const LodgeDialog: React.FC<{ onClose: () => void; communities: { id: string; na
         <Field label="Complaint"><textarea className="input" rows={4} value={text} onChange={e => setText(e.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-2"><input className="input" placeholder="Reporter (optional)" value={name} onChange={e => setName(e.target.value)} /><input className="input" placeholder="Phone (optional)" value={phone} onChange={e => setPhone(e.target.value)} /></div>
         <div className="min-h-[64px] rounded-lg border border-cc-border bg-cc-raised p-3 text-xs">
-          {state === 'busy' ? <Loading label="Classifying…" className="py-1" /> : state === 'error' ? <span className="text-amber-300">Triage model unavailable; the complaint can still be registered once it is restored.</span>
+          {state === 'busy' ? <Loading label="Classifying…" className="py-1" /> : state === 'error' ? <span className="text-amber-800">Triage model unavailable; the complaint can still be registered once it is restored.</span>
             : prev ? <div className="space-y-1"><div className="flex flex-wrap items-center gap-2"><KindLabel kind="predicted" /><b>{prev.category}</b> <Conf v={prev.categoryConfidence} /> <StatusChip status={prev.severity} />{prev.duplicateOf && <Chip tone="warn">possible duplicate of {prev.duplicateOf}</Chip>}</div><p className="text-cc-muted">{prev.recommendedAction}</p></div>
               : <span className="text-cc-faint">Type a few words to see the triage.</span>}
         </div>

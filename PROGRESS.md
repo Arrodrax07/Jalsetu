@@ -5,6 +5,28 @@ Last updated: 2026-10-03.
 
 ## Done
 
+### 2026-10-03 (latest): landing page + "water atlas" redesign
+- Every page load starts on the landing page (in-memory flag in `App.tsx`); "Open the control room" enters the app
+  (existing session goes straight in, otherwise sign-in). `/welcome` shows the landing page to anyone; `/login` = sign-in.
+- Landing data: `GET /api/public/summary` (no auth, 5-min cache). Hero = `components/landing/WaterScene.tsx`
+  (three + @react-three/fiber, lazy chunk ~233 kB gz): glass drop (physical transmission, ior 1.33) over a GPU ripple
+  shader; click the water to make ripples. Sections: sticky scroll numbers, pinned horizontal "how it works",
+  rainfall bars + headlines, 3D-tilting phone mockup, live headline ticker.
+- Intro plays on every page load, starting when the tab is visible.
+
+### 2026-10-03 (later): frontend redesign "water atlas"
+- Light theme: tokens in `src/index.css` (paper / ink / water-blue / terracotta), Geist + Instrument Serif, Motion (`motion` pkg).
+- UI kit `components/ui.tsx`: Stagger/Item, CountUp, Segmented, FadeSwap, animated SlideOver/Dialog/Tabs; same component API.
+- Shell: sidebar wordmark + sliding active state, slim top bar, Ctrl/Cmd+K command palette (pages, actions, 1,263 places).
+- Intro (`components/Intro.tsx`): ~3.5 s SVG sequence, once per session, skippable; toned down (not removed) for
+  prefers-reduced-motion. Maharashtra outline in `src/assets/maharashtra.ts` (generated from geoBoundaries).
+- Map: 3D mode (AWS terrarium DEM terrain + hillshade + crisis-height columns), hover cards, pulse rings, cinematic
+  fly-in, layer toggles; layers attach on `style.load` (~0.3 s) instead of `load` (~10 s).
+- Overview: live situation headline, 6 KPIs, community side sheet with evidence (`components/CommunitySheet.tsx`),
+  route `#overview/<communityId>`.
+- Communities list (filters, crisis sort, paging), citizen portal (type-ahead + nearest place from device location),
+  driver journey stepper, sign-in split layout. Dev-only `/__login` preview route.
+
 ### 2026-10-03: Maharashtra real data, live crisis signals, depot siting, auto-dispatch (70 backend tests passing)
 - Migration 0003. `Community` gains provenance (`external_id`, `source_url`, `settlement_type`, `demand_basis`), `baseline_supply`
   (estimated piped supply; tankers cover the rest, see `services/supply.py`) and `crisis_score`. New `CrisisSignal`, `DispatchProposal`.

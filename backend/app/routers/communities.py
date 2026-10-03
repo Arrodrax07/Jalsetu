@@ -25,8 +25,9 @@ def list_communities(include_inactive: bool = False, db: Session = Depends(get_d
 
 @router.get("/public/communities")
 def public_communities(db: Session = Depends(get_db)):
-    """Minimal list for the citizen complaint portal (no auth)."""
-    return [{"id": c.id, "name": c.name, "ward": c.ward}
+    """Minimal list for the citizen complaint portal (no auth). Settlement coordinates are public (OpenStreetMap);
+    the portal uses them to suggest the nearest place from the resident's own device location, on the device."""
+    return [{"id": c.id, "name": c.name, "ward": c.ward, "lat": round(c.lat, 4), "lng": round(c.lng, 4)}
             for c in db.scalars(select(Community).where(Community.is_active.is_(True)).order_by(Community.name))]
 
 

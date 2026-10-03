@@ -3,95 +3,114 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   JalSetu operations design tokens (RGB triplets for Tailwind alpha support).
-   Contrast: text on surface >= 12:1, muted >= 5:1 (WCAG AA for body text).
+   JalSetu design tokens: "water atlas" (RGB triplets for Tailwind alpha support).
+   Warm paper, deep ink, one water-blue accent, terracotta for crisis.
+   Contrast on white: text 15:1, muted 6.4:1, faint 3.3:1 (large/secondary only).
    --------------------------------------------------------------------------- */
 :root {
-  --cc-bg: 7 12 24;
-  --cc-surface: 13 21 38;
-  --cc-raised: 21 32 55;
-  --cc-hover: 29 44 72;
-  --cc-border: 38 54 86;
-  --cc-border-strong: 62 84 124;
-  --cc-text: 243 246 252;
-  --cc-muted: 174 188 212;
-  --cc-faint: 128 146 176;
-  --cc-accent: 56 189 248;
-  --cc-accent-strong: 14 165 233;
-  --cc-violet: 167 139 250;
-  --cc-teal: 45 212 191;
+  --cc-bg: 245 243 238;          /* paper */
+  --cc-surface: 255 255 255;
+  --cc-raised: 250 249 246;
+  --cc-hover: 242 239 232;
+  --cc-border: 229 225 215;
+  --cc-border-strong: 207 200 186;
+  --cc-text: 19 31 42;           /* ink */
+  --cc-muted: 84 96 108;
+  --cc-faint: 134 143 152;
+  --cc-accent: 12 110 150;       /* water */
+  --cc-accent-strong: 8 84 118;
+  --cc-violet: 104 76 180;
+  --cc-teal: 13 116 108;
 
   /* tracking state */
-  --cc-live: 34 197 94;
-  --cc-stale: 245 158 11;
-  --cc-offline: 239 68 68;
-  --cc-nosignal: 100 116 139;
+  --cc-live: 22 150 72;
+  --cc-stale: 198 128 8;
+  --cc-offline: 200 40 36;
+  --cc-nosignal: 140 150 160;
 
   /* CAP severity */
-  --cc-sev-extreme: 220 38 38;
-  --cc-sev-severe: 249 115 22;
-  --cc-sev-moderate: 234 179 8;
-  --cc-sev-minor: 59 130 246;
+  --cc-sev-extreme: 168 32 26;
+  --cc-sev-severe: 204 84 34;    /* terracotta */
+  --cc-sev-moderate: 196 136 10;
+  --cc-sev-minor: 40 96 200;
 
   /* data provenance */
-  --cc-seeded: 167 139 250;
-  --cc-external: 56 189 248;
-  --cc-predicted: 244 114 182;
-  --cc-estimated: 251 191 36;
+  --cc-seeded: 112 70 200;
+  --cc-external: 12 110 150;
+  --cc-predicted: 182 30 96;
+  --cc-estimated: 176 92 10;
 
   /* outcome */
-  --cc-ok: 34 197 94;
-  --cc-warn: 245 158 11;
-  --cc-danger: 239 68 68;
+  --cc-ok: 22 128 64;
+  --cc-warn: 186 104 8;
+  --cc-danger: 190 38 32;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 @layer base {
   html, body, #root { height: 100%; }
   body {
     @apply bg-cc-bg text-cc-text font-sans antialiased;
-    background-image:
-      radial-gradient(1200px 600px at 10% -10%, rgb(var(--cc-accent) / 0.10), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgb(var(--cc-violet) / 0.08), transparent 60%);
-    background-attachment: fixed;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "ss01", "cv11";
+    text-rendering: optimizeLegibility;
   }
   #root { display: flex; flex-direction: column; }
-  :focus-visible { outline: 2px solid rgb(var(--cc-accent)); outline-offset: 2px; }
-  ::selection { background: rgb(var(--cc-accent) / 0.35); }
+  h1, h2, h3 { letter-spacing: -0.015em; }
+  :focus-visible { outline: 2px solid rgb(var(--cc-accent)); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: rgb(var(--cc-accent) / 0.18); }
 }
 
 @layer components {
-  .panel { @apply bg-cc-surface/90 border border-cc-border rounded-xl shadow-panel backdrop-blur-sm; }
-  .panel-header { @apply flex items-center justify-between gap-3 px-4 py-3 border-b border-cc-border; }
-  .eyebrow { @apply text-2xs font-semibold uppercase tracking-[0.12em] text-cc-muted; }
+  .panel { @apply bg-cc-surface border border-cc-border rounded-2xl shadow-panel; }
+  .panel-header { @apply flex items-center justify-between gap-3 px-5 py-3.5 border-b border-cc-border; }
+  .eyebrow { @apply text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cc-faint; }
+  .display { @apply font-display font-normal tracking-[-0.02em]; }
   .num { font-variant-numeric: tabular-nums; }
   .input {
-    @apply w-full rounded-lg border border-cc-border bg-cc-bg px-3 py-2 text-sm text-cc-text placeholder:text-cc-faint
-           focus:border-cc-accent focus:outline-none focus:ring-2 focus:ring-cc-accent/25 disabled:opacity-60;
+    @apply w-full rounded-xl border border-cc-border bg-cc-surface px-3.5 py-2.5 text-sm text-cc-text placeholder:text-cc-faint
+           shadow-[0_1px_0_rgb(19_31_42/0.03)] transition-[border-color,box-shadow]
+           hover:border-cc-strong focus:border-cc-accent focus:outline-none focus:ring-4 focus:ring-cc-accent/10 disabled:opacity-60;
   }
-  .label { @apply mb-1 block text-xs font-medium text-cc-muted; }
+  .label { @apply mb-1.5 block text-xs font-medium text-cc-muted; }
   .table-cc { @apply w-full text-left text-sm; }
-  .table-cc thead th { @apply sticky top-0 z-[1] bg-cc-raised px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-cc-muted; }
-  .table-cc tbody td { @apply border-t border-cc-border px-3 py-2.5 align-top; }
-  .table-cc tbody tr:hover { @apply bg-cc-hover/60; }
+  .table-cc thead th { @apply sticky top-0 z-[1] border-b border-cc-border bg-cc-raised px-4 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-cc-faint; }
+  .table-cc tbody td { @apply border-t border-cc-border/70 px-4 py-3 align-top; }
+  .table-cc tbody tr { @apply transition-colors; }
+  .table-cc tbody tr:hover { @apply bg-cc-hover/50; }
+  /* Hairline contour texture used behind hero areas (login, intro). */
+  .contours {
+    background-size: 600px 120px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'%3E%3Cg fill='none' stroke='%230c6e96' stroke-opacity='0.08' stroke-width='1'%3E%3Cpath d='M0 20 Q37.5 11 75 20 T150 20 T225 20 T300 20 T375 20 T450 20 T525 20 T600 20'/%3E%3Cpath d='M0 60 Q37.5 51 75 60 T150 60 T225 60 T300 60 T375 60 T450 60 T525 60 T600 60'/%3E%3Cpath d='M0 100 Q37.5 91 75 100 T150 100 T225 100 T300 100 T375 100 T450 100 T525 100 T600 100'/%3E%3C/g%3E%3C/svg%3E");
+  }
 }
 
 /* Scrollbars */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgb(var(--cc-border-strong)); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--cc-border-strong) / .8); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--cc-faint)); background-clip: content-box; border: 3px solid transparent; }
 
 /* MapLibre theming */
-.maplibregl-popup-content { background: rgb(var(--cc-raised)) !important; color: rgb(var(--cc-text)); border: 1px solid rgb(var(--cc-border-strong)); border-radius: 10px !important; padding: 10px 12px !important; box-shadow: 0 20px 40px -12px rgb(0 0 0 / .7) !important; }
-.maplibregl-popup-tip { border-top-color: rgb(var(--cc-raised)) !important; border-bottom-color: rgb(var(--cc-raised)) !important; }
-.maplibregl-ctrl-group { background: rgb(var(--cc-raised)) !important; border: 1px solid rgb(var(--cc-border)); }
+.maplibregl-map { font-family: inherit; }
+.maplibregl-popup-content { background: rgb(var(--cc-surface)) !important; color: rgb(var(--cc-text)); border: 1px solid rgb(var(--cc-border)); border-radius: 14px !important; padding: 12px 14px !important; box-shadow: 0 18px 40px -16px rgb(19 31 42 / .35) !important; }
+.maplibregl-popup-tip { border-top-color: rgb(var(--cc-surface)) !important; border-bottom-color: rgb(var(--cc-surface)) !important; }
+.maplibregl-ctrl-group { background: rgb(var(--cc-surface)) !important; border: 1px solid rgb(var(--cc-border)); border-radius: 12px !important; box-shadow: 0 6px 18px -10px rgb(19 31 42 / .35) !important; overflow: hidden; }
+.maplibregl-ctrl-group button { width: 32px !important; height: 32px !important; }
 .maplibregl-ctrl-group button + button { border-top-color: rgb(var(--cc-border)) !important; }
-.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.85); }
-.maplibregl-ctrl-attrib { background: rgb(var(--cc-bg) / .75) !important; color: rgb(var(--cc-muted)); font-size: 10px; }
+.maplibregl-ctrl-attrib { background: rgb(var(--cc-surface) / .8) !important; color: rgb(var(--cc-muted)); font-size: 10px; border-radius: 8px; }
 .maplibregl-ctrl-attrib a { color: rgb(var(--cc-muted)) !important; }
+.maplibregl-ctrl-scale { background: rgb(var(--cc-surface) / .85) !important; border-color: rgb(var(--cc-text) / .5) !important; color: rgb(var(--cc-text)); font-size: 10px; }
+
+/* Reduced motion: keep fades and short transitions (they carry meaning), drop looping pulses. Motion components
+   tone themselves down via useReducedMotion. */
+/* Landing headline ticker (duplicated row scrolls by half its width for a seamless loop). */
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker { animation: ticker 70s linear infinite; }
+.ticker:hover { animation-play-state: paused; }
+html { scroll-behavior: smooth; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .animate-ping, .animate-pulse, .ticker { animation: none !important; }
+  html { scroll-behavior: auto; }
 }

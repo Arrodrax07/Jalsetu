@@ -46,7 +46,7 @@ export const VehiclePanel: React.FC<{ id: string | null; onClose: () => void; on
                 <KV k="GPS accuracy" v={<span className="num">{v.position.accuracyM != null ? `± ${Math.round(v.position.accuracyM)} m` : 'not reported'}</span>} />
                 <KV k="Speed" v={<span className="num">{v.position.speedKmh != null ? `${v.position.speedKmh} km/h` : '—'}</span>} />
                 <KV k="Heading" v={v.position.headingLabel || '—'} />
-                {ls?.state !== 'live' && <p className="mt-2 rounded-md border border-cc-warn/40 bg-cc-warn/10 p-2 text-xs text-amber-200">Marker shows the last known position. It does not move until a new fix arrives.</p>}
+                {ls?.state !== 'live' && <p className="mt-2 rounded-md border border-cc-warn/40 bg-cc-warn/10 p-2 text-xs text-amber-800">Marker shows the last known position. It does not move until a new fix arrives.</p>}
               </div>
             )}
             <div>

@@ -6,7 +6,7 @@
  */
 import type {
   ActivityProfile, AIAssessment, AllocationPlan, Anomaly, CityForecast, Community, Complaint, ComplaintAnalysis, ComplaintCategory, ComplaintStatus,
-  CrisisSignal, DashboardStats, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
+  CrisisSignal, DashboardStats, PublicSummary, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
   OperationsSettings, Overview, PriorityWeights, RequestStatus, RouteOptimizationResult, SystemHealth, Trip, UrgencyLevel, UserProfile, UserRole,
   Vehicle, WaterRequest, OperationsMetrics,
 } from '../types';
@@ -220,7 +220,8 @@ export const api = {
   createCommunity: (c: Record<string, unknown>) => post<Community>('/communities', c),
   updateCommunity: (id: string, c: Record<string, unknown>) => patch<Community>(`/communities/${id}`, c),
   communityForecast: (id: string, days = 7) => get<{ weatherSource: string; baseline: number; days: any[] }>(`/communities/${id}/forecast?days=${days}`),
-  publicCommunities: () => request<{ id: string; name: string; ward: string }[]>('/public/communities', {}, false),
+  publicSummary: () => request<PublicSummary>('/public/summary', {}, false),
+  publicCommunities: () => request<{ id: string; name: string; ward: string; lat: number; lng: number }[]>('/public/communities', {}, false),
   requests: () => get<WaterRequest[]>('/requests'),
   assessRequest: (r: NewWaterRequest) => post<AIAssessment>('/requests/assess', r),
   createRequest: (r: NewWaterRequest) => post<WaterRequest>('/requests', r),
