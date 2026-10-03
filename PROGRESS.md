@@ -66,19 +66,29 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## In progress at pause
-- Local DB rebuild: `cd backend && .venv\Scripts\python -m scripts.seed --sample-users --sample-activity`, then `python -m app.ingestion geography`, `python -m app.ingestion probes`, `python -m app.ingestion sachet`.
-  Credentials are in `backend/.seed-credentials.txt` (all accounts must change password at first login).
+## State at pause (2026-10-03, ~23:00 IST)
+- Everything committed up to `8de69ec` except the user's own edit to `backend/tests/test_trip_lifecycle.py` (left uncommitted on purpose; ask before committing).
+- Servers: start with `start.ps1` (API :8000, web :5173). Phone demo: `cloudflared tunnel --url http://localhost:5173` (URL changes each restart).
+- Demo driver: kailash.mehra@drivers.jalsetu.local (tanker T-2045, kept at Chembur depot); password in `backend/.seed-credentials.txt`.
+- Live data refresh: `python -m app.ingestion crisis` (also every 3 h in the background); depots: `python -m app.ingestion depots 6 --keep T-2045`.
+- Machine has limited RAM: an unrelated uvicorn on :8001 uses ~1.3 GB.
 
-## Next steps (in order)
-1. Re-run backend tests (`backend\.venv\Scripts\python -m pytest tests -q`); add tests for `/analytics/operations`.
-2. Start backend + frontend; check every page in a browser (console errors, layout); fix issues.
-3. Cloudflare Tunnel for the phone: `cloudflared tunnel --url http://localhost:5173` → open the https URL on the phone (Vite proxies /api + WebSocket). Add `server.allowedHosts` for `.trycloudflare.com` in `vite.config.ts` if Vite blocks the host. Document in README.
-4. Presentation area: create depot + destination community at real coordinates (Communities → Add, "Use this device's location"), create/assign a driver account for the friend.
-5. Full physical acceptance test (phone GPS → live map → arrival → delivery → verification → completed → analytics).
-6. Docs: rewrite root/backend/frontend READMEs, `docs/INTEGRATIONS.md` (service, env var, access, auth, frequency), remove remaining `ChangeMe!2026` mention in root README; update setup.ps1 (no default password; alembic).
-7. Docker: compose `migrate` + `worker` services (RUN_BACKGROUND_JOBS=false on api), Postgres test when Docker is running.
-8. Optional: LLM (Claude) situation reports — only with ANTHROPIC_API_KEY.
+## Next steps (agreed with the user, in order) — gaps against PS 11
+1. **Impact page: first-come-first-served vs JalSetu.** Replay the same real data both ways; show unmet demand, coverage
+   fairness (Jain), vulnerable places served, km driven, duplicate requests avoided. (PS point 5)
+2. **Voice + language switch** (English / मराठी / हिंदी) on citizen portal and driver app; Web Speech API (mr-IN, hi-IN). (PS point 4)
+3. **Offline citizen reporting**: installable PWA, queue complaints offline, send on reconnect. (PS point 4)
+4. **Public-tap schedules / supply information**: operators set tap timings per place; public "when is water coming" page.
+   (Named in the PS problem text; not built yet.)
+5. **Duplicate detection for water requests** (complaints already have it) + **distance as an explicit priority factor**. (PS points 2, 5)
+6. **Demo history script**: a few weeks of clearly labelled synthetic deliveries so trend/analytics charts are not empty. (PS point 3)
+7. Tests for `GET /api/public/summary`; then docs (READMEs, `docs/INTEGRATIONS.md`), Docker migrate/worker services.
+
+## Housekeeping before any demo
+- Allocation page shows an old approved plan for the archived Mumbai sample communities: press "Compute a plan".
+- All 8 tankers are on approved auto-dispatch trips (TR-3003..3010), including demo tanker T-2045 (Mumbai): cancel that trip before the phone demo.
+- Physical phone GPS acceptance test still not done.
+- User's OS has "reduce motion" on (Windows Animation effects off): app tones motion down; turn it on to show full motion.
 
 ## Known issues
 - SACHET polygon endpoint rate-limits (HTTP 403) after bursts; ingestion pauses and retries, shown as DEGRADED.
