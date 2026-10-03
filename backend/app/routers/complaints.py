@@ -60,6 +60,10 @@ def _analysis_view(a) -> dict:
 
 
 def _create(db: Session, body: ComplaintIn, source: str, user: User | None) -> dict:
+    if body.client_ref:
+        existing = db.scalar(select(Complaint).where(Complaint.client_ref == body.client_ref))
+        if existing:  # an offline-queued complaint sent again (lost response, retry): return the stored one
+            return {**complaint_view(existing), "replayed": True}
     if not db.get(Community, body.community_id):
         raise HTTPException(404, "Community not found")
     a = _analyse(db, body.description, body.community_id)
@@ -83,6 +87,10 @@ def _create(db: Session, body: ComplaintIn, source: str, user: User | None) -> d
         data_origin="citizen" if source == "citizen" else "manual",
         reporter_name=body.reporter_name,
         reporter_phone=body.reporter_phone,
+        language=body.language,
+        input_mode=body.input_mode,
+        client_ref=body.client_ref,
+        queued_at=body.queued_at.replace(tzinfo=None) - (body.queued_at.utcoffset() or timedelta(0)) if body.queued_at else None,
     )
     db.add(c)
     db.flush()
@@ -118,12 +126,28 @@ def public_complaint(body: ComplaintIn, request: Request, db: Session = Depends(
     q, now = _public_hits[ip], time.time()
     while q and now - q[0] > 600:
         q.popleft()
-    if len(q) >= 5:
-        raise HTTPException(429, "Too many complaints from this device. Please try again later.")
-    q.append(now)
+    resend = bool(body.client_ref and db.scalar(select(Complaint.id).where(Complaint.client_ref == body.client_ref)))
+    if not resend:  # a resend of an already-stored offline complaint never counts against the limit
+        if len(q) >= 5:
+            raise HTTPException(429, "Too many complaints from this device. Please try again later.")
+        q.append(now)
     view = _create(db, body, "citizen", None)
     return {"id": view["id"], "category": view["category"], "severity": view["severity"], "status": view["status"],
-            "message": "Complaint registered. Keep this ticket ID for follow-up."}
+            "replayed": bool(view.get("replayed")), "message": "Complaint registered. Keep this ticket ID for follow-up."}
+
+
+@router.get("/public/complaints/{code}")
+def public_complaint_status(code: str, db: Session = Depends(get_db)):
+    """Ticket lookup for the citizen who filed it: status only, no personal details."""
+    try:
+        c = db.get(Complaint, int(code.strip().upper().removeprefix("C-")) - 2000)
+    except ValueError:
+        c = None
+    if not c or c.source != "citizen":
+        raise HTTPException(404, "Ticket not found")
+    return {"id": c.code, "status": c.status, "category": c.category, "severity": c.severity,
+            "community": c.community.name if c.community else c.community_id,
+            "submittedAt": complaint_view(c)["submittedAt"], "resolvedAt": complaint_view(c)["resolvedAt"]}
 
 
 @router.patch("/complaints/{code}")

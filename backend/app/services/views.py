@@ -16,6 +16,7 @@ from ..models import (
     AllocationPlan, Community, Complaint, Delivery, Depot, Tanker, WaterRequest, utcnow,
 )
 from . import supply
+from ..domain import SYNTHETIC
 from .common import get_setting
 from .priority import PriorityContext, score_community, vulnerability_level
 
@@ -33,7 +34,7 @@ def priority_context(db: Session, communities: list[Community]) -> PriorityConte
     since = utcnow() - timedelta(days=7)
     rows = db.execute(
         select(Delivery.community_id, func.sum(Delivery.delivered_amount))
-        .where(Delivery.delivered_at >= since)
+        .where(Delivery.delivered_at >= since, Delivery.data_origin != SYNTHETIC)
         .group_by(Delivery.community_id)
     ).all()
     return PriorityContext(
@@ -60,8 +61,10 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
         if sim >= 1 or dup is not None:
             repeated_c[cid] += 1
     critical_req = Counter(cid for (cid,) in db.execute(
-        select(WaterRequest.community_id).where(WaterRequest.urgency == "Critical", WaterRequest.status.in_(("Pending", "Allocated")))))
-    last_delivery = dict(db.execute(select(Delivery.community_id, func.max(Delivery.delivered_at)).group_by(Delivery.community_id)).all())
+        select(WaterRequest.community_id).where(WaterRequest.urgency == "Critical", WaterRequest.status.in_(("Pending", "Allocated")),
+                                                WaterRequest.data_origin != SYNTHETIC)))
+    last_delivery = dict(db.execute(select(Delivery.community_id, func.max(Delivery.delivered_at))
+                                    .where(Delivery.data_origin != SYNTHETIC).group_by(Delivery.community_id)).all())
 
     out = []
     now = utcnow()
@@ -112,6 +115,8 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "source": c.source or None,
             "sourceUrl": c.source_url or None,
             "demandBasis": c.demand_basis or None,
+            "waterAccessKm": c.water_access_km,
+            "waterAccessNote": c.water_access_note or None,
         })
     return out
 
@@ -137,6 +142,8 @@ def request_view(r: WaterRequest) -> dict:
         "aiAssessment": r.assessment or None,
         "dataOrigin": r.data_origin,
         "fulfilledAt": iso(r.fulfilled_at),
+        "duplicateOf": f"WR-{1000 + r.duplicate_of_id}" if r.duplicate_of_id else None,
+        "duplicateReason": r.duplicate_reason or None,
     }
 
 
@@ -165,6 +172,9 @@ def complaint_view(c: Complaint) -> dict:
         "source": c.source,
         "reporterName": c.reporter_name,
         "dataOrigin": c.data_origin,
+        "language": c.language,
+        "inputMode": c.input_mode,
+        "queuedAt": iso(c.queued_at),
     }
 
 

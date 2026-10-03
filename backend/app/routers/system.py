@@ -37,7 +37,8 @@ def get_settings_(db: Session = Depends(get_db), _: User = Depends(any_user)):
 
 @router.put("/settings/weights")
 def put_weights(body: WeightsIn, db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
-    w = body.model_dump(by_alias=True)
+    current = get_setting(db, "weights")
+    w = {k: (current.get(k, 0.0) if v is None else v) for k, v in body.model_dump(by_alias=True).items()}
     total = sum(w.values())
     if total <= 0:
         raise HTTPException(400, "At least one weight must be positive")

@@ -1,7 +1,7 @@
 """Request-body schemas (camelCase on the wire). Responses are built in services/views.py."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from typing import Annotated
@@ -15,7 +15,7 @@ class In(BaseModel):
 
 
 Urgency = Literal["Low", "Medium", "High", "Critical"]
-RequestStatus = Literal["Pending", "Allocated", "Dispatched", "Delivered", "Rejected"]
+RequestStatus = Literal["Pending", "Allocated", "Dispatched", "Delivered", "Rejected", "Merged"]
 ComplaintStatus = Literal["Pending", "Escalated", "Assigned", "Resolved"]
 Category = Literal["No Water", "Late Tanker", "Insufficient Quantity", "Poor Water Quality", "Missed Delivery", "Billing or Other"]
 Role = Literal["admin", "operator", "dispatcher", "driver"]
@@ -84,6 +84,8 @@ class RequestIn(In):
     days_without_water: int = Field(default=0, ge=0, le=60)
     contact_person: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=6, max_length=32)
+    # True: the operator confirms this is a separate need even though an open request exists for the place.
+    allow_duplicate: bool = False
 
 
 class RequestStatusIn(In):
@@ -95,6 +97,35 @@ class ComplaintIn(In):
     description: str = Field(min_length=5, max_length=3000)
     reporter_name: str = Field(default="", max_length=120)
     reporter_phone: str = Field(default="", max_length=32)
+    language: Literal["en", "mr", "hi"] = "en"
+    input_mode: Literal["typed", "voice"] = "typed"
+    # Citizen portal offline queue: a device-generated id makes resending safe, plus when it was written.
+    client_ref: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{8,64}$")
+    queued_at: datetime | None = None
+
+
+TimeHM = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
+
+
+class TapScheduleIn(In):
+    community_id: str
+    point_name: str = Field(min_length=2, max_length=160)
+    kind: Literal["tap", "standpost", "piped", "tanker_halt"] = "tap"
+    days: list[int] = Field(min_length=1, max_length=7)
+    start_time: TimeHM
+    end_time: TimeHM
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    notes: str = Field(default="", max_length=1000)
+    is_active: bool = True
+
+
+class SupplyNoticeIn(In):
+    community_id: str
+    kind: Literal["interruption", "extra_supply", "quality", "info"] = "interruption"
+    message: str = Field(min_length=5, max_length=1000)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
 
 
 class ComplaintAnalyzeIn(In):
@@ -217,6 +248,8 @@ class WeightsIn(In):
     unmet_need: float = Field(ge=0, le=1)
     previous_coverage: float = Field(ge=0, le=1)
     population: float = Field(ge=0, le=1)
+    live_crisis: float | None = Field(default=None, ge=0, le=1)   # omitted = keep the current value
+    water_access: float | None = Field(default=None, ge=0, le=1)
 
 
 class OperationsIn(In):
@@ -232,6 +265,9 @@ class OperationsIn(In):
     geofence_radius_m: float | None = Field(default=None, gt=0, le=5000)
     variance_tolerance_pct: float | None = Field(default=None, ge=0, le=100)
     duplicate_similarity: float | None = Field(default=None, gt=0, le=1)
+    request_duplicate_hours: int | None = Field(default=None, ge=0, le=720)
+    tanker_shift_hours: float | None = Field(default=None, gt=0, le=24)
+    stop_service_minutes: float | None = Field(default=None, ge=0, le=240)
 
 
 class DemandObservationIn(In):

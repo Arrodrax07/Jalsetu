@@ -178,6 +178,9 @@ class Community(Base):
     # 0-100 from live crisis signals (services.crisis); drives baseline_supply for imported communities.
     crisis_score: Mapped[float] = mapped_column(Float, default=0.0)
     crisis_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Straight-line km to the nearest recorded water source or active depot (services.access). Null = not computed.
+    water_access_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    water_access_note: Mapped[str] = mapped_column(String(200), default="")
 
     district: Mapped[GeoDistrict | None] = relationship()
     state: Mapped[GeoState | None] = relationship()
@@ -202,6 +205,9 @@ class WaterRequest(Base):
     priority_score: Mapped[int] = mapped_column(Integer)
     assessment: Mapped[dict] = mapped_column(JSON, default=dict)
     data_origin: Mapped[str] = mapped_column(String(16), default="manual")
+    # Set when this request repeats an open request for the same community (status "Merged").
+    duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("water_requests.id"), nullable=True)
+    duplicate_reason: Mapped[str] = mapped_column(String(300), default="")
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -239,6 +245,11 @@ class Complaint(Base):
     data_origin: Mapped[str] = mapped_column(String(16), default="manual")
     reporter_name: Mapped[str] = mapped_column(String(120), default="")
     reporter_phone: Mapped[str] = mapped_column(String(32), default="")
+    language: Mapped[str] = mapped_column(String(8), default="en")  # en | mr | hi (portal language)
+    input_mode: Mapped[str] = mapped_column(String(8), default="typed")  # typed | voice
+    # Client-generated id from the citizen portal: an offline-queued complaint sent twice is stored once.
+    client_ref: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # when written on the device, if sent later
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -315,6 +326,7 @@ class Trip(Base):
     distance_travelled_km: Mapped[float] = mapped_column(Float, default=0.0)  # from accepted telemetry only
     deviation_streak: Mapped[int] = mapped_column(Integer, default=0)
     open_deviation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    data_origin: Mapped[str] = mapped_column(String(16), default="manual")  # "synthetic" = demo history, never operational
 
     tanker: Mapped[Tanker] = relationship()
     driver: Mapped[User | None] = relationship(foreign_keys=[driver_user_id])
@@ -400,6 +412,7 @@ class Delivery(Base):
     signature_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     trip_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)  # trip start -> this delivery
     recorded_by: Mapped[str] = mapped_column(String(120), default="")
+    data_origin: Mapped[str] = mapped_column(String(16), default="manual")  # "synthetic" = demo history, never operational
 
     tanker: Mapped[Tanker] = relationship()
     community: Mapped[Community] = relationship()
@@ -426,6 +439,45 @@ class Anomaly(Base):
     acknowledged_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
+
+
+class TapSchedule(Base):
+    """When a public tap / standpost / piped line runs, as set by an operator. Shown on the public schedule page."""
+    __tablename__ = "tap_schedules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
+    point_name: Mapped[str] = mapped_column(String(160))  # e.g. "Ward 4 standpost, near the temple"
+    kind: Mapped[str] = mapped_column(String(16), default="tap")  # tap | standpost | piped | tanker_halt
+    days: Mapped[list] = mapped_column(JSON, default=list)  # ISO weekdays 1 (Mon) .. 7 (Sun)
+    start_time: Mapped[str] = mapped_column(String(5))  # "HH:MM", IST
+    end_time: Mapped[str] = mapped_column(String(5))
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    data_origin: Mapped[str] = mapped_column(String(16), default="manual")
+    updated_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    community: Mapped[Community] = relationship()
+
+
+class SupplyNotice(Base):
+    """A published change to normal supply (interruption, extra tanker, quality advisory) for one place."""
+    __tablename__ = "supply_notices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="interruption")  # interruption | extra_supply | quality | info
+    message: Mapped[str] = mapped_column(Text)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    community: Mapped[Community] = relationship()
 
 
 # ---------------------------------------------------------------------------

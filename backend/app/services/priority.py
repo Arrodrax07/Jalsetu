@@ -8,6 +8,7 @@ S_unmet     100 * (demand - allocated) / demand  (a request's days-without-water
 S_gap       100 - delivered coverage over the last 7 days (falls back to previous allocation)
 S_pop       100 * population / max population across active communities
 S_crisis    live crisis score 0-100 from news reports and measured rainfall deficit (services.crisis)
+S_access    100 * min(1, km to the nearest water source or depot / 30)  (services.access): remote places have no fallback
 
 "Demand" here is the tanker need: demand minus the estimated piped/municipal baseline (services.supply).
 """
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import supply
+from . import access, supply
 
 FACTOR_LABELS = {
     "demand": "Demand severity",
@@ -24,6 +25,7 @@ FACTOR_LABELS = {
     "previousCoverage": "Historical coverage gap",
     "population": "Population impacted",
     "liveCrisis": "Live crisis signals",
+    "waterAccess": "Distance to nearest water source",
 }
 
 
@@ -75,6 +77,7 @@ def score_community(community, weights: dict[str, float], ctx: PriorityContext, 
         "previousCoverage": 100 - coverage_7d,
         "population": min(100.0, 100 * community.population / max(ctx.max_population, 1)),
         "liveCrisis": float(getattr(community, "crisis_score", 0.0) or 0.0),
+        "waterAccess": access.subscore(community),
     }
     wsum = sum(max(0.0, weights.get(k, 0.0)) for k in sub) or 1.0
     contrib = {k: max(0.0, weights.get(k, 0.0)) * v / wsum for k, v in sub.items()}

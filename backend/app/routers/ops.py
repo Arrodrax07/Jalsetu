@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import SessionLocal, get_db
-from ..domain import TANKER_AVAILABLE, TANKER_ON_TRIP, TRIP_OPEN
+from ..domain import SYNTHETIC, TANKER_AVAILABLE, TANKER_ON_TRIP, TRIP_OPEN
 from ..ingestion.base import SOURCES
 from ..ingestion.geoboundaries import run_geoboundaries
 from ..ingestion.probes import probe_imd, probe_static
@@ -204,9 +204,9 @@ def overview(db: Session = Depends(get_db), _: User = Depends(require("view_oper
         "tankersTotal": len(tankers),
         "vehiclesLive": states.count("live"), "vehiclesStale": states.count("stale"), "vehiclesOffline": states.count("offline"),
         "openTrips": db.scalar(select(func.count(Trip.id)).where(Trip.status.in_(TRIP_OPEN))),
-        "deliveriesToday": db.scalar(select(func.count(Delivery.id)).where(Delivery.delivered_at >= day0)),
-        "litresDeliveredToday": db.scalar(select(func.coalesce(func.sum(Delivery.delivered_amount), 0)).where(Delivery.delivered_at >= day0)),
-        "tripsCompletedToday": db.scalar(select(func.count(Trip.id)).where(Trip.completed_at >= day0)),
+        "deliveriesToday": db.scalar(select(func.count(Delivery.id)).where(Delivery.delivered_at >= day0, Delivery.data_origin != SYNTHETIC)),
+        "litresDeliveredToday": db.scalar(select(func.coalesce(func.sum(Delivery.delivered_amount), 0)).where(Delivery.delivered_at >= day0, Delivery.data_origin != SYNTHETIC)),
+        "tripsCompletedToday": db.scalar(select(func.count(Trip.id)).where(Trip.completed_at >= day0, Trip.data_origin != SYNTHETIC)),
         "communitiesAffected": len(affected),
         "communitiesTotal": len(communities),
         "openComplaints": db.scalar(select(func.count(Complaint.id)).where(Complaint.status != "Resolved")),

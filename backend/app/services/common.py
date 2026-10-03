@@ -30,6 +30,7 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "previousCoverage": 0.10,
         "population": 0.05,
         "liveCrisis": 0.25,
+        "waterAccess": 0.10,
     },
     "operations": {
         "tripsPerDay": 5,                 # refills per tanker per day -> daily supply capacity
@@ -41,9 +42,12 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "co2KgPerLitreDiesel": 2.68,
         "fallbackSpeedKmh": 22.0,         # used only if OSRM is unreachable
         "roadCircuityFactor": 1.35,       # haversine -> road distance when OSRM is unreachable
+        "tankerShiftHours": 10,           # driving hours a tanker can work per day (impact replay, planning)
+        "stopServiceMinutes": 30,         # filling + unloading time per stop
         "geofenceRadiusM": 150,
         "varianceTolerancePct": 5,
         "duplicateSimilarity": 0.55,
+        "requestDuplicateHours": 48,      # a new water request for a place with an open request this recent is merged
         # --- live tracking (all derived from real telemetry timestamps) ---
         "liveSeconds": 30,                # LIVE if last fix received within this
         "offlineSeconds": 180,            # STALE between live and this; OFFLINE beyond

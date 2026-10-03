@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..config import get_settings
 from ..db import get_db
 from ..domain import (
+    SYNTHETIC,
     D_INVESTIGATION, D_MISMATCH, D_PENDING, D_VERIFIED, STOP_ARRIVED, STOP_DELIVERED, STOP_PENDING, STOP_VERIFIED,
     T_ACCEPTED, T_ARRIVED, T_ASSIGNED, T_CANCELLED, T_COMPLETED, T_DELIVERED, T_DELIVERING, T_EN_ROUTE, T_PLANNED,
     TANKER_ASSIGNED, TANKER_AVAILABLE, TANKER_MAINTENANCE, TANKER_ON_TRIP, TRIP_OPEN, TRIP_TRANSITIONS,
@@ -277,8 +278,11 @@ def cancel_trip(ref: str, body: CancelIn, request: Request, db: Session = Depend
 
 
 @router.get("/trips")
-def list_trips(active: bool = False, limit: int = 100, db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+def list_trips(active: bool = False, limit: int = 100, include_synthetic: bool = False, db: Session = Depends(get_db),
+               _: User = Depends(require("view_operations"))):
     q = select(Trip).options(joinedload(Trip.tanker)).order_by(Trip.created_at.desc()).limit(min(max(limit, 1), 500))
+    if not include_synthetic:
+        q = q.where(Trip.data_origin != SYNTHETIC)
     if active:
         q = q.where(Trip.status.in_(TRIP_OPEN))
     return [trip_view(db, t) for t in db.scalars(q).unique()]
@@ -541,9 +545,12 @@ def _get_delivery(db: Session, ref: str) -> Delivery:
 
 
 @router.get("/deliveries")
-def list_deliveries(limit: int = 500, db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
-    rows = db.scalars(select(Delivery).options(joinedload(Delivery.tanker), joinedload(Delivery.community))
-                      .order_by(Delivery.delivered_at.desc()).limit(min(max(limit, 1), 2000)))
+def list_deliveries(limit: int = 500, include_synthetic: bool = False, db: Session = Depends(get_db),
+                    _: User = Depends(require("view_operations"))):
+    q = select(Delivery).options(joinedload(Delivery.tanker), joinedload(Delivery.community))
+    if not include_synthetic:
+        q = q.where(Delivery.data_origin != SYNTHETIC)
+    rows = db.scalars(q.order_by(Delivery.delivered_at.desc()).limit(min(max(limit, 1), 2000)))
     return [delivery_view(d) for d in rows]
 
 

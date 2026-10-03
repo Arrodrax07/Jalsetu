@@ -22,6 +22,7 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
     "manage_settings":      ("admin",),
     "run_ingestion":        ("admin",),
     "export_reports":       ("admin", "operator", "dispatcher"),
+    "manage_schedules":     ("admin", "operator"),             # public tap timings + supply notices
     "drive":                ("driver",),                       # driver workflow + telemetry
 }
 
@@ -76,4 +77,7 @@ ANOMALY_KINDS = (
     "route_deviation",   # sustained distance from planned route
 )
 
-DATA_ORIGINS = ("seeded", "manual", "external", "citizen")
+# "synthetic" = clearly labelled demo history (scripts/demo_history.py). It feeds history charts and the impact
+# replay only; operational logic (priority, dispatch, overview counts, queues) never reads it.
+DATA_ORIGINS = ("seeded", "manual", "external", "citizen", "synthetic")
+SYNTHETIC = "synthetic"

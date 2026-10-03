@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import INSECURE_JWT_SECRETS, get_settings
 from .db import SessionLocal, init_db
-from .routers import allocation, analytics, auth, communities, complaints, disasters, fleet, intel, ops, requests, system, tracking, trips
+from .routers import allocation, analytics, auth, communities, complaints, disasters, fleet, intel, ops, requests, schedules, system, tracking, trips
 from .security import user_from_token
 from .services import ml
 from .services.realtime import hub
@@ -21,6 +21,19 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("jalsetu")
 
 
+def _backfill_water_access() -> None:
+    """Distance-to-water is part of the priority score; compute it for any community that has none yet."""
+    from .services import access
+
+    try:
+        with SessionLocal() as db:
+            n = access.recompute(db, only_missing=True)
+            if n:
+                log.info("water access distance computed for %d communities", n)
+    except Exception:  # noqa: BLE001
+        log.exception("water access backfill failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.jwt_secret in INSECURE_JWT_SECRETS or len(settings.jwt_secret) < 32:
@@ -28,6 +41,7 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("Set a strong JWT_SECRET (>= 32 chars) before running in production")
         log.warning("JWT_SECRET is weak or default. Acceptable for local development only.")
     init_db()
+    _backfill_water_access()
     hub.bind_loop(asyncio.get_running_loop())
     threading.Thread(target=lambda: (ml.triage(), ml.forecaster()), daemon=True).start()
     task = None
@@ -65,7 +79,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-for r in (auth, communities, requests, complaints, allocation, fleet, trips, tracking, disasters, ops, analytics, system, intel):
+for r in (auth, communities, requests, complaints, allocation, fleet, trips, tracking, disasters, ops, analytics, system, intel, schedules):
     app.include_router(r.router, prefix="/api")
 
 

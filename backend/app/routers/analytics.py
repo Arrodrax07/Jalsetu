@@ -6,10 +6,11 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
+from ..domain import SYNTHETIC
 from ..models import AllocationPlan, Community, Complaint, Delivery, Tanker, Trip, User, WaterRequest, utcnow
 from ..security import require
 from ..services import ml
@@ -39,16 +40,16 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(require("view_ope
     views = community_views(db)
     tankers = db.scalars(select(Tanker)).all()
 
-    req_times = db.scalars(select(WaterRequest.created_at).where(WaterRequest.created_at >= now - timedelta(hours=48))).all()
+    req_times = db.scalars(select(WaterRequest.created_at).where(WaterRequest.created_at >= now - timedelta(hours=48), WaterRequest.data_origin != SYNTHETIC)).all()
     req_24 = sum(1 for t in req_times if t >= now - timedelta(hours=24))
     resolved_24 = db.scalars(select(Complaint.id).where(Complaint.resolved_at >= now - timedelta(hours=24))).all()
 
-    recent_deliv = db.scalars(select(Delivery.trip_minutes).where(Delivery.delivered_at >= now - timedelta(days=7), Delivery.trip_minutes.is_not(None))).all()
-    prev_deliv = db.scalars(select(Delivery.trip_minutes).where(Delivery.delivered_at >= now - timedelta(days=14), Delivery.delivered_at < now - timedelta(days=7), Delivery.trip_minutes.is_not(None))).all()
+    recent_deliv = db.scalars(select(Delivery.trip_minutes).where(Delivery.delivered_at >= now - timedelta(days=7), Delivery.trip_minutes.is_not(None), Delivery.data_origin != SYNTHETIC)).all()
+    prev_deliv = db.scalars(select(Delivery.trip_minutes).where(Delivery.delivered_at >= now - timedelta(days=14), Delivery.delivered_at < now - timedelta(days=7), Delivery.trip_minutes.is_not(None), Delivery.data_origin != SYNTHETIC)).all()
     avg_del = round(sum(recent_deliv) / len(recent_deliv)) if recent_deliv else None
     avg_prev = round(sum(prev_deliv) / len(prev_deliv)) if prev_deliv else None
 
-    trips = db.scalars(select(Trip).where(Trip.created_at >= now - timedelta(days=30), Trip.status != "Cancelled")).all()
+    trips = db.scalars(select(Trip).where(Trip.created_at >= now - timedelta(days=30), Trip.status != "Cancelled", Trip.data_origin != SYNTHETIC)).all()
     saved_km = [max(0.0, t.baseline_distance_km - t.distance_km) for t in trips]
     ops = get_setting(db, "operations")
     fairness = current_fairness(views)
@@ -77,11 +78,14 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(require("view_ope
 
 
 @router.get("/analytics/activity")
-def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
-    """Requests + complaints by hour of day (IST) and by day."""
+def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"), origin: str = Query("all", pattern="^(all|real)$"),
+             db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+    """Requests + complaints by hour of day (IST) and by day. origin=real leaves out labelled synthetic history."""
     now = utcnow()
     since = {"today": now - timedelta(hours=24), "7d": now - timedelta(days=7), "30d": now - timedelta(days=30)}[window]
-    reqs = db.scalars(select(WaterRequest.created_at).where(WaterRequest.created_at >= since)).all()
+    rq = select(WaterRequest.created_at).where(WaterRequest.created_at >= since)
+    reqs = db.scalars(rq.where(WaterRequest.data_origin != SYNTHETIC) if origin == "real" else rq).all()
+    synthetic = db.scalar(select(func.count(WaterRequest.id)).where(WaterRequest.created_at >= since, WaterRequest.data_origin == SYNTHETIC)) if origin == "all" else 0
     comps = db.scalars(select(Complaint.created_at).where(Complaint.created_at >= since)).all()
     hourly = [{"hour": f"{h:02d}:00", "requests": 0, "complaints": 0} for h in range(24)]
     daily: dict[str, dict] = defaultdict(lambda: {"requests": 0, "complaints": 0})
@@ -93,7 +97,8 @@ def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"
         local = t + IST
         hourly[local.hour]["complaints"] += 1
         daily[local.date().isoformat()]["complaints"] += 1
-    return {"range": window, "hourly": hourly, "daily": [{"date": k, **v} for k, v in sorted(daily.items())]}
+    return {"range": window, "origin": origin, "syntheticRecords": synthetic,
+            "hourly": hourly, "daily": [{"date": k, **v} for k, v in sorted(daily.items())]}
 
 
 @router.get("/analytics/forecast")
@@ -194,13 +199,24 @@ def impact(db: Session = Depends(get_db), _: User = Depends(require("view_operat
 
 
 @router.get("/analytics/operations")
-def operations_metrics(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
-    """Trip / delivery / response metrics from real records only. Null when there is no data for a metric."""
+def operations_metrics(days: int = Query(30, ge=1, le=365), origin: str = Query("all", pattern="^(all|real)$"),
+                       db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+    """Trip / delivery / response metrics from stored records. Null when there is no data for a metric.
+    origin=all includes labelled synthetic demo history (counted separately in ``synthetic``); origin=real excludes it."""
     from ..models import Anomaly
 
     now = utcnow()
     since = now - timedelta(days=days)
     trips = db.scalars(select(Trip).where(Trip.created_at >= since)).all()
+    deliveries = db.scalars(select(Delivery).where(Delivery.delivered_at >= since)).all()
+    reqs = db.scalars(select(WaterRequest).where(WaterRequest.created_at >= since)).all()
+    synthetic = {"trips": sum(t.data_origin == SYNTHETIC for t in trips), "deliveries": sum(d.data_origin == SYNTHETIC for d in deliveries),
+                 "requests": sum(r.data_origin == SYNTHETIC for r in reqs)}
+    if origin == "real":
+        trips = [t for t in trips if t.data_origin != SYNTHETIC]
+        deliveries = [d for d in deliveries if d.data_origin != SYNTHETIC]
+        reqs = [r for r in reqs if r.data_origin != SYNTHETIC]
+        synthetic = {k: 0 for k in synthetic}
     done = [t for t in trips if t.status == "Completed"]
     started = [t for t in trips if t.started_at]
 
@@ -211,8 +227,6 @@ def operations_metrics(days: int = Query(30, ge=1, le=365), db: Session = Depend
     def mins(a, b):
         return (b - a).total_seconds() / 60 if a and b else None
 
-    deliveries = db.scalars(select(Delivery).where(Delivery.delivered_at >= since)).all()
-    reqs = db.scalars(select(WaterRequest).where(WaterRequest.created_at >= since)).all()
     fulfilled = [r for r in reqs if r.fulfilled_at]
     anomalies = db.scalars(select(Anomaly).where(Anomaly.detected_at >= since)).all()
     tankers = db.scalars(select(Tanker)).all()
@@ -225,7 +239,7 @@ def operations_metrics(days: int = Query(30, ge=1, le=365), db: Session = Depend
     for d in deliveries:
         by_day[(d.delivered_at + IST).date().isoformat()]["litres"] += d.delivered_amount
     return {
-        "windowDays": days,
+        "windowDays": days, "origin": origin, "synthetic": synthetic,
         "tripsCreated": len(trips), "tripsStarted": len(started), "tripsCompleted": len(done),
         "tripsCancelled": sum(t.status == "Cancelled" for t in trips),
         "completionRatePct": round(100 * len(done) / len(started), 1) if started else None,
@@ -242,3 +256,12 @@ def operations_metrics(days: int = Query(30, ge=1, le=365), db: Session = Depend
         "routeDeviations": sum(a.kind == "route_deviation" for a in anomalies),
         "daily": [{"date": k, **v} for k, v in sorted(by_day.items())],
     }
+
+
+@router.get("/analytics/impact-replay")
+def impact_replay(days: int = Query(30, ge=1, le=120), origin: str = Query("all", pattern="^(all|real)$"),
+                  db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+    """First come first served vs JalSetu on the same requests, fleet and depots (see services/impact.py)."""
+    from ..services.impact import replay
+
+    return replay(db, days=days, include_synthetic=origin == "all")
