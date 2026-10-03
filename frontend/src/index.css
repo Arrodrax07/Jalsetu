@@ -180,8 +180,17 @@
 .maplibregl-ctrl-attrib a { color: rgb(var(--cc-muted)) !important; }
 .maplibregl-ctrl-scale { background: rgb(var(--cc-surface) / .85) !important; border-color: rgb(var(--cc-text) / .5) !important; color: rgb(var(--cc-text)); font-size: 10px; }
 
+/* Charts follow the theme (CSS overrides recharts' presentation attributes). */
+.recharts-cartesian-grid line { stroke: rgb(var(--cc-border)); }
+.recharts-cartesian-axis-tick-value, .recharts-cartesian-axis-tick text { fill: rgb(var(--cc-faint)); font-size: 11px; font-variant-numeric: tabular-nums; }
+.recharts-legend-item-text { color: rgb(var(--cc-muted)) !important; }
+.recharts-default-legend { font-size: 12px; }
+.recharts-tooltip-cursor { fill: rgb(var(--cc-accent) / .06); }
+
 /* Command centre: keep MapLibre's own controls clear of the docked rail */
 @media (min-width: 1024px) { .cc-map .maplibregl-ctrl-bottom-right { right: 420px; } .cc-map .maplibregl-ctrl-bottom-left { left: 96px; } }
+
+@media (min-width: 1024px) { .live-map .maplibregl-ctrl-bottom-right { right: 376px; } .live-map .maplibregl-ctrl-bottom-left { left: 336px; } }
 
 /* Vehicle markers (HTML markers; see components/map/VehicleMarker). Movement between two real fixes is a short
    transform tween; nothing is extrapolated. */

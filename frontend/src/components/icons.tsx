@@ -105,6 +105,7 @@ export const Moon = wrap(P.Moon);
 export const Monitor = wrap(P.Monitor);
 export const CaretUpDown = wrap(P.CaretUpDown);
 export const CaretUp = wrap(P.CaretUp);
+export const CaretDown = wrap(P.CaretDown);
 export const CaretLeft = wrap(P.CaretLeft);
 export const Funnel = wrap(P.Funnel);
 export const ArrowsOut = wrap(P.ArrowsOut);

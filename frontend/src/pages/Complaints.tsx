@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { DataTable, type FilterDef } from '../components/DataTable';
 import { CheckCircle2, Link2, Plus } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
@@ -10,18 +12,25 @@ const SEV: UrgencyLevel[] = ['Low', 'Medium', 'High', 'Critical'];
 
 const Conf: React.FC<{ v: number }> = ({ v }) => (
   <span className="inline-flex items-center gap-1.5" title="Model confidence">
-    <span className="h-1.5 w-12 rounded-full bg-cc-bg"><span className={`block h-full rounded-full ${v >= 0.75 ? 'bg-cc-ok' : v >= 0.5 ? 'bg-cc-warn' : 'bg-cc-danger'}`} style={{ width: `${v * 100}%` }} /></span>
+    <span className="h-1.5 w-10 rounded-full bg-cc-hover"><span className={`block h-full rounded-full ${v >= 0.75 ? 'bg-cc-ok' : v >= 0.5 ? 'bg-cc-warn' : 'bg-cc-danger'}`} style={{ width: `${v * 100}%` }} /></span>
     <span className="num text-2xs text-cc-muted">{Math.round(v * 100)}%</span>
   </span>
 );
+
+const COMPLAINT_FILTERS: FilterDef<Complaint>[] = [
+  { id: 'open', label: 'Open', test: c => c.status !== 'Resolved' },
+  { id: 'Escalated', label: 'Escalated', test: c => c.status === 'Escalated' },
+  { id: 'dup', label: 'Possible duplicates', test: c => !!c.duplicateOf },
+  { id: 'Resolved', label: 'Resolved', test: c => c.status === 'Resolved' },
+  { id: 'all', label: 'All', test: () => true },
+];
 
 export const Complaints: React.FC = () => {
   const { complaints, can, communities } = useApp();
   const [sel, setSel] = useState<string | null>(null);
   const [cat, setCat] = useState('All');
-  const [showResolved, setShowResolved] = useState(false);
   const [lodge, setLodge] = useState(false);
-  const rows = useMemo(() => complaints.filter(c => (showResolved || c.status !== 'Resolved') && (cat === 'All' || c.category === cat)), [complaints, cat, showResolved]);
+  const rows = useMemo(() => complaints.filter(c => cat === 'All' || c.category === cat), [complaints, cat]);
   const current = complaints.find(c => c.id === sel) || null;
   return (
     <div className="p-4 lg:p-6">
@@ -30,26 +39,28 @@ export const Complaints: React.FC = () => {
           <a className="text-sm text-cc-accent hover:underline" href="/report" target="_blank" rel="noreferrer">Citizen portal ↗</a>
           {can('manage_complaints') && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setLodge(true)}>Lodge complaint</Button>}
         </>} />
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <select className="input w-auto" value={cat} onChange={e => setCat(e.target.value)} aria-label="Category"><option>All</option>{COMPLAINT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select>
-        <label className="flex items-center gap-1.5 text-sm text-cc-muted"><input type="checkbox" checked={showResolved} onChange={e => setShowResolved(e.target.checked)} /> Include resolved</label>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <Panel bodyClassName="overflow-x-auto">
-          {rows.length === 0 ? <Empty title="No complaints" /> : (
-            <table className="table-cc">
-              <thead><tr><th>Ticket</th><th>Community</th><th>Category</th><th>Severity</th><th>Status</th><th>Received</th></tr></thead>
-              <tbody>{rows.map(c => (
-                <tr key={c.id} className="cursor-pointer" onClick={() => setSel(c.id)}>
-                  <td className="font-medium">{c.id} {c.duplicateOf && <Link2 className="inline h-3 w-3 text-amber-800" aria-label="possible duplicate" />}</td>
-                  <td>{c.communityName}</td>
-                  <td>{c.category} {c.labelVerified ? <CheckCircle2 className="inline h-3 w-3 text-green-700" aria-label="officer verified" /> : <Conf v={c.categoryConfidence} />}</td>
-                  <td><StatusChip status={c.severity} /></td><td><StatusChip status={c.status} /></td><td className="text-cc-muted">{timeAgo(c.submittedAt)}</td>
-                </tr>))}</tbody>
-            </table>
-          )}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <DataTable label="Complaints" rows={rows} rowKey={c => c.id} onRowClick={c => setSel(c.id)} selectedKey={sel}
+          filters={COMPLAINT_FILTERS} defaultSort={{ id: 'when', dir: 'desc' }}
+          search={c => `${c.id} ${c.communityName} ${c.description} ${c.category}`} searchPlaceholder="Search tickets, places, text"
+          toolbar={<select className="input h-9 w-auto py-0" value={cat} onChange={e => setCat(e.target.value)} aria-label="Category"><option value="All">All categories</option>{COMPLAINT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select>}
+          emptyTitle="No complaints in this view" emptyHint="Citizen and officer complaints appear here as soon as they are filed."
+          columns={[
+            { id: 'id', header: 'Ticket', sort: c => c.dbId, cell: c => <span className="mono font-medium">{c.id}{c.duplicateOf && <Link2 className="ml-1 inline h-3.5 w-3.5 text-amber-800" aria-label={`possible duplicate of ${c.duplicateOf}`} />}</span> },
+            { id: 'place', header: 'Place', sort: c => c.communityName, cell: c => c.communityName },
+            { id: 'cat', header: 'Category', sort: c => c.category, cell: c => <span className="flex items-center gap-2">{c.category}{c.labelVerified ? <CheckCircle2 className="h-3.5 w-3.5 text-green-700" aria-label="officer verified" /> : <Conf v={c.categoryConfidence} />}</span> },
+            { id: 'sev', header: 'Severity', sort: c => SEV.indexOf(c.severity), cell: c => <StatusChip status={c.severity} /> },
+            { id: 'status', header: 'Status', sort: c => c.status, hideBelow: 'md', cell: c => <StatusChip status={c.status} /> },
+            { id: 'via', header: 'Via', hideBelow: 'xl', cell: c => <span className="text-[12px] text-cc-muted">{c.source === 'citizen' ? 'Portal' : 'Officer'}{c.inputMode === 'voice' ? ' · voice' : ''}{c.language && c.language !== 'en' ? (c.language === 'mr' ? ' · मराठी' : ' · हिंदी') : ''}</span> },
+            { id: 'when', header: 'Received', sort: c => Date.parse(c.submittedAt), hideBelow: 'lg', cell: c => <span className="text-cc-muted">{timeAgo(c.submittedAt)}</span> },
+          ]} />
+        <Panel title={current ? `${current.id} · ${current.communityName}` : 'Details'} className="xl:sticky xl:top-4">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={current?.id ?? 'none'} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              {current ? <ComplaintDetail c={current} /> : <Empty title="Select a complaint" hint="Its text, the model's labels with confidence, and the suggested action appear here." />}
+            </motion.div>
+          </AnimatePresence>
         </Panel>
-        <Panel title={current ? current.id : 'Details'}>{current ? <ComplaintDetail c={current} /> : <Empty title="Select a complaint" />}</Panel>
       </div>
       {lodge && <LodgeDialog onClose={() => setLodge(false)} communities={communities} onCreated={id => setSel(id)} />}
     </div>

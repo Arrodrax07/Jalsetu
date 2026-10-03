@@ -66,7 +66,7 @@ const Row: React.FC<{ m: Metric; a: StrategyResult; b: StrategyResult; i: number
             initial={{ width: 0 }} animate={{ width: `${(100 * Math.abs(val ?? 0)) / max}%` }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 * i }} /></div>
         </td>
       ))}
-      <td className="w-[16%] py-2.5 align-top">
+      <td className="w-[19%] whitespace-nowrap py-2.5 align-top">
         <span className={cx('inline-flex items-center gap-1 text-[12px] font-medium',
           v.dir === 'better' ? 'text-green-800' : v.dir === 'worse' ? 'text-red-700' : 'text-cc-muted')}>
           {v.dir === 'better' ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : v.dir === 'worse' ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : <Minus className="h-3.5 w-3.5" aria-hidden />}
@@ -157,7 +157,7 @@ export const Impact: React.FC = () => {
                   <div className="h-56"><ResponsiveContainer><BarChart data={data.coverageBands} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke={GRID} vertical={false} /><XAxis dataKey="band" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
-                    <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => [`${v} places`, n]} cursor={{ fill: '#0c6e9610' }} />
+                    <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => [`${v} places`, n]} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="fcfs" name="First come first served" fill={FCFS} radius={[4, 4, 0, 0]} maxBarSize={26} />
                     <Bar dataKey="jalsetu" name="JalSetu" fill={JALSETU} radius={[4, 4, 0, 0]} maxBarSize={26} />

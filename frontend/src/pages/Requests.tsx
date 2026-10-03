@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Plus } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, OriginLabel, PageHeader, Panel, StatusChip } from '../components/ui';
+import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, OriginLabel, PageHeader, StatusChip } from '../components/ui';
+import { DataTable, type FilterDef } from '../components/DataTable';
 import type { AIAssessment, NewWaterRequest, PriorityFactors, WaterRequest } from '../types';
 import { dt, litres, timeAgo } from '../utils/format';
 
@@ -37,15 +38,16 @@ export const AssessmentView: React.FC<{ a: AIAssessment }> = ({ a }) => (
   </div>
 );
 
+const STATUS_FILTERS: FilterDef<WaterRequest>[] = [
+  { id: 'open', label: 'Open', test: r => ['Pending', 'Allocated', 'Dispatched'].includes(r.status) },
+  ...(['Pending', 'Allocated', 'Dispatched', 'Delivered', 'Merged', 'Rejected'] as const).map(s => ({ id: s, label: s, test: (r: WaterRequest) => r.status === s })),
+  { id: 'all', label: 'All', test: () => true },
+];
+
 export const Requests: React.FC = () => {
   const { requests, can, fail, refresh } = useApp();
-  const [status, setStatus] = useState('Open');
-  const [q, setQ] = useState('');
   const [sel, setSel] = useState<WaterRequest | null>(null);
   const [creating, setCreating] = useState(false);
-  const rows = useMemo(() => requests.filter(r => (status === 'All' || (status === 'Open' ? ['Pending', 'Allocated', 'Dispatched'].includes(r.status) : r.status === status))
-    && (!q || `${r.id} ${r.communityName} ${r.reason}`.toLowerCase().includes(q.toLowerCase())))
-    .sort((a, b) => b.priorityScore - a.priorityScore), [requests, status, q]);
   const merged = useMemo(() => requests.filter(r => r.status === 'Merged').length, [requests]);
   const setReqStatus = async (r: WaterRequest, s: 'Allocated' | 'Rejected' | 'Pending') => {
     try { await api.setRequestStatus(r.id, s); refresh('requests', 'overview'); setSel(null); } catch (e) { fail(e); }
@@ -54,24 +56,29 @@ export const Requests: React.FC = () => {
     <div className="p-4 lg:p-6">
       <PageHeader title="Water requests" subtitle="Requests from communities and ward offices, ranked by an explainable priority model. Approving an allocation plan moves pending requests to Allocated; dispatch moves them to Dispatched; verified delivery fulfils them."
         actions={can('manage_requests') && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>New request</Button>} />
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {['Open', 'Pending', 'Allocated', 'Dispatched', 'Delivered', 'Merged', 'Rejected', 'All'].map(s => <Button key={s} size="sm" variant={status === s ? 'primary' : 'secondary'} onClick={() => setStatus(s)}>{s}</Button>)}
-        {merged > 0 && <span className="text-xs text-cc-muted">{merged} repeat request{merged === 1 ? '' : 's'} merged into open ones</span>}
-        <input className="input ml-auto w-64" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} aria-label="Search requests" />
-      </div>
-      <Panel bodyClassName="overflow-x-auto">
-        {rows.length === 0 ? <Empty title="No requests" /> : (
-          <table className="table-cc">
-            <thead><tr><th>Request</th><th>Community</th><th>Priority</th><th className="text-right">Litres</th><th>Days dry</th><th>Status</th><th>Received</th><th>Record</th></tr></thead>
-            <tbody>{rows.map(r => (
-              <tr key={r.id} className="cursor-pointer" onClick={() => setSel(r)}>
-                <td className="font-medium">{r.id}</td><td>{r.communityName}</td><td><PriorityBadge a={r.aiAssessment} score={r.priorityScore} /></td>
-                <td className="num text-right">{litres(r.requestedAmount)}</td><td className="num">{r.daysWithoutWater}</td>
-                <td><StatusChip status={r.status} label={r.status === 'Merged' ? `Merged → ${r.duplicateOf}` : undefined} /></td><td className="text-cc-muted">{timeAgo(r.submittedAt)}</td><td><OriginLabel origin={r.dataOrigin} /></td>
-              </tr>))}</tbody>
-          </table>
+      <DataTable label="Water requests" rows={requests} rowKey={r => r.id} onRowClick={setSel} selectedKey={sel?.id}
+        filters={STATUS_FILTERS} defaultSort={{ id: 'priority', dir: 'desc' }}
+        search={r => `${r.id} ${r.communityName} ${r.reason} ${r.contactPerson}`} searchPlaceholder="Search requests, places, callers"
+        toolbar={merged > 0 ? <span className="text-[12px] text-cc-muted">{merged} repeat request{merged === 1 ? '' : 's'} merged</span> : undefined}
+        emptyTitle="No requests in this view" emptyHint="New requests from ward offices and communities appear here, ranked by priority."
+        expand={r => (
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div className="space-y-1 text-[13px]"><p className="text-cc-muted">Reason</p><p>{r.reason}</p>
+              <p className="pt-2 text-cc-muted">Contact</p><p>{r.contactPerson} · <span className="mono">{r.phone}</span></p>
+              {r.duplicateReason && <p className="pt-2 text-[12px] text-cc-muted">{r.duplicateReason}</p>}</div>
+            {r.aiAssessment ? <AssessmentView a={r.aiAssessment} /> : <p className="text-[12.5px] text-cc-muted">No assessment stored.</p>}
+          </div>
         )}
-      </Panel>
+        columns={[
+          { id: 'id', header: 'Request', sort: r => r.dbId, cell: r => <span className="mono font-medium">{r.id}</span> },
+          { id: 'community', header: 'Place', sort: r => r.communityName, cell: r => <span className="font-medium">{r.communityName}</span> },
+          { id: 'priority', header: 'Priority', sort: r => r.priorityScore, cell: r => <PriorityBadge a={r.aiAssessment} score={r.priorityScore} /> },
+          { id: 'litres', header: 'Litres', align: 'right', sort: r => r.requestedAmount, cell: r => <span className="mono">{litres(r.requestedAmount)}</span> },
+          { id: 'dry', header: 'Days dry', align: 'right', sort: r => r.daysWithoutWater, hideBelow: 'md', cell: r => <span className="mono">{r.daysWithoutWater}</span> },
+          { id: 'status', header: 'Status', sort: r => r.status, cell: r => <StatusChip status={r.status} label={r.status === 'Merged' ? `Merged into ${r.duplicateOf}` : undefined} /> },
+          { id: 'when', header: 'Received', sort: r => Date.parse(r.submittedAt), hideBelow: 'lg', cell: r => <span className="text-cc-muted">{timeAgo(r.submittedAt)}</span> },
+          { id: 'origin', header: 'Record', hideBelow: 'xl', cell: r => <OriginLabel origin={r.dataOrigin} /> },
+        ]} />
       {sel && (
         <Dialog open onClose={() => setSel(null)} title={`Request ${sel.id}`} subtitle={`${sel.communityName} · ${dt(sel.submittedAt)}`} wide>
           <div className="grid gap-4 md:grid-cols-2">

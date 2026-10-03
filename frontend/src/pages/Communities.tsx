@@ -3,29 +3,16 @@ import { Crosshair, Map as MapIcon, Pencil, Plus, Search, Warehouse } from '../c
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { MAP_COLORS, OpsMap } from '../components/map/OpsMap';
-import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, Panel, Segmented, SlideOver, StatusChip } from '../components/ui';
+import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, SlideOver, StatusChip } from '../components/ui';
+import { DataTable } from '../components/DataTable';
 import type { Community } from '../types';
 import { districtName, litres, timeAgo } from '../utils/format';
 
 export const Communities: React.FC = () => {
   const { communities, depots, can } = useApp();
-  const [q, setQ] = useState('');
   const [sel, setSel] = useState<Community | null>(null);
   const [edit, setEdit] = useState<Community | 'new' | null>(null);
   const [depotOpen, setDepotOpen] = useState(false);
-  const [status, setStatus] = useState('all');
-  const [limit, setLimit] = useState(100);
-  const counts = useMemo(() => ({
-    all: communities.length,
-    Critical: communities.filter(c => c.status === 'Critical').length,
-    'High Demand': communities.filter(c => c.status === 'High Demand').length,
-    Normal: communities.filter(c => c.status === 'Normal' || c.status === 'Recently Served').length,
-  }), [communities]);
-  const rows = useMemo(() => communities
-    .filter(c => status === 'all' || c.status === status || (status === 'Normal' && c.status === 'Recently Served'))
-    .filter(c => !q || `${c.name} ${c.ward} ${c.districtName} ${districtName(c.districtName)} ${c.stateName}`.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => (b.crisisScore ?? 0) - (a.crisisScore ?? 0) || b.priorityScore - a.priorityScore), [communities, q, status]);
-  useEffect(() => setLimit(100), [q, status]);
   return (
     <div className="p-4 lg:p-8">
       <PageHeader eyebrow="Demand" title="Communities" subtitle={`${communities.length.toLocaleString('en-IN')} towns and villages with real populations (OpenStreetMap / Census). Coverage, status and priority are computed live from supply, deliveries and crisis signals.`}
@@ -33,39 +20,28 @@ export const Communities: React.FC = () => {
           <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => setDepotOpen(true)}>Add depot</Button>
           <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEdit('new')}>Add community</Button>
         </>} />
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Segmented value={status} onChange={setStatus} options={[
-          { id: 'all', label: `All ${counts.all.toLocaleString('en-IN')}` }, { id: 'Critical', label: `Critical ${counts.Critical}` },
-          { id: 'High Demand', label: `High demand ${counts['High Demand']}` }, { id: 'Normal', label: `Normal ${counts.Normal}` }]} />
-        <div className="relative w-full max-w-xs"><Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-cc-faint" />
-          <input className="input pl-10" placeholder="Search town, village or district" value={q} onChange={e => setQ(e.target.value)} aria-label="Search communities" /></div>
-        <span className="text-xs text-cc-muted">{rows.length.toLocaleString('en-IN')} shown · sorted by crisis signals</span>
-      </div>
-      <Panel bodyClassName="overflow-x-auto">
-        {rows.length === 0 ? <Empty title="No communities match" hint="Try another filter or search." /> : (
-          <table className="table-cc">
-            <thead><tr><th>Community</th><th>District</th><th className="text-right">Population</th><th>Crisis signals</th><th className="text-right">Shortfall / day</th><th>Coverage</th><th>Status</th><th>Source</th></tr></thead>
-            <tbody>{rows.slice(0, limit).map(c => {
-              const cs = c.crisisScore ?? 0;
-              return (
-                <tr key={c.id} className="cursor-pointer" onClick={() => setSel(c)}>
-                  <td><span className="font-medium">{c.name}</span><div className="text-[11px] capitalize text-cc-faint">{c.settlementType || c.ward}</div></td>
-                  <td className="text-cc-muted">{districtName(c.districtName) || '—'}</td>
-                  <td className="num text-right">{c.population.toLocaleString('en-IN')}</td>
-                  <td><div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-cc-hover"><div className="h-full rounded-full" style={{ width: `${cs}%`, background: cs >= 70 ? MAP_COLORS.critical : cs >= 30 ? MAP_COLORS.high : MAP_COLORS.normal }} /></div><span className="num w-7 text-xs">{cs}</span></div></td>
-                  <td className="num whitespace-nowrap text-right">{litres(c.shortfall)}</td>
-                  <td className="num text-xs text-cc-muted">{c.currentCoverage}%</td>
-                  <td className="whitespace-nowrap"><StatusChip status={c.status} /></td>
-                  <td><OriginLabel origin={c.dataOrigin} /></td>
-                </tr>
-              );
-            })}</tbody>
-          </table>
-        )}
-        {rows.length > limit && (
-          <div className="border-t border-cc-border p-3 text-center"><Button size="sm" onClick={() => setLimit(l => l + 200)}>Show more ({(rows.length - limit).toLocaleString('en-IN')} remaining)</Button></div>
-        )}
-      </Panel>
+      <DataTable label="Communities" rows={communities} rowKey={c => c.id} onRowClick={setSel} selectedKey={sel?.id} pageSize={50}
+        filters={[
+          { id: 'all', label: 'All', test: () => true },
+          { id: 'Critical', label: 'Critical', test: c => c.status === 'Critical' },
+          { id: 'High Demand', label: 'High demand', test: c => c.status === 'High Demand' },
+          { id: 'Normal', label: 'Normal', test: c => c.status === 'Normal' || c.status === 'Recently Served' },
+        ]}
+        defaultSort={{ id: 'crisis', dir: 'desc' }}
+        search={c => `${c.name} ${c.ward} ${c.districtName} ${districtName(c.districtName)} ${c.stateName}`} searchPlaceholder="Search town, village or district"
+        emptyTitle="No communities match"
+        columns={[
+          { id: 'name', header: 'Place', sort: c => c.name, cell: c => <><span className="font-medium">{c.name}</span><div className="text-[11.5px] capitalize text-cc-faint">{c.settlementType || c.ward}</div></> },
+          { id: 'district', header: 'District', sort: c => districtName(c.districtName), hideBelow: 'md', cell: c => <span className="text-cc-muted">{districtName(c.districtName) || '—'}</span> },
+          { id: 'pop', header: 'Population', align: 'right', sort: c => c.population, cell: c => <span className="mono">{c.population.toLocaleString('en-IN')}</span> },
+          { id: 'crisis', header: 'Crisis signals', sort: c => c.crisisScore ?? 0, cell: c => { const cs = c.crisisScore ?? 0; return (
+            <div className="flex items-center gap-2"><div className="h-1.5 w-16 overflow-hidden rounded-full bg-cc-hover"><div className="h-full rounded-full" style={{ width: `${cs}%`, background: cs >= 70 ? MAP_COLORS.critical : cs >= 30 ? MAP_COLORS.high : MAP_COLORS.normal }} /></div><span className="mono w-7 text-[12px]">{cs}</span></div>); } },
+          { id: 'access', header: 'To water', align: 'right', sort: c => c.waterAccessKm ?? -1, hideBelow: 'xl', cell: c => <span className="mono text-cc-muted" title={c.waterAccessNote ?? undefined}>{c.waterAccessKm != null ? `${c.waterAccessKm.toFixed(1)} km` : '—'}</span> },
+          { id: 'short', header: 'Shortfall / day', align: 'right', sort: c => c.shortfall, hideBelow: 'lg', cell: c => <span className="mono whitespace-nowrap">{litres(c.shortfall)}</span> },
+          { id: 'cov', header: 'Coverage', align: 'right', sort: c => c.currentCoverage, hideBelow: 'lg', cell: c => <span className="mono text-cc-muted">{c.currentCoverage}%</span> },
+          { id: 'status', header: 'Status', sort: c => c.status, cell: c => <StatusChip status={c.status} /> },
+          { id: 'origin', header: 'Source', hideBelow: 'xl', cell: c => <OriginLabel origin={c.dataOrigin} /> },
+        ]} />
       <p className="mt-3 text-[11px] text-cc-faint">Depots: {depots.map(d => `${d.name}${d.dataOrigin === 'seeded' ? ' (reference)' : ''}`).join(' · ') || 'none'}</p>
       {sel && <CommunityDetail c={sel} onClose={() => setSel(null)} onEdit={can('manage_master_data') ? () => { setEdit(sel); setSel(null); } : undefined} />}
       {edit && <CommunityForm initial={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}

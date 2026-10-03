@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, tooltipStyle } from '../components/charts/theme';
+import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, shortDate, tooltipStyle } from '../components/charts/theme';
 import { Chip, Empty, KindLabel, Kpi, Loading, PageHeader, Panel, Segmented } from '../components/ui';
 import { FlaskConical } from '../components/icons';
 import type { CityForecast, ImpactStats, OperationsMetrics } from '../types';
@@ -41,7 +41,7 @@ export const Analytics: React.FC = () => {
       )}
       {!ops ? <Loading /> : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+          <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-cc-border bg-cc-border md:grid-cols-4 [&>button]:rounded-none [&>button]:bg-cc-surface">
             <Kpi label="Trips completed" value={ops.tripsCompleted} sub={`${ops.tripsStarted} started · ${ops.tripsCancelled} cancelled`} tone="ok" />
             <Kpi label="Completion rate" value={pct(ops.completionRatePct, 1)} sub="of started trips" />
             <Kpi label="Start → arrival" value={ops.avgStartToArrivalMin != null ? `${ops.avgStartToArrivalMin} min` : '—'} sub={ops.synthetic.trips ? 'real: GPS-detected · synthetic: estimated' : 'GPS-detected, average'} />
@@ -55,9 +55,9 @@ export const Analytics: React.FC = () => {
             <Panel title="Daily completed trips and litres delivered (IST)">
               {ops.daily.length === 0 ? <Empty title="No completed trips or deliveries in this window" /> : (
                 <div className="h-64"><ResponsiveContainer><BarChart data={ops.daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke={GRID} vertical={false} /><XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                  <CartesianGrid stroke={GRID} vertical={false} /><XAxis dataKey="date" tickFormatter={shortDate} tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="l" tickFormatter={kLitres} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip {...tooltipStyle} cursor={{ fill: '#17213333' }} formatter={(v: any, n: any) => [n === 'litres' ? litres(v) : v, n === 'litres' ? 'Litres delivered' : 'Trips completed']} />
+                  <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => [n === 'litres' ? litres(v) : v, n === 'litres' ? 'Litres delivered' : 'Trips completed']} />
                   <Legend wrapperStyle={{ fontSize: 12, color: '#94a3bd' }} formatter={(v) => v === 'litres' ? 'Litres delivered' : v} />
                   <Bar yAxisId="l" dataKey="litres" fill={SERIES[0]} radius={[4, 4, 0, 0]} maxBarSize={24} />
                 </BarChart></ResponsiveContainer></div>
