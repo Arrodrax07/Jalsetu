@@ -61,6 +61,8 @@ export const CommunitySheet: React.FC<{ id: string | null; onClose: () => void; 
             <KV k="Tanker allocation" v={litres(c.allocatedWater)} />
             <KV k="Shortfall" v={<span className={c.shortfall > 0 ? 'text-red-700' : ''}>{litres(c.shortfall)}</span>} />
             {c.demandBasis && <p className="mt-2 text-[11.5px] leading-relaxed text-cc-muted">Need = {c.demandBasis}.</p>}
+            {c.waterAccessKm != null && <KV k={<span>Nearest water source <Chip tone="estimated">straight line</Chip></span>} v={`${c.waterAccessKm.toFixed(1)} km`} />}
+            {c.waterAccessNote && <p className="mt-1 text-[11.5px] leading-relaxed text-cc-muted">{c.waterAccessNote}. Farther from any source = fewer fallbacks, so it raises priority.</p>}
           </section>
 
           <section>

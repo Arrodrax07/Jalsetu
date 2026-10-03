@@ -262,6 +262,8 @@ def plan_view(plan: AllocationPlan) -> dict:
         "metricsBefore": (plan.details or {}).get("before", {}),
         "metricsAfter": (plan.details or {}).get("after", {}),
         "notes": (plan.details or {}).get("notes", []),
+        "scope": (plan.details or {}).get("scope", "all"),
+        "scopeLabel": (plan.details or {}).get("scopeLabel"),
         "createdAt": iso(plan.created_at),
         "approvedAt": iso(plan.approved_at),
         "items": [{

@@ -169,6 +169,9 @@ class BreakdownIn(In):
 class AllocationRunIn(In):
     total_supply: int | None = Field(default=None, gt=0)
     use_forecast: bool = False  # forecast is advisory; allocation defaults to recorded baseline demand
+    # crisis_reach: places in crisis (score >= 40) within tanker reach of a depot, plus any place with an open request
+    # requests: only places with an open request;  all: every active place with a tanker need
+    scope: Literal["crisis_reach", "requests", "all"] = "crisis_reach"
 
 
 class RouteOptimizeIn(In):

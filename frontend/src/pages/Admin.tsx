@@ -113,6 +113,8 @@ const OPS: { k: keyof OperationsSettings; label: string; step?: string }[] = [
   { k: 'varianceTolerancePct', label: 'Delivery volume tolerance (±%)', step: '0.5' }, { k: 'tripsPerDay', label: 'Trips per tanker per day' },
   { k: 'survivalLitresPerPerson', label: 'Survival floor (L/person/day)', step: '0.5' }, { k: 'minCoveragePct', label: 'Minimum coverage guarantee (%)' },
   { k: 'protectVulnerabilityAbove', label: 'Protect vulnerability ≥' }, { k: 'dieselPricePerLitre', label: 'Diesel price (₹/L)', step: '0.1' },
+  { k: 'requestDuplicateHours', label: 'Merge repeat requests within (h)' }, { k: 'tankerShiftHours', label: 'Tanker driving hours per day', step: '0.5' },
+  { k: 'stopServiceMinutes', label: 'Filling + unloading per stop (min)' },
 ];
 
 const Settings: React.FC = () => {

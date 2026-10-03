@@ -110,7 +110,11 @@ def test_allocation_deterministic_by_default(client, operator, admin):
 def test_breakdown_replans_and_restore(client, operator):
     b = client.post("/api/tankers/T-1888/breakdown", json={"note": "Axle failure"}, headers=operator)
     assert b.status_code == 200 and b.json()["plan"]["disruption"]["tankerId"] == "T-1888"
-    assert client.post("/api/tankers/T-1888/restore", headers=operator).status_code == 200
+    # a second click must not record a second breakdown or run another reallocation
+    assert client.post("/api/tankers/T-1888/breakdown", json={"note": "Axle failure"}, headers=operator).status_code == 409
+    r = client.post("/api/tankers/T-1888/restore", headers=operator)
+    assert r.status_code == 200 and r.json()["status"] in ("Available", "Assigned", "On Trip")
+    assert client.post("/api/tankers/T-1888/restore", headers=operator).status_code == 409
 
 
 def test_settings_weights_normalised(client, admin, operator):

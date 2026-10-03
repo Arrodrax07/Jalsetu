@@ -8,6 +8,7 @@ import { CommandCenter } from './pages/CommandCenter';
 import { DriverApp } from './driver/DriverApp';
 import { CitizenPortal } from './pages/CitizenPortal';
 import { Landing } from './pages/Landing';
+import { LangProvider } from './i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lazyPage = (load: () => Promise<any>, name: string) =>
@@ -22,6 +23,8 @@ const Allocation = lazyPage(() => import('./pages/Allocation'), 'Allocation');
 const Communities = lazyPage(() => import('./pages/Communities'), 'Communities');
 const Complaints = lazyPage(() => import('./pages/Complaints'), 'Complaints');
 const Analytics = lazyPage(() => import('./pages/Analytics'), 'Analytics');
+const Impact = lazyPage(() => import('./pages/Impact'), 'Impact');
+const Schedules = lazyPage(() => import('./pages/Schedules'), 'Schedules');
 const Reports = lazyPage(() => import('./pages/Reports'), 'Reports');
 const Admin = lazyPage(() => import('./pages/Admin'), 'Admin');
 
@@ -39,6 +42,8 @@ const Routed: React.FC = () => {
     case 'communities': return <Communities />;
     case 'complaints': return <Complaints />;
     case 'analytics': return <Analytics />;
+    case 'impact': return <Impact />;
+    case 'schedules': return <Schedules />;
     case 'reports': return <Reports />;
     case 'admin': return <Admin />;
     default: return <CommandCenter />;
@@ -54,7 +59,7 @@ const Root: React.FC = () => {
   if (!authChecked) return <Loading label="Restoring session…" className="h-full" />;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword />;
-  if (user.role === 'driver') return <DriverApp />;
+  if (user.role === 'driver') return <LangProvider><DriverApp /></LangProvider>;
   const fullBleed = ['overview', '', 'live'].includes(route.split('/')[0]);
   return (
     <div className="flex h-full flex-col">
@@ -78,7 +83,10 @@ const WithIntro: React.FC = () => {
 };
 
 export function App() {
-  if (window.location.pathname.replace(/\/$/, '') === '/report') return <CitizenPortal />;
+  const path = window.location.pathname.replace(/\/$/, '');
+  if (path === '/report') return <CitizenPortal initial="report" />;
+  if (path === '/water') return <CitizenPortal initial="water" />;
+  if (path === '/track') return <CitizenPortal initial="track" />;
   // Public story page, also reachable while signed in (e.g. to show visitors).
   if (window.location.pathname.replace(/\/$/, '') === '/welcome') return <Landing />;
   // Dev-only design preview of the sign-in screen without ending the current session (stripped from production builds).

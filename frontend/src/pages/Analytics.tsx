@@ -3,7 +3,8 @@ import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, Respon
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, tooltipStyle } from '../components/charts/theme';
-import { Empty, KindLabel, Kpi, Loading, PageHeader, Panel } from '../components/ui';
+import { Chip, Empty, KindLabel, Kpi, Loading, PageHeader, Panel, Segmented } from '../components/ui';
+import { FlaskConical } from 'lucide-react';
 import type { CityForecast, ImpactStats, OperationsMetrics } from '../types';
 import { km, litres, num, pct } from '../utils/format';
 
@@ -11,6 +12,7 @@ import { km, litres, num, pct } from '../utils/format';
 export const Analytics: React.FC = () => {
   const { fail } = useApp();
   const [days, setDays] = useState(30);
+  const [origin, setOrigin] = useState<'all' | 'real'>('all');
   const [ops, setOps] = useState<OperationsMetrics | null>(null);
   const [impact, setImpact] = useState<ImpactStats | null>(null);
   const [forecast, setForecast] = useState<CityForecast | null>(null);
@@ -18,8 +20,8 @@ export const Analytics: React.FC = () => {
 
   useEffect(() => {
     setOps(null);
-    api.operations(days).then(setOps).catch(fail);
-  }, [days, fail]);
+    api.operations(days, origin).then(setOps).catch(fail);
+  }, [days, origin, fail]);
   useEffect(() => { api.impact().then(setImpact).catch(fail); api.forecast(7).then(setForecast).catch(e => setFcErr(e.message)); }, [fail]);
 
   const fc = forecast?.days.map(d => ({ date: new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' }), band: [d.p10, d.p90], Forecast: d.p50, Baseline: d.baseline })) || [];
@@ -27,7 +29,16 @@ export const Analytics: React.FC = () => {
   return (
     <div className="p-4 lg:p-6">
       <PageHeader title="Analytics" subtitle="Computed from stored trips, telemetry, deliveries, requests and complaints. Metrics with no underlying records show “—”."
-        actions={<div className="flex gap-1">{[7, 30, 90].map(d => <button key={d} onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-xs ${days === d ? 'bg-cc-accent-strong text-white' : 'bg-cc-raised text-cc-muted'}`}>{d} days</button>)}</div>} />
+        actions={<>
+          <Segmented value={String(days)} onChange={v => setDays(Number(v))} options={[7, 30, 90].map(d => ({ id: String(d), label: `${d} days` }))} />
+          <Segmented value={origin} onChange={v => setOrigin(v as 'all' | 'real')} options={[{ id: 'all', label: 'All records' }, { id: 'real', label: 'Real only' }]} />
+        </>} />
+      {ops && origin === 'all' && (ops.synthetic.trips + ops.synthetic.deliveries + ops.synthetic.requests) > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-cc-muted">
+          <Chip tone="predicted" icon={<FlaskConical className="h-3 w-3" aria-hidden />}>Includes synthetic demo history</Chip>
+          {ops.synthetic.trips} trips, {ops.synthetic.deliveries} deliveries and {ops.synthetic.requests} requests in this window are labelled synthetic (no GPS). Switch to “Real only” to exclude them.
+        </div>
+      )}
       {!ops ? <Loading /> : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">

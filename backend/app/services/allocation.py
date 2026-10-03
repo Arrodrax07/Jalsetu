@@ -132,7 +132,7 @@ def optimise(items: list[AllocationInput], supply: float, survival_lpcd: float, 
         scale = supply / max(sum(survival.values()), 1)
         floors = {k: v * scale for k, v in survival.items()}
         floors_scaled = True
-        notes.append(f"Supply covers only {scale:.0%} of survival floors; floors scaled proportionally.")
+        notes.append(f"Supply covers only {scale:.1%} of survival floors (drinking + cooking for every resident); floors scaled proportionally.")
 
     raw = _water_fill(items, floors, supply) if not floors_scaled else floors
     alloc = _round_to_budget(raw, int(supply))

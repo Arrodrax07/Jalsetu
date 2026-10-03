@@ -153,6 +153,7 @@ const ORIGIN = {
   manual: { tone: 'neutral' as const, icon: <PencilLine className="h-3 w-3" aria-hidden />, label: 'Manual', title: 'Entered by staff' },
   external: { tone: 'external' as const, icon: <Globe2 className="h-3 w-3" aria-hidden />, label: 'External', title: 'Imported from an external source (see provenance)' },
   citizen: { tone: 'accent' as const, icon: <PencilLine className="h-3 w-3" aria-hidden />, label: 'Citizen', title: 'Submitted through the public portal' },
+  synthetic: { tone: 'predicted' as const, icon: <FlaskConical className="h-3 w-3" aria-hidden />, label: 'Synthetic', title: 'Labelled demo history (scripts/demo_history.py). Never used operationally.' },
 };
 export const OriginLabel: React.FC<{ origin?: string | null }> = ({ origin }) => {
   const o = ORIGIN[(origin || 'manual') as keyof typeof ORIGIN] || ORIGIN.manual;
@@ -182,7 +183,7 @@ const STATUS_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'accent' | 'neutral
   Completed: 'ok', Verified: 'ok', Delivered: 'ok', Resolved: 'ok', Available: 'ok', Approved: 'ok', connected: 'ok', healthy: 'ok', receiving: 'ok',
   'En Route': 'accent', 'On Trip': 'accent', Arrived: 'accent', Delivering: 'accent', Accepted: 'accent', Assigned: 'accent', Allocated: 'accent', Dispatched: 'accent', Proposed: 'accent',
   Pending: 'neutral', Planned: 'neutral', 'Pending Verification': 'warn', Escalated: 'warn', degraded: 'warn', unknown: 'neutral', idle: 'neutral', awaiting_credentials: 'neutral',
-  Mismatch: 'danger', 'Under Investigation': 'danger', Maintenance: 'danger', Cancelled: 'neutral', Rejected: 'neutral', down: 'danger', unavailable: 'danger',
+  Merged: 'neutral', Mismatch: 'danger', 'Under Investigation': 'danger', Maintenance: 'danger', Cancelled: 'neutral', Rejected: 'neutral', down: 'danger', unavailable: 'danger',
   Critical: 'danger', High: 'warn', Medium: 'accent', Low: 'neutral', 'High Demand': 'warn', Normal: 'neutral', 'Recently Served': 'ok',
 };
 export const StatusChip: React.FC<{ status: string; label?: string }> = ({ status, label }) => {

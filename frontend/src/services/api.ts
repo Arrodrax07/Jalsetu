@@ -8,7 +8,7 @@ import type {
   ActivityProfile, AIAssessment, AllocationPlan, Anomaly, CityForecast, Community, Complaint, ComplaintAnalysis, ComplaintCategory, ComplaintStatus,
   CrisisSignal, DashboardStats, PublicSummary, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
   OperationsSettings, Overview, PriorityWeights, RequestStatus, RouteOptimizationResult, SystemHealth, Trip, UrgencyLevel, UserProfile, UserRole,
-  Vehicle, WaterRequest, OperationsMetrics,
+  Vehicle, WaterRequest, OperationsMetrics, ImpactReplay, TapSchedule, SupplyNotice, PublicSupply, ScheduleKind, NoticeKind,
 } from '../types';
 
 export const API_BASE_URL: string = import.meta.env.VITE_API_URL || '/api';
@@ -118,6 +118,8 @@ async function blobUrl(path: string): Promise<string> {
 }
 
 type Session = { accessToken: string; user: UserProfile; expiresInSeconds: number };
+export type ScheduleInput = { communityId: string; pointName: string; kind: ScheduleKind; days: number[]; startTime: string; endTime: string; notes?: string; isActive?: boolean };
+export type PublicComplaintInput = { communityId: string; description: string; reporterName?: string; reporterPhone?: string; language?: 'en' | 'mr' | 'hi'; inputMode?: 'typed' | 'voice'; clientRef?: string; queuedAt?: string };
 
 export const api = {
   // session
@@ -230,20 +232,32 @@ export const api = {
   analyzeComplaint: (description: string, communityId?: string) => post<ComplaintAnalysis>('/complaints/analyze', { description, communityId }),
   createComplaint: (c: { communityId: string; description: string; reporterName?: string; reporterPhone?: string }) => post<Complaint>('/complaints', c),
   updateComplaint: (id: string, u: { status?: ComplaintStatus; assignedOfficer?: string; category?: ComplaintCategory; severity?: UrgencyLevel; confirmLabels?: boolean }) => patch<Complaint>(`/complaints/${id}`, u),
-  publicComplaint: (c: { communityId: string; description: string; reporterName?: string; reporterPhone?: string }) =>
-    request<{ id: string; category: string; severity: string; status: string; message: string }>('/public/complaints', { method: 'POST', body: JSON.stringify(c) }, false),
+  publicComplaint: (c: PublicComplaintInput) =>
+    request<{ id: string; category: string; severity: string; status: string; message: string; replayed: boolean }>('/public/complaints', { method: 'POST', body: JSON.stringify(c) }, false),
 
   // allocation
   currentPlan: () => get<{ plan: AllocationPlan | null; fleetSupply: number }>('/allocation/current'),
-  runAllocation: (b: { totalSupply?: number; useForecast?: boolean }) => post<AllocationPlan>('/allocation/run', b),
+  runAllocation: (b: { totalSupply?: number; useForecast?: boolean; scope?: 'crisis_reach' | 'requests' | 'all' }) => post<AllocationPlan>('/allocation/run', b),
   approvePlan: (id: number) => post<AllocationPlan & { requestsAllocated: number }>(`/allocation/${id}/approve`),
 
   // analytics
   dashboard: () => get<DashboardStats>('/analytics/dashboard'),
-  activity: (range: 'today' | '7d' | '30d') => get<ActivityProfile>(`/analytics/activity?range=${range}`),
+  activity: (range: 'today' | '7d' | '30d', origin: 'all' | 'real' = 'all') => get<ActivityProfile>(`/analytics/activity?range=${range}&origin=${origin}`),
   forecast: (days = 7) => get<CityForecast>(`/analytics/forecast?days=${days}`),
   impact: () => get<ImpactStats>('/analytics/impact'),
-  operations: (days: number) => get<OperationsMetrics>(`/analytics/operations?days=${days}`),
+  operations: (days: number, origin: 'all' | 'real' = 'all') => get<OperationsMetrics>(`/analytics/operations?days=${days}&origin=${origin}`),
+  impactReplay: (days: number, origin: 'all' | 'real') => get<ImpactReplay>(`/analytics/impact-replay?days=${days}&origin=${origin}`),
+
+  // tap schedules + supply notices
+  schedules: (communityId?: string) => get<{ schedules: TapSchedule[]; notices: SupplyNotice[] }>(`/schedules${communityId ? `?community_id=${encodeURIComponent(communityId)}` : ''}`),
+  createSchedule: (s: ScheduleInput) => post<TapSchedule>('/schedules', s),
+  updateSchedule: (id: number, s: ScheduleInput) => put<TapSchedule>(`/schedules/${id}`, s),
+  deleteSchedule: (id: number) => request<void>(`/schedules/${id}`, { method: 'DELETE' }),
+  createNotice: (n: { communityId: string; kind: NoticeKind; message: string; startsAt?: string; endsAt?: string }) => post<SupplyNotice>('/supply-notices', n),
+  endNotice: (id: number) => post<SupplyNotice>(`/supply-notices/${id}/end`),
+  publicScheduleIndex: () => request<{ id: string; name: string; ward: string; schedules: number; hasNotice: boolean }[]>('/public/schedules', {}, false),
+  publicSupply: (communityId: string) => request<PublicSupply>(`/public/supply/${encodeURIComponent(communityId)}`, {}, false),
+  publicTicket: (code: string) => request<{ id: string; status: string; category: string; severity: string; community: string; submittedAt: string; resolvedAt: string | null }>(`/public/complaints/${encodeURIComponent(code)}`, {}, false),
 
   // settings, ML, audit, reports
   settings: () => get<{ weights: PriorityWeights; operations: OperationsSettings; defaults: { weights: PriorityWeights; operations: OperationsSettings } }>('/settings'),

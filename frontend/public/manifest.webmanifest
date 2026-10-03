@@ -1,0 +1,23 @@
+{
+  "name": "JalSetu · जलसेतु — Water for every community",
+  "short_name": "JalSetu",
+  "description": "Report water problems, see when water is coming, and track your complaint. Works without network: complaints are sent when the connection returns.",
+  "start_url": "/report?source=pwa",
+  "scope": "/",
+  "id": "/report",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F3EE",
+  "theme_color": "#0C4A6E",
+  "lang": "en-IN",
+  "categories": ["utilities", "government"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Report a problem", "url": "/report", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "When is water coming?", "url": "/water", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

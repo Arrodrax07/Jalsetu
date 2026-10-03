@@ -2,7 +2,7 @@
 
 export type UrgencyLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 export type VulnerabilityLevel = 'Low' | 'Medium' | 'High' | 'Very High';
-export type RequestStatus = 'Pending' | 'Allocated' | 'Dispatched' | 'Delivered' | 'Rejected';
+export type RequestStatus = 'Pending' | 'Allocated' | 'Dispatched' | 'Delivered' | 'Rejected' | 'Merged';
 export type ComplaintCategory = 'No Water' | 'Late Tanker' | 'Insufficient Quantity' | 'Poor Water Quality' | 'Missed Delivery' | 'Billing or Other';
 export const COMPLAINT_CATEGORIES: ComplaintCategory[] = ['No Water', 'Late Tanker', 'Insufficient Quantity', 'Poor Water Quality', 'Missed Delivery', 'Billing or Other'];
 export type ComplaintStatus = 'Pending' | 'Escalated' | 'Assigned' | 'Resolved';
@@ -10,7 +10,7 @@ export type TankerStatus = 'Available' | 'Assigned' | 'On Trip' | 'Maintenance';
 export type TripStatus = 'Planned' | 'Assigned' | 'Accepted' | 'En Route' | 'Arrived' | 'Delivering' | 'Delivered' | 'Completed' | 'Cancelled';
 export type DeliveryStatus = 'Pending Verification' | 'Verified' | 'Mismatch' | 'Under Investigation';
 export type UserRole = 'admin' | 'operator' | 'dispatcher' | 'driver';
-export type DataOrigin = 'seeded' | 'manual' | 'external' | 'citizen';
+export type DataOrigin = 'seeded' | 'manual' | 'external' | 'citizen' | 'synthetic';
 export type TrackingState = 'live' | 'stale' | 'offline' | 'no_signal';
 
 export interface UserProfile {
@@ -18,7 +18,7 @@ export interface UserProfile {
   isActive: boolean; tankerId: string | null; mustChangePassword: boolean; permissions: string[];
 }
 
-export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis?: number }
+export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis?: number; waterAccess?: number }
 
 export interface Community {
   id: string; name: string; ward: string; population: number; dailyDemand: number; allocatedWater: number; availableWater: number;
@@ -30,6 +30,8 @@ export interface Community {
   baselineSupply?: number; tankerNeed?: number;
   /** 0-100 from live crisis signals (news + rainfall deficit). */
   crisisScore?: number; settlementType?: string | null; source?: string | null; sourceUrl?: string | null; demandBasis?: string | null;
+  /** Straight-line km to the nearest recorded water source or active depot. */
+  waterAccessKm?: number | null; waterAccessNote?: string | null;
 }
 
 export interface CrisisSignal {
@@ -50,14 +52,16 @@ export interface DispatchProposal {
 export interface AIAssessment {
   demandLevel: string; vulnerability: string; estimatedShortfall: number; priorityScore: number; urgency: UrgencyLevel;
   factors: PriorityFactors; contributions: PriorityFactors; weights: PriorityWeights; reasoning: string;
+  possibleDuplicateOf?: string | null; duplicateWindowHours?: number;
 }
 
 export interface WaterRequest {
   id: string; dbId: number; communityId: string; communityName: string; requestedAmount: number; urgency: UrgencyLevel; population: number;
   peopleCurrentlyServed: number; vulnerability: VulnerabilityLevel; reason: string; daysWithoutWater: number; contactPerson: string; phone: string;
   submittedAt: string; status: RequestStatus; priorityScore: number; aiAssessment: AIAssessment | null; dataOrigin: DataOrigin; fulfilledAt: string | null;
+  duplicateOf: string | null; duplicateReason: string | null;
 }
-export interface NewWaterRequest { communityId: string; requestedAmount: number; peopleCurrentlyServed: number; reason: string; daysWithoutWater: number; contactPerson: string; phone: string }
+export interface NewWaterRequest { communityId: string; requestedAmount: number; peopleCurrentlyServed: number; reason: string; daysWithoutWater: number; contactPerson: string; phone: string; allowDuplicate?: boolean }
 
 export interface ComplaintAnalysis {
   category: ComplaintCategory; categoryConfidence: number; categoryProbabilities: Record<string, number>; severity: UrgencyLevel; severityConfidence: number;
@@ -68,6 +72,7 @@ export interface Complaint {
   sentiment: string; severity: UrgencyLevel; severityConfidence: number; isRepeated: boolean; similarComplaintsCount: number; duplicateOf: string | null;
   status: ComplaintStatus; assignedOfficer: string | null; submittedAt: string; resolvedAt: string | null; duplicateProbability: number;
   recommendedAction: string; labelVerified: boolean; source: 'officer' | 'citizen'; reporterName: string; dataOrigin: DataOrigin;
+  language?: 'en' | 'mr' | 'hi'; inputMode?: 'typed' | 'voice'; queuedAt?: string | null;
 }
 
 export interface Depot { id: number; name: string; lat: number; lng: number; dataOrigin: DataOrigin; stockLitres: number | null; stockUpdatedAt: string | null; isActive?: boolean; placementNote?: string }
@@ -116,7 +121,7 @@ export interface DeliveryRecord {
   tripId: string | null; receiverName: string; receiverPhone: string; verifiedAt: string | null; verificationNotes: string; gpsDeviceTime: string | null;
 }
 
-export interface PriorityWeights { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis: number }
+export interface PriorityWeights { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis: number; waterAccess: number }
 export interface OperationsSettings {
   tripsPerDay: number; survivalLitresPerPerson: number; minCoveragePct: number; protectVulnerabilityAbove: number; dieselPricePerLitre: number;
   tankerKmPerLitre: number; co2KgPerLitreDiesel: number; fallbackSpeedKmh: number; roadCircuityFactor: number; geofenceRadiusM: number;
@@ -124,6 +129,7 @@ export interface OperationsSettings {
   arrivalMaxAccuracyM: number; startMaxAccuracyM: number; maxPlausibleSpeedKmh: number; lowAccuracyM: number; deviationThresholdM: number;
   deviationConsecutiveFixes: number; prolongedStopMinutes: number; maxClockSkewSeconds: number; maxBufferedAgeHours: number;
   requireReceiverName: boolean; requireProofForVerification: boolean;
+  requestDuplicateHours: number; tankerShiftHours: number; stopServiceMinutes: number;
 }
 
 export interface FairnessMetrics { needWeightedEquity: number; coverageEquality: number; minCoveragePct: number; avgCoveragePct: number; vulnerableCoveragePct: number }
@@ -134,7 +140,7 @@ export interface AllocationPlanItem {
 export interface AllocationPlan {
   id: number; status: 'Proposed' | 'Approved' | 'Superseded'; totalSupply: number; totalDemand: number; fairnessBefore: number; fairnessAfter: number;
   weights: PriorityWeights; method: string; demandSource: string; disruption: { tankerId: string; lostLitres: number; note?: string } | null;
-  metricsBefore: FairnessMetrics; metricsAfter: FairnessMetrics; notes: string[]; createdAt: string; approvedAt: string | null; items: AllocationPlanItem[];
+  metricsBefore: FairnessMetrics; metricsAfter: FairnessMetrics; notes: string[]; scope?: string; scopeLabel?: string | null; createdAt: string; approvedAt: string | null; items: AllocationPlanItem[];
 }
 
 export interface RouteOptimizationResult {
@@ -188,7 +194,7 @@ export interface DashboardStats {
   routeTrips30d: number; routeAvgKmSaved: number | null; routeAvgFuelSavedInr: number | null;
 }
 export interface CityForecast { days: { date: string; p10: number; p50: number; p90: number; baseline: number; tempMax: number; precipMm: number }[]; weatherSource: string | null; communities: unknown[]; model: Record<string, unknown> | null }
-export interface ActivityProfile { range: string; hourly: { hour: string; requests: number; complaints: number }[]; daily: { date: string; requests: number; complaints: number }[] }
+export interface ActivityProfile { range: string; origin?: 'all' | 'real'; syntheticRecords?: number; hourly: { hour: string; requests: number; complaints: number }[]; daily: { date: string; requests: number; complaints: number }[] }
 export interface ImpactStats {
   fairnessSeries: { date: string; before: number; after: number; minCoverageAfter: number | null }[];
   coverageComparison: { community: string; before: number; after: number; vulnerability: number }[];
@@ -210,6 +216,7 @@ export interface OperationsMetrics {
   deliveries: number; deliveriesVerified: number; litresDelivered: number; requestsCreated: number; requestsFulfilled: number;
   avgRequestToFulfilmentHours: number | null; fleetUtilisationPct: number | null; anomaliesByKind: Record<string, number>; routeDeviations: number;
   daily: { date: string; trips: number; litres: number }[];
+  origin: 'all' | 'real'; synthetic: { trips: number; deliveries: number; requests: number };
 }
 
 /** Public situation summary (landing page, no auth). */
@@ -221,4 +228,43 @@ export interface PublicSummary {
   criticalPlaces: { name: string; district: string; crisis: number }[];
   rainfall: { district: string; deviation: number; severity: string }[];
   headlines: { title: string; publisher: string; url: string; publishedAt: string | null; places: string[] }[];
+}
+
+/** First come first served vs JalSetu on the same request stream (GET /analytics/impact-replay). */
+export interface StrategyResult {
+  litresDelivered: number; litresTowardNeed: number; unmetLitres: number; unmetPct: number; requestsFullyServed: number;
+  requestsStillWaiting: number | null; uniqueNeeds: number; medianWaitHours: number | null; avgWaitHours: number | null;
+  fairnessJain: number | null; worstFifthCoveragePct: number | null; placesReached: number; placesTotal: number;
+  vulnerablePlaces: number; vulnerablePlacesReached: number; vulnerableCoveragePct: number | null; trips: number; kmDriven: number;
+  drivingHours: number; fuelLitres: number; fuelInr: number; co2Kg: number; loadUtilisationPct: number | null; litresPerKm: number | null;
+  duplicateRequestsServed: number; litresOnDuplicates: number;
+}
+export interface ImpactReplay {
+  windowDays: number; from: string; to: string; includeSynthetic: boolean; available: boolean; reason?: string;
+  requests: { total: number; synthetic: number; real: number };
+  fleet: { tankers: number; depots: number; tripsPerDay: number; shiftHours: number; speedKmh: number; stopMinutes: number; capacityLitres: number };
+  needLitres?: number; places?: number;
+  duplicates?: { requests: number; litresAsked: number; fcfsServedAgain: number; fcfsLitresOnRepeats: number; jalsetuMerged: number };
+  fcfs?: StrategyResult; jalsetu?: StrategyResult;
+  daily?: { date: string; requests: number; fcfsDelivered: number; jalsetuDelivered: number; fcfsCumulative: number; jalsetuCumulative: number; fcfsBacklog: number; jalsetuBacklog: number }[];
+  coverageBands?: { band: string; fcfs: number; jalsetu: number }[];
+  perPlace?: { communityId: string; name: string; priority: number; vulnerability: number; vulnerable: boolean; crisis: number; needLitres: number;
+    requests: number; repeats: number; fcfsCoveragePct: number; jalsetuCoveragePct: number; fcfsFirstServedDay: number | null; jalsetuFirstServedDay: number | null }[];
+  assumptions?: string[]; method?: string; generatedAt?: string;
+}
+
+export type ScheduleKind = 'tap' | 'standpost' | 'piped' | 'tanker_halt';
+export interface TapSchedule {
+  id: number; communityId: string; communityName: string; pointName: string; kind: ScheduleKind; days: number[]; daysLabel: string;
+  startTime: string; endTime: string; lat: number | null; lng: number | null; notes: string; isActive: boolean; dataOrigin: DataOrigin;
+  updatedBy: string; updatedAt: string;
+  next: { startsAt: string; endsAt: string; running: boolean; startsLocal: string; endsLocal: string } | null;
+}
+export type NoticeKind = 'interruption' | 'extra_supply' | 'quality' | 'info';
+export interface SupplyNotice { id: number; communityId: string; communityName: string; kind: NoticeKind; message: string; startsAt: string; endsAt: string | null; createdBy: string; createdAt: string }
+export interface PublicSupply {
+  community: { id: string; name: string; ward: string; district: string | null; state: string | null; population: number };
+  schedules: TapSchedule[]; nextSupply: TapSchedule | null; notices: SupplyNotice[];
+  tanker: { stage: 'scheduled' | 'on_the_way' | 'arrived'; trip: string; litres: number; since: string | null } | null;
+  lastDelivery: { at: string; litres: number } | null; estimatedCoveragePct: number; coverageBasis: string; serverTime: string;
 }

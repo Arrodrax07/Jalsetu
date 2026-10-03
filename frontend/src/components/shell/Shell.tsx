@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Bell, Building2, CheckCircle2, ClipboardCheck, Command, Cpu, Droplets, FileSpreadsheet,
-  LayoutDashboard, LogOut, MessageSquareWarning, Radio, RadioTower, Route, Search, Settings2, ShieldCheck, Sparkles, Truck, WifiOff, X,
+  CalendarClock, LayoutDashboard, LogOut, Scale, MessageSquareWarning, Radio, RadioTower, Route, Search, Settings2, ShieldCheck, Sparkles, Truck, WifiOff, X,
 } from 'lucide-react';
 import { useApp, useNow } from '../../context/AppContext';
 import { api } from '../../services/api';
@@ -18,7 +18,9 @@ export const NAV: { id: string; label: string; icon: React.ComponentType<{ class
   { id: 'requests', label: 'Water requests', icon: Droplets, group: 'Demand' },
   { id: 'allocation', label: 'Allocation', icon: Cpu, group: 'Demand', hint: 'Fair-share optimiser' },
   { id: 'communities', label: 'Communities', icon: Building2, group: 'Demand' },
+  { id: 'schedules', label: 'Tap schedules', icon: CalendarClock, group: 'Demand', hint: 'Public tap timings + supply notices' },
   { id: 'complaints', label: 'Complaints', icon: MessageSquareWarning, group: 'Demand' },
+  { id: 'impact', label: 'Impact', icon: Scale, group: 'Insight', hint: 'First come first served vs JalSetu' },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, group: 'Insight' },
   { id: 'reports', label: 'Reports', icon: FileSpreadsheet, group: 'Insight' },
   { id: 'admin', label: 'Administration', icon: Settings2, group: 'System' },

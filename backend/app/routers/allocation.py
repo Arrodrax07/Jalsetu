@@ -49,11 +49,41 @@ def latest_plan(db: Session, statuses=("Proposed", "Approved")) -> AllocationPla
                      .options(selectinload(AllocationPlan.items)).order_by(AllocationPlan.created_at.desc()))
 
 
-def run_plan(db: Session, user: User | None, supply: int | None = None, use_forecast: bool = False, disruption: dict | None = None) -> AllocationPlan:
-    # Only communities with a tanker need take part: places fully covered by their piped baseline get no tanker water.
-    communities = [c for c in db.scalars(select(Community).where(Community.is_active.is_(True))) if supply_.tanker_need(c) > 0]
+SCOPE_LABELS = {
+    "crisis_reach": "Towns and villages in crisis (score 40+) within tanker reach, plus places with an open request "
+                    "(cities need piped supply restored; a tanker fleet cannot cover them)",
+    "requests": "Places with an open water request",
+    "all": "Every active place with an estimated tanker need",
+}
+CRISIS_SCOPE_MIN = 40
+
+
+def plan_candidates(db: Session, scope: str) -> list[Community]:
+    """Communities that take part in a plan. Only places with a tanker need ever do (a place fully covered by its
+    piped baseline gets no tanker water). The default scope keeps the plan to places the fleet can actually reach
+    and that show stress, so the fleet's few hundred thousand litres are not spread thinly over a whole state."""
+    from ..services.common import haversine_m
+
+    active = [c for c in db.scalars(select(Community).where(Community.is_active.is_(True))) if supply_.tanker_need(c) > 0]
+    requested = {cid for (cid,) in db.execute(select(WaterRequest.community_id).where(
+        WaterRequest.status.in_(("Pending", "Allocated", "Dispatched")), WaterRequest.data_origin != "synthetic"))}
+    if scope == "all":
+        return active
+    if scope == "requests":
+        return [c for c in active if c.id in requested]
+    reach = get_setting(db, "dispatch")["maxDistanceKm"]
+    depots = [t.depot for t in db.scalars(select(Tanker).where(Tanker.status != TANKER_MAINTENANCE)) if t.depot and t.depot.is_active]
+    def reachable(c):
+        return any(haversine_m(c.lat, c.lng, d.lat, d.lng) / 1000 <= reach for d in depots)
+    return [c for c in active if c.id in requested or ((c.crisis_score or 0) >= CRISIS_SCOPE_MIN
+                                                        and c.settlement_type not in ("city", "suburb") and reachable(c))]
+
+
+def run_plan(db: Session, user: User | None, supply: int | None = None, use_forecast: bool = False, disruption: dict | None = None,
+             scope: str = "crisis_reach") -> AllocationPlan:
+    communities = plan_candidates(db, scope)
     if not communities:
-        raise HTTPException(400, "No active community currently needs tanker water")
+        raise HTTPException(400, f"No place in scope needs tanker water ({SCOPE_LABELS[scope].lower()})")
     weights = get_setting(db, "weights")
     ops = get_setting(db, "operations")
     supply = supply or fleet_supply(db, ops["tripsPerDay"])
@@ -93,7 +123,8 @@ def run_plan(db: Session, user: User | None, supply: int | None = None, use_fore
         method=METHOD,
         demand_source=demand_source,
         disruption=disruption,
-        details={"before": res.metrics_before, "after": res.metrics_after, "notes": res.notes},
+        details={"before": res.metrics_before, "after": res.metrics_after, "notes": res.notes, "scope": scope,
+                 "scopeLabel": SCOPE_LABELS[scope], "places": len(communities)},
         created_by=user.id if user else None,
     )
     db.add(plan)
@@ -136,7 +167,7 @@ def plan_history(limit: int = 30, db: Session = Depends(get_db), _: User = Depen
 
 @router.post("/allocation/run")
 def run(body: AllocationRunIn, db: Session = Depends(get_db), user: User = Depends(require("run_allocation"))):
-    return plan_view(run_plan(db, user, body.total_supply, body.use_forecast))
+    return plan_view(run_plan(db, user, body.total_supply, body.use_forecast, scope=body.scope))
 
 
 @router.post("/allocation/{plan_id}/approve")
@@ -164,11 +195,24 @@ def approve(plan_id: int, db: Session = Depends(get_db), user: User = Depends(re
     return {**plan_view(plan), "requestsAllocated": n}
 
 
+def status_from_open_trip(db: Session, tanker_id: str) -> str:
+    """A restored tanker goes back to what its open trip says, not blindly to Available."""
+    from ..domain import TANKER_ASSIGNED, TANKER_ON_TRIP, TRIP_MOVING, TRIP_OPEN, T_DELIVERED
+    from ..models import Trip
+
+    trip = db.scalar(select(Trip).where(Trip.tanker_id == tanker_id, Trip.status.in_(TRIP_OPEN)).order_by(Trip.created_at.desc()))
+    if trip is None:
+        return TANKER_AVAILABLE
+    return TANKER_ON_TRIP if trip.status in (*TRIP_MOVING, T_DELIVERED) else TANKER_ASSIGNED
+
+
 @router.post("/tankers/{tanker_id}/breakdown")
 def breakdown(tanker_id: str, body: BreakdownIn, db: Session = Depends(get_db), user: User = Depends(require("report_breakdown"))):
     t = db.get(Tanker, tanker_id)
     if not t:
         raise HTTPException(404, "Tanker not found")
+    if t.status == TANKER_MAINTENANCE:  # repeated click / retry: already recorded, do not reallocate again
+        raise HTTPException(409, f"{t.id} is already marked as broken down")
     ops = get_setting(db, "operations")
     t.status, t.breakdown_note = TANKER_MAINTENANCE, body.note
     audit(db, user, "tanker.breakdown", "tanker", t.id, {"note": body.note})
@@ -176,7 +220,8 @@ def breakdown(tanker_id: str, body: BreakdownIn, db: Session = Depends(get_db), 
     hub.publish("tankers.changed")
     plan = None
     if body.reallocate:
-        plan = run_plan(db, user, disruption={"tankerId": t.id, "lostLitres": t.capacity * ops["tripsPerDay"], "note": body.note})
+        last = latest_plan(db)
+        plan = run_plan(db, user, scope=((last.details or {}).get("scope") if last else None) or "crisis_reach", disruption={"tankerId": t.id, "lostLitres": t.capacity * ops["tripsPerDay"], "note": body.note})
     return {"tankerId": t.id, "plan": plan_view(plan) if plan else None}
 
 
@@ -185,8 +230,10 @@ def restore(tanker_id: str, db: Session = Depends(get_db), user: User = Depends(
     t = db.get(Tanker, tanker_id)
     if not t:
         raise HTTPException(404, "Tanker not found")
-    t.status, t.breakdown_note = TANKER_AVAILABLE, None
-    audit(db, user, "tanker.restore", "tanker", t.id)
+    if t.status != TANKER_MAINTENANCE:
+        raise HTTPException(409, f"{t.id} is not under maintenance")
+    t.status, t.breakdown_note = status_from_open_trip(db, t.id), None
+    audit(db, user, "tanker.restore", "tanker", t.id, {"status": t.status})
     db.commit()
     hub.publish("tankers.changed")
     return {"tankerId": t.id, "status": t.status}

@@ -9,10 +9,11 @@ export const Allocation: React.FC = () => {
   const { plan, fleetSupply, operations, can, fail, toast, refresh } = useApp();
   const [supply, setSupply] = useState('');
   const [useForecast, setUseForecast] = useState(false);
+  const [scope, setScope] = useState<'crisis_reach' | 'requests' | 'all'>('crisis_reach');
   const [busy, setBusy] = useState<string | null>(null);
   const run = async () => {
     setBusy('run');
-    try { const p = await api.runAllocation({ totalSupply: supply ? Number(supply) : undefined, useForecast }); toast('Plan computed', `Need-weighted equity ${p.fairnessBefore}% → ${p.fairnessAfter}%`, 'success'); await refresh('plan'); }
+    try { const p = await api.runAllocation({ totalSupply: supply ? Number(supply) : undefined, useForecast, scope }); toast('Plan computed', `Need-weighted equity ${p.fairnessBefore}% → ${p.fairnessAfter}%`, 'success'); await refresh('plan'); }
     catch (e) { fail(e); }
     setBusy(null);
   };
@@ -34,6 +35,13 @@ export const Allocation: React.FC = () => {
           <Field label="Daily supply (litres)" hint={`Default: operational tanker capacity × ${operations?.tripsPerDay ?? '…'} trips/day`}>
             <input className="input w-56" type="number" min={0} step={1000} placeholder={fleetSupply.toLocaleString('en-IN')} value={supply} onChange={e => setSupply(e.target.value)} />
           </Field>
+          <Field label="Which places">
+            <select className="input w-72" value={scope} onChange={e => setScope(e.target.value as typeof scope)}>
+              <option value="crisis_reach">In crisis and within tanker reach (+ open requests)</option>
+              <option value="requests">Only places with an open request</option>
+              <option value="all">Every place with a tanker need (statewide)</option>
+            </select>
+          </Field>
           <label className="flex items-center gap-2 pb-5 text-sm">
             <input type="checkbox" checked={useForecast} onChange={e => setUseForecast(e.target.checked)} />
             Use demand forecast instead of recorded baseline <KindLabel kind="predicted" title="Advisory model; requires real historical observations for production calibration" />
@@ -47,6 +55,7 @@ export const Allocation: React.FC = () => {
       </Panel>
       {!plan ? <Panel><Empty title="No allocation plan yet" hint="Compute a plan from recorded demand and available supply." /></Panel> : (
         <>
+          {plan.scopeLabel && <p className="mb-2 text-xs text-cc-muted">Scope: {plan.scopeLabel} · {plan.items.length} places</p>}
           {plan.notes.length > 0 && <p className="mb-3 flex gap-2 rounded-lg border border-cc-border bg-cc-raised p-3 text-sm text-cc-muted"><Info className="h-4 w-4 flex-shrink-0" />{plan.notes.join(' ')}</p>}
           <div className="mb-4 grid gap-3 md:grid-cols-5">
             {mb && ma && ([['Need-weighted equity', mb.needWeightedEquity, ma.needWeightedEquity], ['Coverage equality', mb.coverageEquality, ma.coverageEquality],
