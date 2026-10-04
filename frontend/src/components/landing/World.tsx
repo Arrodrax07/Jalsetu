@@ -13,7 +13,7 @@
  *
  * Every moving thing is a shader uniform or a small per-frame update; nothing here re-renders React on scroll.
  */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -24,7 +24,9 @@ import { HorizontalTiltShiftShader } from 'three/examples/jsm/shaders/Horizontal
 import { VerticalTiltShiftShader } from 'three/examples/jsm/shaders/VerticalTiltShiftShader.js';
 import type { PublicSummary } from '../../types';
 import { deficitRings, dotField, focusPlace, inAny, project, px as lngX, pz as latZ, ringSegments, supplyArcs, toPlaces, type GeoFile, type Place, plain } from './geo';
-import { cameraKeys, clock, phases, sampleKeys, stepClock, type Phases } from './story';
+import { base, cameraKeys, clock, phases, sampleKeys, smooth, stepClock } from './story';
+import { live } from './live';
+import { Clouds, Ground, M, SUN_OFFSET, SkyDome, groundCamera, setGroundReduce } from './Ground';
 
 export type Quality = 'high' | 'low';
 export type Anchors = Record<string, HTMLElement | null>;
@@ -53,7 +55,9 @@ const MHB = { w: 72.4, e: 81.0, s: 15.4, n: 22.2 };
 const HOME_TOP = 0;       // Maharashtra's plateau
 const OTHER_TOP = -0.07;  // every other state sits a little lower
 
-const shared = { uTime: { value: 0 } };
+/** Dev aid: ?debug=noclouds,nofilm,... switches layers off to isolate rendering problems. */
+const DEBUG = new Set((new URLSearchParams(window.location.search).get('debug') ?? '').split(','));
+const shared = { uTime: { value: 0 }, uFade: { value: 1 } };
 /** Pixels per world unit at distance 1 (viewport height / (2 tan(fov/2))); point sizes are set in world units. */
 const scaleU = { value: 1000 };
 
@@ -86,7 +90,8 @@ const terrainVS = /* glsl */ `
 const pointFS = /* glsl */ `
   varying float vA; varying vec3 vC;
   ${DISC}
-  void main() { float a = disc() * vA; if (a < 0.02) discard; gl_FragColor = vec4(vC, a); }
+  uniform float uFade;
+  void main() { float a = disc() * vA * uFade; if (a < 0.02) discard; gl_FragColor = vec4(vC, a); }
 `;
 
 const placesVS = /* glsl */ `
@@ -136,13 +141,14 @@ const arcVS = /* glsl */ `
   void main() { vSeg = aSeg; vT = aT; vec4 mv = modelViewMatrix * vec4(position, 1.0); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }
 `;
 const arcFS = /* glsl */ `
-  uniform float uChaos, uAlpha, uTime; uniform vec3 uColor, uChaosC;
+  uniform float uChaos, uAlpha, uTime, uFade; uniform vec3 uColor, uChaosC;
   varying float vSeg, vT; varying float vDepth;
   void main() {
+    if (uFade < 0.01) discard;
     if (vSeg < uChaos * 0.8) discard;
     float pulse = 0.35 + 0.65 * smoothstep(0.1, 0.0, abs(fract(vT - uTime * 0.12) - 0.5) - 0.38);
     vec3 c = mix(uColor, uChaosC, uChaos);
-    gl_FragColor = vec4(c, uAlpha * pulse * (1.0 - 0.5 * uChaos) * smoothstep(120.0, 15.0, vDepth));
+    gl_FragColor = vec4(c, uAlpha * uFade * pulse * (1.0 - 0.5 * uChaos) * smoothstep(120.0, 15.0, vDepth));
   }
 `;
 
@@ -151,39 +157,11 @@ const fillVS = /* glsl */ `
   void main() { vec4 w = modelMatrix * vec4(position, 1.0); vXZ = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }
 `;
 const fillFS = /* glsl */ `
-  uniform float uAlpha, uTime; uniform vec3 uColor; varying vec2 vXZ; uniform vec2 uCentre;
+  uniform float uAlpha, uTime, uFade; uniform vec3 uColor; varying vec2 vXZ; uniform vec2 uCentre;
   void main() {
     float r = distance(vXZ, uCentre);
     float ring = 0.5 + 0.5 * sin(r * 9.0 - uTime * 1.6);
-    gl_FragColor = vec4(uColor, uAlpha * (0.5 + 0.3 * ring));
-  }
-`;
-
-/** Soft sprite clouds the camera flies through; they thin out as they get close so they never smother the view. */
-const cloudVS = /* glsl */ `
-  uniform float uTime, uPx, uScale, uAlpha;
-  attribute float aSize, aSeed;
-  varying float vA; varying float vSeed;
-  void main() {
-    vec3 p = position + vec3(sin(uTime * 0.03 + aSeed * 6.0) * 0.8, 0.0, uTime * 0.05 * (0.5 + aSeed));
-    p.z = mod(p.z + 15.0, 32.0) - 15.0;
-    vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_Position = projectionMatrix * mv;
-    float depth = -mv.z;
-    gl_PointSize = min(uPx * aSize * uScale / depth, 1400.0);
-    vSeed = aSeed;
-    vA = uAlpha * smoothstep(1.2, 7.0, depth) * smoothstep(140.0, 50.0, depth);
-  }
-`;
-const cloudFS = /* glsl */ `
-  uniform sampler2D uTex; varying float vA; varying float vSeed;
-  void main() {
-    vec2 uv = gl_PointCoord;
-    float r = vSeed * 6.2831; uv = mat2(cos(r), -sin(r), sin(r), cos(r)) * (uv - 0.5) + 0.5;
-    vec4 t = texture2D(uTex, uv);
-    float a = t.a * vA;
-    if (a < 0.01) discard;
-    gl_FragColor = vec4(mix(vec3(0.95, 0.965, 0.975), vec3(1.0), t.r), a);
+    gl_FragColor = vec4(uColor, uAlpha * uFade * (0.5 + 0.3 * ring));
   }
 `;
 
@@ -201,31 +179,10 @@ const dustVS = /* glsl */ `
 `;
 
 const pointsMat = (vs: string, fs: string, uniforms: Record<string, THREE.IUniform>) =>
-  new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { ...uniforms, uTime: shared.uTime }, transparent: true, depthWrite: false });
-
-function cloudTexture() {
-  const s = 128, cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const g = cv.getContext('2d')!;
-  const blob = (x: number, y: number, r: number, a: number) => {
-    const grd = g.createRadialGradient(x, y, 0, x, y, r);
-    grd.addColorStop(0, `rgba(255,255,255,${a})`); grd.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-  };
-  // a puff: several soft lobes, brighter on top (red channel carries the light)
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2, d = 18 + ((i * 37) % 13);
-    blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d * 0.6, 30 + ((i * 11) % 14), 0.32);
-  }
-  blob(64, 60, 40, 0.5);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+  new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { ...uniforms, uTime: shared.uTime, uFade: shared.uFade }, transparent: true, depthWrite: false });
 
 // ---------------------------------------------------------------------------- layers
 interface Ctx { geo: GeoFile; places: Place[]; focus: { place: Place; name: string | null; district: string | null }; s: PublicSummary; q: Quality; px: number; run: THREE.Vector3[]; hub: Place }
-const live: { ph: Phases; speed: number } = { ph: phases(0), speed: 0 };
 
 const toShapes = (rings: [number, number][][]) => rings.filter(r => r.length > 3).map(r => new THREE.Shape(r.map(([lng, lat]) => { const [x, z] = project(lng, lat); return new THREE.Vector2(x, -z); })));
 
@@ -271,7 +228,7 @@ const Earth: React.FC<{ c: Ctx }> = ({ c }) => {
         <planeGeometry args={[400, 400]} />
         <meshStandardMaterial color={C.haze} roughness={1} />
       </mesh>
-      <mesh geometry={ground} position={groundPos} receiveShadow renderOrder={-1}>
+      <mesh geometry={ground} position={groundPos} receiveShadow renderOrder={-10}>
         <meshStandardMaterial map={wide} alphaMap={edge} transparent roughness={1} />
       </mesh>
       <mesh geometry={plateau} material={[capMat, sideMat]} castShadow receiveShadow />
@@ -392,7 +349,7 @@ const Flows: React.FC<{ c: Ctx }> = ({ c }) => {
     lg.setAttribute('aSeg', new THREE.BufferAttribute(ls, 1));
     lg.setAttribute('aT', new THREE.BufferAttribute(lt, 1));
     const lm = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false,
-      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: C.arc }, uChaosC: { value: C.chaos } } });
+      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uFade: shared.uFade, uColor: { value: C.arc }, uChaosC: { value: C.chaos } } });
     return { geom: g, mat: m, arcGeom: lg, arcMat: lm };
   }, [c]);
   useFrame(() => {
@@ -525,7 +482,7 @@ const Deficit: React.FC<{ c: Ctx }> = ({ c }) => {
       const g = new THREE.ShapeGeometry(toShapes(d.rings));
       g.rotateX(-Math.PI / 2);
       const mat = new THREE.ShaderMaterial({ vertexShader: fillVS, fragmentShader: fillFS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: r.severity === 'Severe' ? C.rust : C.amber }, uCentre: { value: new THREE.Vector2(cx, cz) } } });
+        uniforms: { uAlpha: { value: 0 }, uTime: shared.uTime, uFade: shared.uFade, uColor: { value: r.severity === 'Severe' ? C.rust : C.amber }, uCentre: { value: new THREE.Vector2(cx, cz) } } });
       return { g, mat, weight: Math.min(1, Math.abs(r.deviation) / 45) };
     }).filter(Boolean) as { g: THREE.BufferGeometry; mat: THREE.ShaderMaterial; weight: number }[];
   }, [c]);
@@ -560,31 +517,17 @@ const National: React.FC<{ c: Ctx }> = ({ c }) => {
     g.setAttribute('aSeg', new THREE.BufferAttribute(seg, 1));
     g.setAttribute('aT', new THREE.BufferAttribute(tt, 1));
     const m = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false,
-      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: C.arc }, uChaosC: { value: C.chaos } } });
+      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uFade: shared.uFade, uColor: { value: C.arc }, uChaosC: { value: C.chaos } } });
     return { geom: g, mat: m };
   }, [c.geo]);
   useFrame(() => { mat.uniforms.uAlpha.value = live.ph.national * 0.95; });
   return <lineSegments geometry={geom} material={mat} frustumCulled={false} />;
 };
 
-/** Atmosphere: cloud banks at altitude and dust in the air above Maharashtra. Decoration only. */
+/** Atmosphere: dust in the air above Maharashtra, for depth. Decoration only. */
 const Atmosphere: React.FC<{ c: Ctx }> = ({ c }) => {
-  const { clouds, cloudMat, dust, dustMat } = useMemo(() => {
+  const { dust, dustMat } = useMemo(() => {
     const rnd = (i: number, k: number) => Math.abs((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1);
-    const n = c.q === 'high' ? 170 : 80;
-    const cp = new Float32Array(n * 3), cs = new Float32Array(n), cseed = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      // two banks: a high one the opening shot looks through, a lower one the dive passes through
-      const high = i % 3 !== 0;
-      cp.set([-13 + rnd(i, 1) * 34, high ? 9 + rnd(i, 2) * 6 : 4.5 + rnd(i, 2) * 2.5, -15 + rnd(i, 3) * 32], i * 3);
-      cs[i] = (high ? 3.2 : 2.2) + rnd(i, 4) * 3.5; cseed[i] = rnd(i, 5);
-    }
-    const cg = new THREE.BufferGeometry();
-    cg.setAttribute('position', new THREE.BufferAttribute(cp, 3));
-    cg.setAttribute('aSize', new THREE.BufferAttribute(cs, 1));
-    cg.setAttribute('aSeed', new THREE.BufferAttribute(cseed, 1));
-    const cm = new THREE.ShaderMaterial({ vertexShader: cloudVS, fragmentShader: cloudFS, transparent: true, depthWrite: false,
-      uniforms: { uTime: shared.uTime, uPx: { value: c.px }, uScale: scaleU, uAlpha: { value: 0.85 }, uTex: { value: cloudTexture() } } });
     const dn = c.q === 'high' ? 2600 : 900;
     const dp = new Float32Array(dn * 3), ds = new Float32Array(dn);
     for (let i = 0; i < dn; i++) { dp.set([-9 + rnd(i, 7) * 15, 0.1 + rnd(i, 8) * 4.5, -2 + rnd(i, 9) * 11], i * 3); ds[i] = rnd(i, 10); }
@@ -592,16 +535,13 @@ const Atmosphere: React.FC<{ c: Ctx }> = ({ c }) => {
     dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
     dg.setAttribute('aSeed', new THREE.BufferAttribute(ds, 1));
     const dm = pointsMat(dustVS, pointFS, { uPx: { value: c.px }, uScale: scaleU, uAlpha: { value: 1 } });
-    return { clouds: cg, cloudMat: cm, dust: dg, dustMat: dm };
+    return { dust: dg, dustMat: dm };
   }, [c.q, c.px]);
   useFrame(() => {
     const ph = live.ph;
-    // clouds thin out while the story is down at street level and while the impact numbers are read
-    cloudMat.uniforms.uAlpha.value = 0.9 * ph.clouds;
-    clouds.drawRange.count = ph.clouds > 0.003 ? Infinity : 0;
     dustMat.uniforms.uAlpha.value = 0.6 + 0.4 * Math.max(ph.spikes, ph.ops);
   });
-  return <group><points geometry={dust} material={dustMat} frustumCulled={false} /><points geometry={clouds} material={cloudMat} frustumCulled={false} renderOrder={10} /></group>;
+  return <points geometry={dust} material={dustMat} frustumCulled={false} />;
 };
 
 // ---------------------------------------------------------------------------- film pipeline
@@ -640,7 +580,7 @@ const CinemaShader = {
 const Film: React.FC = () => {
   const { gl, scene, camera, size } = useThree();
   const { composer, tiltH, tiltV, cine } = useMemo(() => {
-    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 2 });
     const composer = new EffectComposer(gl, rt);
     composer.addPass(new RenderPass(scene, camera));
     const tiltH = new ShaderPass(HorizontalTiltShiftShader), tiltV = new ShaderPass(VerticalTiltShiftShader);
@@ -661,10 +601,11 @@ const Film: React.FC = () => {
   const perf = useMemo(() => ({ n: 0, sum: 0, off: false }), []);
   useFrame((_, dt) => {
     if (perf.off) { gl.render(scene, camera); return; }
-    if (perf.n < 240) { perf.n++; if (perf.n > 60) perf.sum += dt; if (perf.n === 240 && perf.sum / 180 > 1 / 45) { perf.off = true; console.info('Landing: film effects off for smoothness'); } }
+    if (perf.n < 240) { perf.n++; if (perf.n > 60) perf.sum += dt; if (perf.n === 240 && perf.sum / 180 > 1 / 45) { perf.off = true; live.lowPower = true; console.info('Landing: film effects off for smoothness'); } }
     const ph = live.ph, reduce = clock.reduce;
     // tilt-shift: close to the ground the world reads as a miniature; from altitude only a whisper of it
-    const blur = reduce ? 0.6 : 1.1 + 2.8 * Math.max(ph.spikes, ph.ops, ph.focus * 0.7);
+    const tilt = reduce ? 0.6 : 1.1 + 2.8 * Math.max(ph.spikes, ph.ops, ph.focus * 0.7);
+    const blur = 0.45 + (tilt - 0.45) * smooth((live.dist - 0.02) / 0.4);   // drone and street shots stay optically real
     tiltH.uniforms.h.value = blur / size.width;
     tiltV.uniforms.v.value = blur / size.height;
     cine.uniforms.uTime.value += dt;
@@ -675,40 +616,67 @@ const Film: React.FC = () => {
   return null;
 };
 
+/** Dynamic resolution: holds the frame rate on any machine by trading pixels, never by dropping the story. */
+const Adaptive: React.FC<{ max: number }> = ({ max }) => {
+  const { setDpr } = useThree();
+  const st = useMemo(() => ({ acc: 0, n: 0, dpr: Math.min(window.devicePixelRatio || 1, max), cool: 0 }), [max]);
+  useFrame((_, dt) => {
+    st.acc += Math.min(dt, 0.2); st.n++;
+    if (st.acc < 1.2) return;
+    const fps = st.n / st.acc; st.acc = 0; st.n = 0;
+    if (st.cool > 0) { st.cool--; return; }
+    const floor = 0.6, top = Math.min(window.devicePixelRatio || 1, max);
+    let next = st.dpr;
+    if (fps < 42 && st.dpr > floor) next = Math.max(floor, st.dpr * 0.82);
+    else if (fps > 57 && st.dpr < top) next = Math.min(top, st.dpr * 1.1);
+    if (Math.abs(next - st.dpr) > 0.01) { st.dpr = next; setDpr(next); st.cool = 1; live.lowPower = next < 0.85; }
+  });
+  return null;
+};
+
 // ---------------------------------------------------------------------------- light, camera, anchors
 const Sun: React.FC<{ q: Quality }> = ({ q }) => {
   const light = useRef<THREE.DirectionalLight>(null);
+  const hemi = useRef<THREE.HemisphereLight>(null);
   useEffect(() => {
     const l = light.current;
     if (!l) return;
-    l.shadow.mapSize.set(q === 'high' ? 2048 : 1024, q === 'high' ? 2048 : 1024);
     l.shadow.bias = -0.0004; l.shadow.normalBias = 0.02;
   }, [q]);
   useFrame(({ camera }) => {
     // the sun follows the camera's target so shadows stay crisp from country scale down to one village
     const l = light.current;
     if (!l) return;
-    const t = rigTarget, dist = camera.position.distanceTo(t), sf = THREE.MathUtils.clamp(dist / 18, 0.12, 2.6);
-    l.position.set(t.x - 7 * sf, 13 * sf, t.z + 6 * sf);
+    const t = rigTarget, dist = camera.position.distanceTo(t);
+    const half = dist < 0.05 ? dist * 1.15 + 2 / M : dist * 0.95 + 1;
+    // the sun sits a scale-proportional distance up its own direction, so the shadow frustum fits every shot
+    const D = half * 4;
+    l.position.copy(t).addScaledVector(sunDir, D);
     l.target.position.copy(t);
     l.target.updateMatrixWorld();
-    const cam = l.shadow.camera, half = dist * 0.95 + 1;
-    if (Math.abs(cam.right - half) > 0.01) {
-      cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half; cam.near = 0.1; cam.far = 40 * sf + 20;
+    // a stronger, warmer sun near the ground: real daylight contrast instead of the map's soft studio light
+    const g = 1 - smooth((dist - 0.01) / 0.2);
+    l.intensity = 1.7 + 1.1 * g; if (hemi.current) hemi.current.intensity = 1.15 - 0.45 * g;
+    const cam = l.shadow.camera;
+    if (Math.abs(cam.right - half) > half * 0.01) {
+      cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half; cam.near = D * 0.2; cam.far = D * 2;
       cam.updateProjectionMatrix();
+      l.shadow.normalBias = half * 0.003;
     }
   });
   return (
     <>
-      <hemisphereLight args={['#ffffff', '#a9bcc4', 1.15]} />
-      <directionalLight ref={light} intensity={1.7} color="#fff3e2" castShadow={q === 'high'} />
+      <hemisphereLight ref={hemi} args={['#ffffff', '#a9bcc4', 1.15]} />
+      <directionalLight ref={light} intensity={1.7} color="#fff3e2" castShadow={q === 'high' && !DEBUG.has('noshadow')}
+        shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
     </>
   );
 };
 const rigTarget = new THREE.Vector3();
+const sunDir = SUN_OFFSET.clone().normalize();
 
 const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapterFrame?: (p: number) => void }> = ({ c, anchors, onChapterFrame }) => {
-  const { camera, size } = useThree();
+  const { camera, size, scene } = useThree();
   const cam = camera as THREE.PerspectiveCamera;
   const portrait = size.height > size.width * 1.1;
   const keys = useMemo(() => cameraKeys(c.focus.place, c.hub, portrait), [c, portrait]);
@@ -724,6 +692,7 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
     return out;
   }, [c]);
   const truckPos = useMemo(() => new THREE.Vector3(), []);
+  const gv = useMemo(() => ({ mp: new THREE.Vector3(), mt: new THREE.Vector3(), gp: new THREE.Vector3(), gt: new THREE.Vector3() }), []);
   const placed = useMemo<[number, number][]>(() => [], []);
 
   useFrame((st, dt) => {
@@ -734,9 +703,22 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
     if (!clock.reduce) shared.uTime.value += dt;
     onChapterFrame?.(clock.p);
 
-    sampleKeys(keys, clock.p, s);
+    sampleKeys(keys, base(clock.p), s);
+    gv.mp.set(s.pos[0], s.pos[1], s.pos[2]); gv.mt.set(s.target[0], s.target[1], s.target[2]);
+    if (groundCamera(clock.p, gv.mp, gv.mt, gv.gp, gv.gt)) {
+      const w = live.ph.descend * (1 - live.ph.ascend);
+      s.pos[0] = gv.gp.x; s.pos[1] = gv.gp.y; s.pos[2] = gv.gp.z;
+      s.target[0] = gv.gt.x; s.target[1] = gv.gt.y; s.target[2] = gv.gt.z;
+      s.fov += (44 - s.fov) * w;
+    }
     rigTarget.set(s.target[0], s.target[1], s.target[2]);
     const dist = Math.hypot(s.pos[0] - s.target[0], s.pos[1] - s.target[1], s.pos[2] - s.target[2]);
+    live.dist = dist;
+    // map overlays (country-scale models: a 'tanker' there is 13 km long) leave as the dive to the ground begins
+    const ph0 = live.ph;
+    const groundFade = ph0.inGround ? Math.max(1 - smooth(ph0.descend / 0.3), smooth((ph0.ascend - 0.7) / 0.3)) : 1;
+    live.fade = Math.min(smooth((dist - 0.05) / 0.45), groundFade);
+    shared.uFade.value = live.fade;
     const t = st.clock.elapsedTime;
     v.par.lerp(new THREE.Vector2(clock.pointerX, clock.pointerY), clock.reduce ? 1 : 0.04);
     const par = clock.reduce ? 0 : dist * 0.03;
@@ -761,7 +743,12 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
     const kick = clock.reduce ? 0 : Math.min(9, live.speed * 0.32);
     v.kick += (kick - v.kick) * (1 - Math.exp(-dt * 3));
     const fov = s.fov + v.kick;
-    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    // clip planes and haze follow the scale of the shot: a subcontinent, a district, a road, a person
+    const near = THREE.MathUtils.clamp(dist * 0.004, 3e-7, 0.05), far = THREE.MathUtils.clamp(dist * 600, 0.09, 220);
+    if (Math.abs(cam.fov - fov) > 0.01 || Math.abs(cam.near - near) > near * 0.05 || Math.abs(cam.far - far) > far * 0.05) {
+      cam.fov = fov; cam.near = near; cam.far = far; cam.updateProjectionMatrix();
+    }
+    if (scene.fog instanceof THREE.Fog) { scene.fog.far = THREE.MathUtils.clamp(dist * 12, 0.035, 105); scene.fog.near = scene.fog.far * (dist < 0.5 ? 0.28 : 0.3); }
     scaleU.value = size.height / (2 * Math.tan((cam.fov * Math.PI) / 360));
 
     // anchored labels: project world points to the screen and move the DOM labels there; later labels give way
@@ -781,8 +768,10 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
       el.style.visibility = alpha < 0.01 || behind || clash ? 'hidden' : 'visible';
       if (alpha > 0.01 && !behind && !clash) placed.push([x, y]);
     };
-    place('focus', anchorPts.focus, Math.max(ph.focus * (1 - ph.ops), 0));
-    place('truck', truckPos, ph.ops);
+    const groundLabel = ph.inGround * clamp01((700 - dist * M) / 350) * (1 - ph.ascend);
+    place('gtruck', live.tankerWorld, groundLabel);
+    place('focus', anchorPts.focus, Math.max(ph.focus * (1 - ph.ops), 0) * live.fade);
+    place('truck', truckPos, ph.ops * live.fade);
     place('d0', anchorPts.d0, ph.disaster);
     place('d1', anchorPts.d1, ph.disaster * clamp01((ph.disaster - 0.3) / 0.7));
     place('d2', anchorPts.d2, ph.disaster * clamp01((ph.disaster - 0.5) / 0.5));
@@ -821,6 +810,11 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
     const { hub, run } = buildRun(focus.place, places);
     return { geo, places, focus, s: summary, q: quality, px, run, hub };
   }, [geo, summary, quality, px]);
+  const overlay = useRef<THREE.Group>(null);
+  const three = useThree();
+  useEffect(() => { if (DEBUG.has('expose')) (window as unknown as { __three: unknown }).__three = three; }, [three]);
+  useFrame(() => { if (overlay.current) overlay.current.visible = live.fade > 0.01; });
+  useEffect(() => { setGroundReduce(clock.reduce); }, []);
   useEffect(() => { onReady?.({ focusName: ctx.focus.name, focusDistrict: ctx.focus.district, focusCrisis: ctx.focus.place.crisis, focusPop: ctx.focus.place.pop }); }, [ctx, onReady]);
   return (
     <>
@@ -828,24 +822,32 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
       <fog attach="fog" args={[C.haze, 30, 105]} />
       <Sun q={quality} />
       <Earth c={ctx} />
-      <Terrain c={ctx} />
-      <Lines c={ctx} />
-      <Deficit c={ctx} />
-      <Flows c={ctx} />
-      <National c={ctx} />
-      <Places c={ctx} onHover={onHover} />
-      <Spikes c={ctx} />
-      <Focus c={ctx} />
-      <Run c={ctx} />
-      <Atmosphere c={ctx} />
+      {!DEBUG.has('nosky') && <SkyDome haze={C.haze} />}
+      <group ref={overlay}>
+        <Terrain c={ctx} />
+        <Lines c={ctx} />
+        <Deficit c={ctx} />
+        <Flows c={ctx} />
+        <National c={ctx} />
+        <Places c={ctx} onHover={onHover} />
+        <Spikes c={ctx} />
+        <Focus c={ctx} />
+        <Run c={ctx} />
+        <Atmosphere c={ctx} />
+      </group>
+      <Suspense fallback={null}>
+        {!DEBUG.has('noground') && <Ground q={quality} haze={C.haze} />}
+        {!DEBUG.has('noclouds') && <Clouds q={quality} haze={C.haze} />}
+      </Suspense>
       <Rig c={ctx} anchors={anchors} onChapterFrame={onFrame} />
-      {quality === 'high' && <Film />}
+      {quality === 'high' && !DEBUG.has('nofilm') && <Film />}
+      {!DEBUG.has('fixeddpr') && <Adaptive max={quality === 'high' ? 1.5 : 1.25} />}
     </>
   );
 };
 
 export default function World(props: WorldProps) {
-  const dpr: [number, number] = props.quality === 'high' ? [1, 1.75] : [1, 1.25];
+  const dpr: [number, number] = props.quality === 'high' ? [1, 1.5] : [1, 1.25];
   const px = Math.min(window.devicePixelRatio || 1, dpr[1]);
   return (
     <Canvas dpr={dpr} shadows={props.quality === 'high' ? 'soft' : false}

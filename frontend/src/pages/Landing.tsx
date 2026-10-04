@@ -18,7 +18,7 @@ import { Mark } from '../components/shell/Shell';
 import { cx } from '../components/ui';
 import { districtName } from '../utils/format';
 import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
-import { CHAPTERS, band, chapterAt, clock, phases, ramp, stepClock } from '../components/landing/story';
+import { CHAPTERS, band, base, chapterAt, clock, groundState, phases, ramp, stepClock } from '../components/landing/story';
 import type { Anchors, Quality } from '../components/landing/World';
 
 const World = React.lazy(() => import('../components/landing/World'));
@@ -132,6 +132,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const bar = useRef<HTMLDivElement>(null);
   const truckText = useRef<HTMLSpanElement>(null);
   const numeral = useRef<HTMLSpanElement>(null);
+  const groundText = useRef<HTMLSpanElement>(null);
+  const haze = useRef<HTMLDivElement>(null);
   const barTop = useRef<HTMLDivElement>(null), barBottom = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null), hint = useRef<HTMLDivElement>(null);
   const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
@@ -224,7 +226,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
       // cinema bars slide in while the camera flies (the dive, the reorganisation, the climb); the chrome steps aside
       const ph = phases(p);
-      const bars = reduce ? 0 : Math.max(ph.clouds, band(p, 0.225, 0.25, 0.3, 0.33) * 0.8);
+      const bars = reduce ? 0 : Math.max(ph.clouds, band(base(p), 0.225, 0.25, 0.3, 0.33) * 0.8, ph.flight);
       if (barTop.current) barTop.current.style.transform = `scaleY(${bars.toFixed(3)})`;
       if (barBottom.current) barBottom.current.style.transform = `scaleY(${bars.toFixed(3)})`;
       if (header.current) { header.current.style.opacity = (1 - Math.min(1, bars * 1.6)).toFixed(3); header.current.style.visibility = bars > 0.6 ? 'hidden' : 'visible'; }
@@ -233,6 +235,12 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         const c = CHAPTERS[chapterAt(p)], lp = (p - c.start) / (c.end - c.start);
         numeral.current.style.transform = reduce ? 'none' : `translate3d(${((0.5 - lp) * 60).toFixed(1)}px, ${((0.5 - lp) * 160).toFixed(1)}px, 0)`;
         numeral.current.style.opacity = (band(lp, 0, 0.18, 0.82, 1) * (p > 0.84 ? 0 : 1)).toFixed(3);
+      }
+      // the page's paper haze steps aside while the camera is low over real ground
+      if (haze.current) haze.current.style.opacity = (1 - band(p, 0.53, 0.55, 0.625, 0.645)).toFixed(3);
+      if (groundText.current) {
+        const g = groundState.delivering ? 'Delivering · proof of delivery next' : groundState.arrived ? 'Arrived · inside the 150 m geofence' : 'En route · live GPS';
+        if (groundText.current.textContent !== g) groundText.current.textContent = g;
       }
       if (truckText.current) {
         const t = phases(p).tanker;
@@ -289,15 +297,17 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           )}
           {(!worldDriving || failed) && <StaticMap s={s} geo={geo} />}
           {/* vignette and horizon haze keep type readable over the world */}
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/80 to-transparent" />
+          <div ref={haze} className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
+            <div className="absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
+            <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/80 to-transparent" />
+          </div>
           {quality === 'low' && <div className="landing-grain pointer-events-none absolute inset-[-50%] opacity-[0.07] mix-blend-multiply" />}
 
           {/* readability scrims for the chapters that sit over a busy scene */}
           <Layer ch={0} a={0} b={1} depth={0} first className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/90 from-25% via-[#eef4f6]/50 via-50% to-transparent to-75% md:w-[62vw] md:bg-gradient-to-r md:from-[#eef4f6]/95 md:from-0% md:via-[#eef4f6]/60 md:via-55% md:to-transparent md:to-100%" />
-          {[3, 4, 5].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
-          <Layer ch={7} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/70 backdrop-blur-[2px]" />
+          {[3, 4, 6].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
+          <Layer ch={8} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/70 backdrop-blur-[2px]" />
 
           {/* Chapter 1: scale */}
           <Layer ch={0} a={0} b={0.62} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">
@@ -373,9 +383,28 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             </div>
           </div>
 
-          {/* Chapter 6: disaster response */}
-          <Layer ch={5} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
-            <Eyebrow className="mb-4">06 · Disaster response</Eyebrow>
+          {/* Chapter 6: on the ground (satellite -> drone -> street, then back up) */}
+          <Layer ch={5} a={0.02} b={0.3} className="inset-x-5 top-[16vh] text-center">
+            <Eyebrow className="mb-3">06 · On the ground</Eyebrow>
+            <p className={cx(H, 'text-[9vw] leading-[0.95] text-white [text-shadow:0_2px_30px_rgba(10,30,40,0.45)] md:text-[4.4vw]')}>From orbit to the road.</p>
+          </Layer>
+          <Layer ch={5} a={0.36} b={0.74} depth={0.4} className="bottom-[13vh] left-5 max-w-[88vw] md:left-[6vw] md:max-w-[34vw]">
+            <div className="rounded-xl bg-white/80 p-5 shadow-[0_30px_60px_-30px_rgba(19,34,43,0.55)] backdrop-blur-md">
+              <p className={cx(H, 'text-[7.5vw] leading-[0.98] md:text-[2.6vw]')}>For the people waiting,<br /><span className="text-[#0a7f99]">the tanker is the plan.</span></p>
+              <p className="mt-3 text-[13.5px] leading-relaxed text-[#3f525b]">Arrival is confirmed by a 150 m geofence on the driver’s phone. The delivery is signed, photographed and verified by an officer.</p>
+              <div className="mt-3 flex flex-wrap gap-2"><Illustration>a delivery near Beed</Illustration>
+                <span className="inline-flex items-center gap-1.5 rounded-[3px] border border-[#3d7486]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#2d6c7f]">Real terrain · Sentinel-2</span></div>
+            </div>
+          </Layer>
+          <div ref={el => { anchors.current.gtruck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
+            <div className="-translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
+              <span className="mr-2 text-[#0a7f99]">●</span><span ref={groundText}>En route · live GPS</span>
+            </div>
+          </div>
+
+          {/* Chapter 7: disaster response */}
+          <Layer ch={6} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
+            <Eyebrow className="mb-4">07 · Disaster response</Eyebrow>
             <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>When the monsoon fails,<br /><span className="text-[#c0621c]">the plan moves.</span></p>
             <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">Shaded districts: monsoon rainfall far below their own 10-year mean (Open-Meteo ERA5). Official NDMA alerts and news re-rank every place, and dispatch follows the new priorities.</p>
             <div className="mt-4"><Live at={at} /></div>
@@ -390,15 +419,15 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           ))}
 
           {/* Chapter 7: the network */}
-          <Layer ch={6} a={0.05} b={0.95} className="inset-x-5 top-[16vh] text-center">
+          <Layer ch={7} a={0.05} b={0.95} className="inset-x-5 top-[16vh] text-center">
             <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[4.6vw]')}>{s ? num(s.places) : '1,263'} towns and villages today.<br /><span className="text-[#0a7f99]">Built for every state.</span></p>
             <div className="mt-5 flex justify-center"><Illustration>national arcs show the design, not current coverage</Illustration></div>
           </Layer>
 
           {/* Chapter 8: impact (live numbers only) */}
           {s && (
-            <Layer ch={7} a={0.03} b={0.97} depth={0.6} className="inset-x-5 top-[14vh] md:inset-x-[8vw] md:top-[24vh]">
-              <div className="flex items-center justify-between"><Eyebrow>08 · Right now</Eyebrow><Live at={at} /></div>
+            <Layer ch={8} a={0.03} b={0.97} depth={0.6} className="inset-x-5 top-[14vh] md:inset-x-[8vw] md:top-[24vh]">
+              <div className="flex items-center justify-between"><Eyebrow>09 · Right now</Eyebrow><Live at={at} /></div>
               <TiltCard strength={0.5}>
               <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12 [transform-style:preserve-3d]">
                 {[
@@ -409,7 +438,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
                   [num(s.newsReports), 'news reports read', 'Marathi + English, unverified until confirmed'],
                   [`${s.tankers} / ${s.depots}`, 'tankers / depots on real GPS', 'depots on real water sites'],
                 ].map(([v, l, n], i) => (
-                  <motion.div key={l} custom={i} variants={slab} initial="hidden" animate={chapter === 7 ? 'show' : 'hidden'}
+                  <motion.div key={l} custom={i} variants={slab} initial="hidden" animate={chapter === 8 ? 'show' : 'hidden'}
                     style={{ transformPerspective: 900, transformOrigin: '50% 100%' }} className="border-t border-[#c4d3d9] pt-3">
                     <dt className="text-[12px] text-[#4d626b] md:text-[13px]">{l}</dt>
                     <dd className={cx(H, 'mt-1 text-[11vw] leading-none md:text-[4.6vw] [transform:translateZ(30px)]')}>{v}</dd>
@@ -422,7 +451,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           )}
 
           {/* Chapter 9 (title only; the call to action is real page content below) */}
-          <Layer ch={8} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
+          <Layer ch={9} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
             <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#0a7f99]">to intelligent response.</span></p>
           </Layer>
 
@@ -483,7 +512,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
         {/* ------------------------------------------------ the scroll track, with the story as plain text for assistive tech */}
         <main className="pointer-events-none relative z-20">
-          <div style={{ height: `${quality === 'high' ? 1250 : 1050}vh` }} className="relative">
+          <div style={{ height: `${quality === 'high' ? 1550 : 1300}vh` }} className="relative">
             {CHAPTERS.slice(0, -1).map((c, i) => (
               <section key={c.id} id={c.id} aria-labelledby={`sr-${c.id}`} className="sr-only" style={{ position: 'absolute', top: `${c.start * 100}%` }}>
                 <h2 id={`sr-${c.id}`}>{c.label}</h2>
@@ -509,7 +538,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               </div>
               <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
-                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
+                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS; Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). The village scene near Beed is an illustration. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
               </p>
             </section>
           </div>
@@ -529,6 +558,7 @@ const SR_TEXT: ((s: PublicSummary | null) => string)[] = [
   () => 'JalSetu turns scattered requests into one picture of need and one plan for every tanker, prioritising by live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.',
   () => 'Every place is scored and explained: rainfall deficit, news from the ground, vulnerability and distance to water combine into a crisis score.',
   () => "Every tanker is tracked on real GPS from the driver's phone. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.",
+  () => 'On the ground: the camera descends from orbit through the clouds to real terrain near Beed, where people wait with pots at a village water point as a tanker arrives. Arrival is confirmed by a 150 metre geofence; the delivery is signed, photographed and verified. The village scene is an illustration.',
   s => `When the monsoon fails, the plan moves.${s?.rainfall[0] ? ` ${districtName(s.rainfall[0].district)} district has ${s.rainfall[0].deviation}% monsoon rainfall against its 10-year mean.` : ''} Official alerts and news re-rank every place and dispatch follows.`,
   s => `${s ? num(s.places) : 'Over a thousand'} towns and villages are monitored today, and the model is built for every state.`,
   s => (s ? `Right now: ${num(s.places)} places monitored with ${millions(s.people)} people; ${num(s.inCrisis)} places under water stress with ${millions(s.peopleInCrisis)} people; ${num(s.newsReports)} news reports read; ${s.tankers} tankers at ${s.depots} depots on real GPS.` : 'Live figures are loading.'),

@@ -5,16 +5,33 @@
 export interface Chapter { id: string; label: string; start: number; end: number }
 
 export const CHAPTERS: Chapter[] = [
-  { id: 'scale', label: 'Scale', start: 0, end: 0.1 },
-  { id: 'problem', label: 'The problem', start: 0.1, end: 0.22 },
-  { id: 'jalsetu', label: 'JalSetu', start: 0.22, end: 0.34 },
-  { id: 'intelligence', label: 'Intelligence', start: 0.34, end: 0.48 },
-  { id: 'live', label: 'Live operations', start: 0.48, end: 0.62 },
-  { id: 'disaster', label: 'Disaster response', start: 0.62, end: 0.74 },
-  { id: 'network', label: 'The network', start: 0.74, end: 0.84 },
-  { id: 'impact', label: 'Impact', start: 0.84, end: 0.93 },
+  { id: 'scale', label: 'Scale', start: 0, end: 0.09 },
+  { id: 'problem', label: 'The problem', start: 0.09, end: 0.19 },
+  { id: 'jalsetu', label: 'JalSetu', start: 0.19, end: 0.29 },
+  { id: 'intelligence', label: 'Intelligence', start: 0.29, end: 0.4 },
+  { id: 'live', label: 'Live operations', start: 0.4, end: 0.5 },
+  { id: 'ground', label: 'On the ground', start: 0.5, end: 0.66 },
+  { id: 'disaster', label: 'Disaster response', start: 0.66, end: 0.76 },
+  { id: 'network', label: 'The network', start: 0.76, end: 0.85 },
+  { id: 'impact', label: 'Impact', start: 0.85, end: 0.93 },
   { id: 'return', label: 'Return', start: 0.93, end: 1 },
 ];
+
+/** The descent to the ground is inserted into the map story: during it the map timeline holds still. `base` maps
+ *  page progress onto the map timeline every other phase and camera key was tuned on. */
+const NEW = [0, 0.09, 0.19, 0.29, 0.4, 0.5, 0.66, 0.76, 0.85, 0.93, 1];
+const OLD = [0, 0.1, 0.22, 0.34, 0.48, 0.62, 0.62, 0.74, 0.84, 0.93, 1];
+export function base(p: number) {
+  if (p <= 0) return 0;
+  for (let i = 1; i < NEW.length; i++) if (p <= NEW[i]) return OLD[i - 1] + ((p - NEW[i - 1]) / (NEW[i] - NEW[i - 1])) * (OLD[i] - OLD[i - 1]);
+  return 1;
+}
+/** Ground chapter timing (page progress): descend through the clouds, drone over the real ground, the tanker arrives,
+ *  then climb back out to the exact map view the descent started from. */
+export const G = { start: 0.5, drone: 0.555, hold: 0.615, end: 0.66 };
+
+/** Written by the world every frame, read by the page's type layer. */
+export const groundState = { arrived: false, stopped: false, delivering: false };
 
 /** Shared, mutable story clock. `target` follows the scrollbar; `p` eases toward it in the render loop. */
 export const clock = { target: 0, p: 0, v: 0, pointerX: 0, pointerY: 0, reduce: false };
@@ -43,12 +60,20 @@ export const band = (p: number, a: number, b: number, c: number, d: number) => M
 export interface Phases {
   chaos: number; sweep: number; places: number; routes: number; spikes: number; focus: number;
   tanker: number; ops: number; disaster: number; national: number; districts: number; calm: number;
-  /** cloud banks: only while the camera dives into Maharashtra and climbs back out to India */
+  /** cinema bars: while the camera dives into Maharashtra and climbs back out to India */
   clouds: number;
+  /** ground chapter: 0..1 progress of the descent, the tanker's drive, the climb; flight = letterbox weight */
+  descend: number; drive: number; ascend: number; inGround: number; flight: number;
 }
 
-export function phases(p: number): Phases {
+export function phases(pp: number): Phases {
+  const p = base(pp);
   return {
+    descend: smooth((pp - G.start) / (G.drone - G.start)),
+    drive: clamp01((pp - 0.528) / (0.605 - 0.528)),
+    ascend: smooth((pp - G.hold) / (G.end - G.hold)),
+    inGround: pp > G.start && pp < G.end ? 1 : 0,
+    flight: Math.max(band(pp, G.start, 0.512, 0.54, 0.556), band(pp, 0.618, 0.632, 0.648, G.end)),
     chaos: band(p, 0.11, 0.2, 0.235, 0.31),
     sweep: clamp01((p - 0.235) / (0.33 - 0.235)),
     places: 0.5 + 0.5 * ramp(p, 0.07, 0.15),

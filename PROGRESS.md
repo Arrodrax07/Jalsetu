@@ -112,6 +112,14 @@ Last updated: 2026-10-03.
   lens fringing, grade, vignette, grain; switches itself off if the device can't hold ~45 fps. Story clock is a
   critically damped spring. Letterbox bars during the flights, 3D page-turn on headlines, pointer-tilting 3D cards
   (Framer Motion springs), spring-flipped impact slabs, extruded 3D wordmark, scroll hint, error boundary -> static map.
+- Descent chapter "On the ground" (06): the camera plunges from the map through raymarched cumulus (3D noise, real
+  1.8-3.3 km altitude, sun-lit, casting shadows on the ground) onto real terrain near Beed: elevation (Mapzen/SRTM) +
+  Sentinel-2 cloudless 2016 imagery (EOX, CC BY 4.0), fetched by `backend/scripts/fetch_landing_ground.py` into
+  `public/landing/{ground,height}-{mid,hi}.*`. Trees placed where the image is green, cracked dry earth up close.
+  Illustration (labelled): a tanker drives in on a dirt road to a village water point where people wait with pots;
+  its label steps En route -> Arrived (150 m geofence ring) -> Delivering. Then it climbs back to the exact map view.
+  Map timeline remapped around the new chapter (`story.base`); dynamic resolution holds the frame rate.
+  Dev aid: `?debug=noclouds,nofilm,noground,nosky,noshadow,fixeddpr`.
 
 ## State (2026-10-04 midday): Phase 2 (frontend transformation) complete
 

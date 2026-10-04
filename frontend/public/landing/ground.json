@@ -1,0 +1,28 @@
+{
+ "centre": [
+  75.7426,
+  18.9499
+ ],
+ "imagery": "Sentinel-2 cloudless 2016 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016), CC BY 4.0",
+ "elevation": "Mapzen terrain tiles (SRTM and other public sources), via AWS Open Data",
+ "mid": {
+  "bounds": {
+   "w": 75.498046875,
+   "e": 76.025390625,
+   "s": 18.729501999072138,
+   "n": 19.22817673776625
+  },
+  "heightMin": 250.0,
+  "heightMax": 808.0
+ },
+ "hi": {
+  "bounds": {
+   "w": 75.673828125,
+   "e": 75.8056640625,
+   "s": 18.89589255941503,
+   "n": 19.020577110966805
+  },
+  "heightMin": 486.0,
+  "heightMax": 747.0
+ }
+}
