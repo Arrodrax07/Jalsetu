@@ -90,45 +90,56 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## State at pause (2026-10-04 ~01:30 IST): Phase 2 (frontend transformation) in progress
+## State (2026-10-04 midday): Phase 2 (frontend transformation) complete
 
-Phase 1 is complete (see Done). Phase 2 work so far (commits 9b2cf7e, 643d156, 820aaeb + final pause commit):
+Phase 1 is complete (see Done). Real phone GPS: accepted by the user on the 2026-10-03 run.
+
+Phase 2 (commits 9b2cf7e, 643d156, 820aaeb, 5a143c2, cb92f53, 801bf7a, d6ddbb3, 23e9a88):
 - Design system: tokens in `src/index.css` (cool neutrals, one water accent, full dark theme via `html[data-theme]`,
   palette shades remapped in `tailwind.config.js`), `src/theme.ts` (light/dark/auto, switch in nav + command palette),
   fonts self-hosted (Geist, Geist Mono, Mona Sans with width axis + italic, Mukta for Devanagari), icons = Phosphor via
-  `src/components/icons.tsx` (lucide no longer imported; package still in package.json), motion tokens `src/motion.ts`.
+  `src/components/icons.tsx` (`lucide-react` removed), motion tokens `src/motion.ts`.
 - UI kit `src/components/ui.tsx`: provenance/trust marks (`Provenance`, `ProvMark`: solid=observed, outline/dashed=derived,
   hatched=reference/synthetic, hollow=stale, struck=offline), metrics, drawers with focus trap, dialogs, tabs with keys.
-- Shell: collapsible nav rail, mobile nav sheet, skip link, theme switch, realtime indicator.
+- Shell: nav rail (auto-collapses to icons below 1440 px; expanding there lasts for the session), mobile nav sheet,
+  skip link, theme switch, realtime indicator.
 - Map `components/map/OpsMap.tsx`: theme basemaps, clustered places, HTML vehicle markers that glide between real fixes
   and change SHAPE for live/stale/offline, route draw-on, district drill-down, overlay-aware camera padding.
-- Command centre: map-first, glass situation strip + docked intelligence rail with inline detail views.
+- Command centre: map-first with floating situation strip + intelligence rail from 1280 px; stacked layout below
+  (KPIs in a 2/3-column grid, no sideways scroll).
 - Live operations: map-first, trips grouped by GPS freshness, FreshnessMeter, TripProgress, follow mode (`components/live.tsx`).
 - `components/DataTable.tsx` (search, filters, sort, paging, expand, keyboard) on requests, complaints, communities,
-  trips, verification, fleet, alerts, allocation. Charts theme-aware (`components/charts/theme.ts` + CSS).
+  trips, verification, fleet, alerts, allocation; columns hide by breakpoint on phones. Charts theme-aware.
 - Driver app: mobile-first task card + thumb dock (geofence approach bar), status pills, menu sheet, finish state.
 - Citizen portal: own register (`.citizen` scoped tokens, icon tiles). Heavy screens lazy-loaded (portal bundle ~226 KB gz).
-- Verified with Playwright: light + dark command centre, live ops with an emulated moving phone on the QA DB copy
-  (live -> stale transition), driver flow, citizen portal (EN/MR, dark), no console errors.
+- Reports: grouped export list; each row names the columns the CSV really contains; download state.
+- Analytics: litres + trips per day, "Telemetry checks" (all six anomaly kinds, zeros shown), forecast panel.
+- Impact: metric rows stack on phones. Login: Maharashtra outline is a watermark behind the headline.
+- Responsive pass verified with Playwright at 1440, 1280, 820 and 390 px (no horizontal overflow, no page errors).
+- Final light/dark desktop/mobile review: done by the user (2026-10-04).
 
-Running at pause (may be gone tomorrow): API :8000, prod preview :4173, dev :5180 (-> :8000), QA API :8010 on a DB copy
-in the session scratchpad + QA dev :5181, Cloudflare tunnel. Restart with `start.ps1` (or `-Dev`).
+State-wide forecast fix (23e9a88): `/analytics/forecast` and plan computation ran the model and fetched weather once
+per place, so with 1,263 places the forecast never returned. Now places share ~28 km weather cells fetched in batched
+Open-Meteo requests (50 cells each; a failed batch falls back to climatology for its cells only, retried after
+10 min), the model predicts everything in one pass (`DemandForecaster.forecast_groups`, identical numbers, tested in
+`tests/test_forecast_batch.py`), the weather cache is warmed at API start, and the endpoint memoises for 5 min.
+Production build: forecast request ~0.2 s.
+
+Restart with `start.ps1` (or `-Dev`).
 
 ## Next steps (resume here)
-1. Finish the responsive pass: tablet (820 px) and phone (390 px) screenshots of overview, requests, live, impact were
-   being taken when paused; fix any overflow / layout issues found.
-2. Remaining guideline items: remove unused imports (lint warnings), `lucide-react` from package.json, Intro/Login page
-   polish to the new type system, Landing copy check, Schedules/Admin/Reports/Analytics visual pass.
-3. Final Playwright review of every page in light + dark, desktop + mobile; fix anything generic or inconsistent.
-4. Update README/PROGRESS, rebuild prod (`npm run build`), commit.
+1. Demo housekeeping below (changes the live database; do it together with the user).
+2. Optional: real-phone arrival + delivery run before the presentation (START and live tracking were accepted
+   on a real phone; arrival/delivery were exercised with emulated GPS on a DB copy).
 
 ## Housekeeping before any demo
 - Allocation page shows an old approved plan for the archived Mumbai sample communities: press "Compute a plan".
 - All 8 tankers are on approved auto-dispatch trips (TR-3003..3010), including demo tanker T-2045 (Mumbai): cancel that trip before the phone demo.
-- Physical phone GPS acceptance test still not done.
 - User's OS has "reduce motion" on (Windows Animation effects off): app tones motion down; turn it on to show full motion.
 
 ## Known issues
 - SACHET polygon endpoint rate-limits (HTTP 403) after bursts; ingestion pauses and retries, shown as DEGRADED.
-- Lint: only warnings (set-state-in-effect, fast-refresh exports).
+- Lint: only warnings (set-state-in-effect, fast-refresh exports); jsx-key warnings in the map legend are false positives (tuple arrays).
+- Dev server only: React StrictMode runs effects twice, so pages fire duplicate requests that queue on the single
+  API process and look slow. Judge load times on the production build (`npm run build`, `vite preview`).
 - Browser GPS stops when the phone screen is off; driver must keep the page open (wake lock requested).

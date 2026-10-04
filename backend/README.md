@@ -91,7 +91,7 @@ Analytics endpoints take `origin=all|real`.
 | Tracking | `POST /tracking/telemetry`, `GET /tracking/vehicles`, history, ETA, anomalies |
 | Intelligence | `GET /disasters`, impact, recommendations, `GET /crisis/signals`, `POST /crisis/refresh` |
 | Schedules | `GET/POST /schedules`, `PUT/DELETE /schedules/{id}`, `POST /supply-notices`, `/supply-notices/{id}/end` |
-| Analytics | `GET /analytics/dashboard`, `/activity`, `/operations`, `/forecast`, `/impact`, `/impact-replay` |
+| Analytics | `GET /analytics/dashboard`, `/activity`, `/operations`, `/forecast` (state total; `perPlace=true` adds per-place rows; memoised 5 min), `/impact`, `/impact-replay` |
 | Public (no login) | `GET /public/summary`, `/public/communities`, `/public/schedules`, `/public/supply/{id}`, `POST /public/complaints`, `GET /public/complaints/{code}` |
 | System | `GET /overview`, `/system/health`, `/notifications`, `/settings`, `/audit`, `/reports/{kind}.csv`, WebSocket `/ws?token=` |
 

@@ -18,10 +18,10 @@ models; they live in `backend/app/services/`.
 ml/
 ├── jalsetu_ml/
 │   ├── config.py             paths, label spaces, Open-Meteo endpoints
-│   ├── weather.py            Open-Meteo archive/forecast client (+ climatology fallback)
+│   ├── weather.py            Open-Meteo archive/forecast client, batched multi-location forecast (+ climatology fallback)
 │   ├── complaint_corpus.py   multilingual bootstrap corpus with train/holdout phrase split
 │   ├── complaints.py         triage model: train / evaluate / predict, duplicate detection
-│   ├── demand.py             demand features, documented simulator, train / evaluate / forecast
+│   ├── demand.py             demand features, documented simulator, train / evaluate / forecast (forecast_groups: many places in one predict)
 │   └── train.py              CLI
 ├── tests/test_models.py      quality gates (golden set, direction checks, baselines)
 ├── artifacts/                trained models + metrics.json (models are git-ignored)

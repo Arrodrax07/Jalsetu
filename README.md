@@ -33,7 +33,7 @@ their status: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). Model card: [ml/MODE
 | Multilingual, voice, low-connectivity access | Citizen portal and driver app in English / मराठी / हिंदी; browser speech recognition (mr-IN, hi-IN, en-IN); installable PWA; complaints queue offline and send on reconnect |
 | **Public tap schedules / supply information** | Operators publish tap timings and supply notices; public `/water` page shows next water, notices, tanker status, estimated coverage |
 | Measurable impact | `Impact` page: first come first served vs JalSetu replayed on the same requests, fleet and limits: unmet need, wait, Jain fairness, vulnerable places, km, fuel, repeat requests |
-| Analytics | Trips, deliveries, response times, anomalies, demand forecast (with real/synthetic toggle) |
+| Analytics | Trips and litres per day, response times, telemetry checks (every GPS anomaly type, zeros included), state-wide 7-day demand forecast for all 1,263 places on live weather (real/synthetic toggle) |
 
 ## Layout
 
@@ -106,6 +106,8 @@ cd frontend; npm run build; npm run lint
 * Vulnerability is a settlement-type baseline until SECC/NFHS data is attached; piped supply is an estimate.
 * Complaint and demand models are bootstrapped (generated multilingual corpus; simulated demand response
   on real weather) and retrain on officer-verified labels and metered observations. See the model card.
+* The state-wide demand forecast uses weather per ~28 km cell (0.25°), the resolution of daily forecast models. If
+  Open-Meteo is unreachable, the affected cells use climatology for 10 minutes and the page names the weather source.
 * Browser speech recognition is provided by the browser vendor and needs a connection; offline, residents type.
 * Phone GPS stops when the screen is off (the driver app requests a wake lock).
 * The Docker / PostgreSQL stack is defined and validated (`docker compose config`) but has not been run on this
