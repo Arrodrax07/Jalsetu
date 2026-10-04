@@ -90,6 +90,20 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
+## IN PROGRESS (2026-10-04 afternoon): landing "Google Earth" pass — resume here
+User brief: one continuous scroll-driven shot INDIA -> region -> city -> street -> people at a water tanker -> back up to
+India above the clouds; photoreal (Google Earth 3D feel, not stylised), and SCROLL SMOOTHNESS IS PRIORITY #1.
+Plan, in order (tick as done, commit after each):
+1. [ ] Scroll: remove the custom wheel hijack (double smoothing with trackpads), drive the story clock with one
+       critically damped spring + velocity cap so big jumps fly instead of snap; read scroll in rAF. (story.ts stepClock,
+       Landing.tsx wheel effect)
+2. [ ] Frame rate: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
+       every frame at every altitude); measure per chapter with `?debug=` flags on the prod build (scratchpad jank.js).
+3. [ ] Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
+       Google attribution) vs. real licensed footage/photo of a tanker queue blended at the end of the descent. Ask.
+4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
+5. [ ] Aggressive scroll tests (wheel, fast jumps, scrollbar drag, touch) in Playwright; fix jank; commit; update docs.
+
 ## Landing page: one continuous 3D world (2026-10-04)
 - `/` and `/welcome`: scroll drives one WebGL scene (`components/landing/World.tsx`, React Three Fiber, no new deps)
   through nine chapters (`landing/story.ts`: camera keys + phase values); DOM type and world-anchored labels follow the
