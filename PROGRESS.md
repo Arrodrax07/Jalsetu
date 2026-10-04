@@ -100,8 +100,12 @@ Last updated: 2026-10-03.
   the page: supply arcs/flow particles, the tanker run, national arcs.
 - Quality tiers (fewer particles, lower DPR on phones/weak devices), reduced motion (direct camera settles, letters
   pre-formed, no drift), static SVG fallback without WebGL, screen-reader copy of every chapter, keyboard chapter rail.
-- Verified with Playwright at 1440/820/390 px + reduced motion + no-WebGL; prod build at 4x CPU throttle: desktop
-  ~164 fps, phone 65-90 fps in the heaviest chapters.
+- Daylight version: India as a white relief (Maharashtra raised) on a pale sea with a graticule, sun + soft shadows that
+  follow the camera, haze, cloud banks only during the dive into Maharashtra and the climb back out, dust for depth;
+  flight feel (speed widens the lens, sideways speed banks the camera, hand-held drift), inertial mouse-wheel scrolling,
+  giant drifting chapter numerals. Atmosphere is decoration, not data.
+- Verified with Playwright at 1440/820/390 px + reduced motion + no-WebGL. Prod build: ~165 fps unthrottled; at 4x CPU
+  throttle ~164 fps when settled, 45-60 fps while the camera is moving.
 
 ## State (2026-10-04 midday): Phase 2 (frontend transformation) complete
 

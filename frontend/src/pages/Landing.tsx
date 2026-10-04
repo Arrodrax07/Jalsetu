@@ -56,16 +56,16 @@ const Layer: React.FC<{ ch: number; a?: number; b?: number; className?: string; 
   );
 
 const Eyebrow: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <p className={cx('font-mono text-[11px] uppercase tracking-[0.22em] text-[#7fa9b8]', className)}>{children}</p>
+  <p className={cx('font-mono text-[11px] uppercase tracking-[0.22em] text-[#3d7486]', className)}>{children}</p>
 );
 const Illustration: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-[3px] border border-dashed border-[#7fa9b8]/50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#9db8c2]">
-    Illustration{children ? <span className="normal-case tracking-normal text-[#7f97a1]">· {children}</span> : null}
+  <span className="inline-flex items-center gap-1.5 rounded-[3px] border border-dashed border-[#3d7486]/50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#2d6c7f]">
+    Illustration{children ? <span className="normal-case tracking-normal text-[#6a7f88]">· {children}</span> : null}
   </span>
 );
 const Live: React.FC<{ at?: string }> = ({ at }) => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8fd3a8]">
-    <span className="h-1.5 w-1.5 rounded-full bg-[#5fcf8a]" />Live data{at ? <span className="text-[#7f97a1]"> · {at} IST</span> : null}
+  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#1f7a45]">
+    <span className="h-1.5 w-1.5 rounded-full bg-[#22a35a]" />Live data{at ? <span className="text-[#6a7f88]"> · {at} IST</span> : null}
   </span>
 );
 
@@ -94,6 +94,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const tip = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const truckText = useRef<HTMLSpanElement>(null);
+  const numeral = useRef<HTMLSpanElement>(null);
   const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
 
   useEffect(() => {
@@ -105,7 +106,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   useEffect(() => {
     const prev = [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background];
     document.documentElement.style.overflowY = 'auto'; document.body.style.overflowY = 'visible';
-    document.documentElement.style.background = '#04080c';
+    document.documentElement.style.background = '#eaf1f3';
     clock.reduce = reduce;
     return () => { [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background] = prev; };
   }, [reduce]);
@@ -121,6 +122,30 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
     window.addEventListener('resize', onScroll);
     return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
   }, []);
+
+  // inertial wheel scrolling: mouse wheels move in steps, the journey should glide. Touch, keys and the scrollbar stay native.
+  useEffect(() => {
+    if (reduce || !window.matchMedia('(pointer: fine)').matches) return;
+    let target = window.scrollY, current = window.scrollY, raf = 0, ours = false;
+    const max = () => document.documentElement.scrollHeight - window.innerHeight;
+    const step = () => {
+      current += (target - current) * 0.085;
+      if (Math.abs(target - current) < 0.4) current = target;
+      ours = true; window.scrollTo(0, current);
+      raf = current === target ? 0 : requestAnimationFrame(step);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.defaultPrevented) return;
+      e.preventDefault();
+      const d = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaMode === 2 ? e.deltaY * window.innerHeight : e.deltaY;
+      target = Math.min(max(), Math.max(0, target + d));
+      if (!raf) { current = window.scrollY; raf = requestAnimationFrame(step); }
+    };
+    const onScroll = () => { if (ours) { ours = false; return; } if (!raf) target = current = window.scrollY; };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('wheel', onWheel); window.removeEventListener('scroll', onScroll); };
+  }, [reduce]);
 
   // one frame loop for all DOM layers (the WebGL world advances the clock; without it, this loop does)
   const worldDriving = gl && !failed;
@@ -157,13 +182,18 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         el.style.transform = `translate3d(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px, 0) rotate(${(r * k).toFixed(1)}deg)`;
       }
       if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
+      if (numeral.current) {
+        const c = CHAPTERS[chapterAt(p)], lp = (p - c.start) / (c.end - c.start);
+        numeral.current.style.transform = reduce ? 'none' : `translate3d(${((0.5 - lp) * 60).toFixed(1)}px, ${((0.5 - lp) * 160).toFixed(1)}px, 0)`;
+        numeral.current.style.opacity = (band(lp, 0, 0.18, 0.82, 1) * (p > 0.84 ? 0 : 1)).toFixed(3);
+      }
       if (truckText.current) {
         const t = phases(p).tanker;
         const label = t < 0.08 ? 'Accepted · waiting for a fresh GPS fix' : t < 0.82 ? 'En route · live GPS' : t < 0.95 ? 'Arrived · inside the geofence' : 'Delivered · proof of delivery recorded';
         if (truckText.current.textContent !== label) truckText.current.textContent = label;
       }
       const ch = chapterAt(p);
-      if (ch !== lastCh) { lastCh = ch; setChapter(ch); }
+      if (ch !== lastCh) { lastCh = ch; setChapter(ch); if (numeral.current) numeral.current.textContent = String(ch + 1).padStart(2, '0'); }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -194,9 +224,13 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
   return (
     <EnterContext.Provider value={onEnter}>
-      <div className="landing relative bg-[#04080c] text-[#e6eef1] antialiased selection:bg-[#6cc3d5]/30">
+      <div className="landing relative bg-[#eaf1f3] text-[#13222b] antialiased selection:bg-[#0a7f99]/20">
         {/* ------------------------------------------------ stage (fixed) */}
         <div ref={stage} className="fixed inset-0 overflow-hidden" aria-hidden>
+          <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-end overflow-hidden pr-[3vw]">
+            <span ref={numeral} className="select-none font-display text-[46vw] font-semibold leading-none tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgba(19,34,43,0.07)] will-change-transform md:text-[34vw]">01</span>
+          </div>
           {worldDriving && ready && (
             <Suspense fallback={null}>
               <div className="absolute inset-0 animate-[landingIn_1.6s_ease-out_both]">
@@ -206,21 +240,22 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           )}
           {(!worldDriving || failed) && <StaticMap s={s} geo={geo} />}
           {/* vignette and horizon haze keep type readable over the world */}
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_40%,rgba(2,5,8,0.75)_100%)]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[38vh] bg-gradient-to-t from-[#04080c] via-[#04080c]/70 to-transparent md:h-[30vh]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/90 to-transparent" />
 
           {/* readability scrims for the chapters that sit over a busy scene */}
-          {[3, 4, 5].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#04080c]/95 from-30% via-[#04080c]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#04080c]/90 md:from-0% md:via-[#04080c]/55 md:via-50% md:to-transparent md:to-100%" />)}
-          <Layer ch={7} a={0} b={1} depth={0} className="inset-0 bg-[#04080c]/60" />
+          {[3, 4, 5].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
+          <Layer ch={7} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/70 backdrop-blur-[2px]" />
 
           {/* Chapter 1: scale */}
           <Layer ch={0} a={0} b={0.62} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">
             <Eyebrow className="mb-6">Maharashtra · {s ? `${num(s.places)} towns and villages` : 'loading the country'}</Eyebrow>
-            <h1 className={cx(H, 'text-[13vw] leading-[0.9] md:text-[5.6vw]')}>Water moves.<br /><span className="text-[#6cc3d5]">So should intelligence.</span></h1>
+            <h1 className={cx(H, 'text-[13vw] leading-[0.9] md:text-[5.6vw]')}>Water moves.<br /><span className="text-[#0a7f99]">So should intelligence.</span></h1>
           </Layer>
           <Layer ch={0} a={0.55} b={1} depth={1.4} className="inset-x-5 bottom-[16vh] md:left-[8vw] md:right-auto">
             <p className={cx(H, 'text-[18vw] leading-none md:text-[9vw]')}>JalSetu</p>
-            <p className="mt-3 max-w-[34ch] text-[17px] leading-snug text-[#b7c7cd] md:text-[19px]">Intelligent water logistics and emergency response, live across water-stressed Maharashtra.</p>
+            <p className="mt-3 max-w-[34ch] text-[17px] leading-snug text-[#3f525b] md:text-[19px]">Intelligent water logistics and emergency response, live across water-stressed Maharashtra.</p>
           </Layer>
 
           {/* Chapter 2: the problem */}
@@ -231,13 +266,13 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <p className={cx(H, 'text-[12vw] leading-[0.92] md:text-[6vw]')}>Emergencies don’t<br />follow schedules.</p>
           </Layer>
           <Layer ch={1} a={0.6} b={1} className="inset-x-5 top-[22vh] md:left-[8vw] md:right-auto">
-            <p className="text-[19px] text-[#9fb2b9] md:text-[24px]">The challenge isn’t only water.</p>
-            <p className={cx(H, 'mt-2 text-[14vw] leading-none text-[#e3a26a] md:text-[7vw]')}>It’s coordination.</p>
+            <p className="text-[19px] text-[#4d626b] md:text-[24px]">The challenge isn’t only water.</p>
+            <p className={cx(H, 'mt-2 text-[14vw] leading-none text-[#c0621c] md:text-[7vw]')}>It’s coordination.</p>
           </Layer>
           {s && (
             <Layer ch={1} a={0.1} b={1} depth={0.3} className="bottom-[9vh] left-5 md:bottom-[10vh] md:left-[8vw]">
               <Live at={at} />
-              <p className="mt-2 font-mono text-[13px] text-[#c9d6da]"><span className="text-[22px] text-[#e3a26a]">{num(s.inCrisis)}</span> places under water stress · <span className="text-[#df5a3b]">{num(s.critical)} critical</span></p>
+              <p className="mt-2 font-mono text-[13px] text-[#23343d]"><span className="text-[22px] text-[#c0621c]">{num(s.inCrisis)}</span> places under water stress · <span className="text-[#c23b1b]">{num(s.critical)} critical</span></p>
             </Layer>
           )}
 
@@ -247,25 +282,25 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           </Layer>
           <Layer ch={2} a={0.45} b={1} className="inset-x-5 bottom-[12vh] text-center">
             <p className={cx(H, 'text-[7vw] leading-tight md:text-[2.8vw]')}>One picture of need. One plan for every tanker.</p>
-            <p className="mx-auto mt-3 max-w-[56ch] text-[14px] text-[#9fb2b9] md:text-[16px]">Priority from live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.</p>
+            <p className="mx-auto mt-3 max-w-[56ch] text-[14px] text-[#4d626b] md:text-[16px]">Priority from live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.</p>
             <div className="mt-4 flex justify-center"><Illustration>supply arcs</Illustration></div>
           </Layer>
 
           {/* Chapter 4: intelligence */}
           <Layer ch={3} a={0.05} b={0.95} className="left-5 top-[18vh] max-w-[90vw] md:left-[6vw] md:max-w-[28vw]">
             <Eyebrow className="mb-4">04 · Intelligence</Eyebrow>
-            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every place, scored.<br /><span className="text-[#6cc3d5]">And explained.</span></p>
-            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.</p>
+            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every place, scored.<br /><span className="text-[#0a7f99]">And explained.</span></p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.</p>
           </Layer>
           <div ref={el => { anchors.current.focus = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
-            <div className="w-max translate-y-10 -translate-x-1/2 border-t border-[#6cc3d5] bg-[#04080c]/85 px-3 py-2 backdrop-blur-sm sm:w-auto sm:-translate-y-1/2 sm:translate-x-6 sm:border-l sm:border-t-0 sm:pl-3 sm:pr-4">
+            <div className="w-max translate-y-10 -translate-x-1/2 border-t border-[#0a7f99] bg-white/85 px-3 py-2 shadow-[0_20px_50px_-24px_rgba(19,34,43,0.45)] backdrop-blur-md sm:w-auto sm:-translate-y-1/2 sm:translate-x-6 sm:border-l sm:border-t-0 sm:pl-3 sm:pr-4">
               <p className={cx(H, 'text-[22px] leading-none')}>{focus?.focusName ?? 'Highest-crisis place'}</p>
-              {focus?.focusDistrict && <p className="mt-1 text-[12px] text-[#9fb2b9]">{districtName(focus.focusDistrict)} district</p>}
+              {focus?.focusDistrict && <p className="mt-1 text-[12px] text-[#4d626b]">{districtName(focus.focusDistrict)} district</p>}
               <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 font-mono text-[11px]">
-                <dt className="text-[#7f97a1]">Crisis score</dt><dd className="text-[#df5a3b]">{focus?.focusCrisis ?? '—'}/100</dd>
-                <dt className="text-[#7f97a1]">Population</dt><dd>{focus ? num(focus.focusPop) : '—'}</dd>
+                <dt className="text-[#6a7f88]">Crisis score</dt><dd className="text-[#c23b1b]">{focus?.focusCrisis ?? '—'}/100</dd>
+                <dt className="text-[#6a7f88]">Population</dt><dd>{focus ? num(focus.focusPop) : '—'}</dd>
                 {topDeficit && focus?.focusDistrict && plain(topDeficit.district) === plain(focus.focusDistrict) && (
-                  <><dt className="text-[#7f97a1]">Monsoon rain</dt><dd className="text-[#e3a26a]">{topDeficit.deviation}% vs 10-yr</dd></>
+                  <><dt className="text-[#6a7f88]">Monsoon rain</dt><dd className="text-[#c0621c]">{topDeficit.deviation}% vs 10-yr</dd></>
                 )}
               </dl>
               <div className="mt-2"><Live at={at} /></div>
@@ -276,34 +311,34 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           <Layer ch={4} a={0.04} b={0.96} className="left-5 top-[18vh] max-w-[90vw] md:left-[6vw] md:max-w-[30vw]">
             <Eyebrow className="mb-4">05 · Live operations</Eyebrow>
             <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every tanker,<br />on real GPS.</p>
-            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">The driver’s phone is the tracker. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.</p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">The driver’s phone is the tracker. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.</p>
             <div className="mt-4"><Illustration>the tracking workflow, not live telemetry</Illustration></div>
           </Layer>
           <div ref={el => { anchors.current.truck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
-            <div className="-translate-x-1/2 -translate-y-[calc(100%+18px)] whitespace-nowrap bg-[#04080c]/85 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm">
-              <span className="mr-2 text-[#6cc3d5]">●</span><span ref={truckText}>Accepted</span>
+            <div className="-translate-x-1/2 -translate-y-[calc(100%+18px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
+              <span className="mr-2 text-[#0a7f99]">●</span><span ref={truckText}>Accepted</span>
             </div>
           </div>
 
           {/* Chapter 6: disaster response */}
           <Layer ch={5} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
             <Eyebrow className="mb-4">06 · Disaster response</Eyebrow>
-            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>When the monsoon fails,<br /><span className="text-[#e3a26a]">the plan moves.</span></p>
-            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">Shaded districts: monsoon rainfall far below their own 10-year mean (Open-Meteo ERA5). Official NDMA alerts and news re-rank every place, and dispatch follows the new priorities.</p>
+            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>When the monsoon fails,<br /><span className="text-[#c0621c]">the plan moves.</span></p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">Shaded districts: monsoon rainfall far below their own 10-year mean (Open-Meteo ERA5). Official NDMA alerts and news re-rank every place, and dispatch follows the new priorities.</p>
             <div className="mt-4"><Live at={at} /></div>
           </Layer>
           {s?.rainfall.slice(0, 3).map((r, i) => (
             <div key={r.district} ref={el => { anchors.current[`d${i}`] = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
-              <div className="-translate-x-1/2 -translate-y-1/2 text-center">
-                <p className="font-mono text-[18px] text-[#f0b483] md:text-[22px]">{r.deviation}%</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-[#d9c2b2]">{districtName(r.district)}</p>
+              <div className="-translate-x-1/2 -translate-y-1/2 rounded-md bg-white/75 px-2 py-1 text-center shadow-[0_10px_30px_-16px_rgba(19,34,43,0.5)] backdrop-blur-sm">
+                <p className="font-mono text-[18px] text-[#b8531a] md:text-[22px]">{r.deviation}%</p>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[#7a4a2e]">{districtName(r.district)}</p>
               </div>
             </div>
           ))}
 
           {/* Chapter 7: the network */}
           <Layer ch={6} a={0.05} b={0.95} className="inset-x-5 top-[16vh] text-center">
-            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[4.6vw]')}>{s ? num(s.places) : '1,263'} towns and villages today.<br /><span className="text-[#6cc3d5]">Built for every state.</span></p>
+            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[4.6vw]')}>{s ? num(s.places) : '1,263'} towns and villages today.<br /><span className="text-[#0a7f99]">Built for every state.</span></p>
             <div className="mt-5 flex justify-center"><Illustration>national arcs show the design, not current coverage</Illustration></div>
           </Layer>
 
@@ -320,10 +355,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
                   [num(s.newsReports), 'news reports read', 'Marathi + English, unverified until confirmed'],
                   [`${s.tankers} / ${s.depots}`, 'tankers / depots on real GPS', 'depots on real water sites'],
                 ].map(([v, l, n]) => (
-                  <div key={l} className="border-t border-[#2a3d48] pt-3">
-                    <dt className="text-[12px] text-[#9fb2b9] md:text-[13px]">{l}</dt>
+                  <div key={l} className="border-t border-[#c4d3d9] pt-3">
+                    <dt className="text-[12px] text-[#4d626b] md:text-[13px]">{l}</dt>
                     <dd className={cx(H, 'mt-1 text-[11vw] leading-none md:text-[4.6vw]')}>{v}</dd>
-                    <dd className="mt-2 font-mono text-[10.5px] text-[#6f8790]">{n}</dd>
+                    <dd className="mt-2 font-mono text-[10.5px] text-[#6a7f88]">{n}</dd>
                   </div>
                 ))}
               </dl>
@@ -332,16 +367,16 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
           {/* Chapter 9 (title only; the call to action is real page content below) */}
           <Layer ch={8} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
-            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#6cc3d5]">to intelligent response.</span></p>
+            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#0a7f99]">to intelligent response.</span></p>
           </Layer>
 
           {/* hover card for real places */}
           <div ref={tip} className="pointer-events-none absolute left-0 top-0 z-10 opacity-0 transition-opacity duration-150">
-            <div className="min-w-[180px] border border-[#2a3d48] bg-[#04080c]/90 px-3 py-2 font-mono text-[11px] backdrop-blur">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[#7fa9b8]">Place · live</p>
-              <p className="flex justify-between gap-4"><span className="text-[#7f97a1]">Crisis</span><span data-k="crisis" /></p>
-              <p className="flex justify-between gap-4"><span className="text-[#7f97a1]">Population</span><span data-k="pop" /></p>
-              <p className="mt-1 text-[#6f8790]" data-k="ll" />
+            <div className="min-w-[180px] rounded-md border border-[#c4d3d9] bg-white/90 px-3 py-2 font-mono text-[11px] shadow-[0_16px_40px_-20px_rgba(19,34,43,0.5)] backdrop-blur">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[#3d7486]">Place · live</p>
+              <p className="flex justify-between gap-4"><span className="text-[#6a7f88]">Crisis</span><span data-k="crisis" /></p>
+              <p className="flex justify-between gap-4"><span className="text-[#6a7f88]">Population</span><span data-k="pop" /></p>
+              <p className="mt-1 text-[#6a7f88]" data-k="ll" />
             </div>
           </div>
         </div>
@@ -349,21 +384,21 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         {/* ------------------------------------------------ chrome */}
         <header className="fixed inset-x-0 top-0 z-30">
           <div className="flex h-16 items-center justify-between px-5 md:px-8">
-            <a href="/welcome" className="flex items-center gap-2.5 text-[#e6eef1]" aria-label="JalSetu home">
-              <Mark className="h-7 w-7 text-[#6cc3d5]" /><span className={cx(H, 'text-[22px] leading-none')}>JalSetu</span>
+            <a href="/welcome" className="flex items-center gap-2.5 text-[#13222b]" aria-label="JalSetu home">
+              <Mark className="h-7 w-7 text-[#0a7f99]" /><span className={cx(H, 'text-[22px] leading-none')}>JalSetu</span>
             </a>
-            <p className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-[#7fa9b8] md:block" aria-live="polite">
+            <p className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-[#3d7486] md:block" aria-live="polite">
               {String(chapter + 1).padStart(2, '0')} / {String(CHAPTERS.length).padStart(2, '0')} · {CHAPTERS[chapter].label}
             </p>
             <nav aria-label="Primary" className="flex items-center gap-1 md:gap-5">
-              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#b7c7cd] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5] sm:inline">Report a problem</a>
-              <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#b7c7cd] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5] md:inline">Water schedule</a>
-              <EnterLink className="group flex items-center gap-1.5 rounded-full border border-[#6cc3d5]/50 px-3.5 py-1.5 text-[13px] font-medium text-[#e6eef1] transition-colors hover:bg-[#6cc3d5] hover:text-[#04080c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6cc3d5]">
+              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] sm:inline">Report a problem</a>
+              <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] md:inline">Water schedule</a>
+              <EnterLink className="group flex items-center gap-1.5 rounded-full border border-[#0a7f99]/50 px-3.5 py-1.5 text-[13px] font-medium text-[#13222b] transition-colors hover:bg-[#0a7f99] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0a7f99]">
                 Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
               </EnterLink>
             </nav>
           </div>
-          <div className="h-px bg-[#1a2a33]"><div ref={bar} className="h-px origin-left scale-x-0 bg-[#6cc3d5]" /></div>
+          <div className="h-px bg-[#cfdce1]"><div ref={bar} className="h-px origin-left scale-x-0 bg-[#0a7f99]" /></div>
         </header>
 
         <nav aria-label="Chapters" className="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
@@ -371,9 +406,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             {CHAPTERS.map((c, i) => (
               <li key={c.id}>
                 <button type="button" onClick={() => goTo(i)} aria-current={i === chapter ? 'step' : undefined}
-                  className="group flex w-full items-center justify-end gap-3 rounded py-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5]">
-                  <span className={cx('font-mono text-[10px] uppercase tracking-[0.16em] transition-opacity duration-300', i === chapter ? 'text-[#cfe3ea] opacity-100' : 'text-[#7f97a1] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100')}>{c.label}</span>
-                  <span className={cx('h-px transition-all duration-500', i === chapter ? 'w-8 bg-[#6cc3d5]' : 'w-4 bg-[#3a4f5a] group-hover:bg-[#7f97a1]')} />
+                  className="group flex w-full items-center justify-end gap-3 rounded py-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99]">
+                  <span className={cx('font-mono text-[10px] uppercase tracking-[0.16em] transition-opacity duration-300', i === chapter ? 'text-[#13222b] opacity-100' : 'text-[#6a7f88] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100')}>{c.label}</span>
+                  <span className={cx('h-px transition-all duration-500', i === chapter ? 'w-8 bg-[#0a7f99]' : 'w-4 bg-[#9fb3bb] group-hover:bg-[#6a7f88]')} />
                 </button>
               </li>
             ))}
@@ -393,19 +428,19 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <section id="return" aria-labelledby="return-title" className="absolute inset-x-0 bottom-0 flex h-[100svh] flex-col items-center justify-end px-5 pb-[10vh] text-center [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
               <h2 id="return-title" className="sr-only">From water movement to intelligent response</h2>
               <p className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')}>JalSetu</p>
-              <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#9fc9d6] md:text-[13px]">Connect · Coordinate · Respond</p>
+              <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#2d6c7f] md:text-[13px]">Connect · Coordinate · Respond</p>
               <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
-                <EnterLink className="group inline-flex items-center gap-2 rounded-full bg-[#6cc3d5] px-6 py-3 text-[15px] font-semibold text-[#04080c] transition-[background-color,transform] hover:bg-[#8fd6e4] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                <EnterLink className="group inline-flex items-center gap-2 rounded-full bg-[#0a7f99] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_18px_40px_-18px_rgba(10,127,153,0.8)] transition-[background-color,transform] hover:bg-[#0b6e85] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </EnterLink>
-                <a href="/report" className="inline-flex items-center gap-1.5 rounded-full border border-[#3a4f5a] px-5 py-3 text-[14px] text-[#d5e2e6] transition-colors hover:border-[#6cc3d5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                <a href="/report" className="inline-flex items-center gap-1.5 rounded-full border border-[#9fb3bb] px-5 py-3 text-[14px] text-[#23343d] transition-colors hover:border-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   Report a water problem <ArrowUpRight className="h-4 w-4" />
                 </a>
-                <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#9fb2b9] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#4d626b] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   When is water coming? <ArrowUpRight className="h-4 w-4" />
                 </a>
               </div>
-              <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#5f7680]">
+              <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
                 Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Supply arcs, the tanker run and national arcs are illustrations.
               </p>
@@ -437,7 +472,7 @@ const StaticMap: React.FC<{ s: PublicSummary | null; geo: GeoFile | null }> = ({
       {paths.map((d, i) => <polygon key={i} points={d} fill="none" stroke="#284050" strokeWidth={0.04} />)}
       {s?.points.map(([lng, lat, crisis], i) => {
         const [x, z] = project(lng, lat);
-        return <circle key={i} cx={x} cy={z} r={crisis >= 70 ? 0.07 : 0.045} fill={crisis >= 70 ? '#df5a3b' : crisis >= 40 ? '#d8953f' : '#2f7f95'} />;
+        return <circle key={i} cx={x} cy={z} r={crisis >= 70 ? 0.07 : 0.045} fill={crisis >= 70 ? '#c23b1b' : crisis >= 40 ? '#d8953f' : '#2f7f95'} />;
       })}
     </svg>
   );

@@ -1,11 +1,15 @@
 /**
  * The landing world: one WebGL scene whose state is a function of the story clock (story.ts).
  *
+ * A daylight diorama: India's states as a white relief on a pale sea, Maharashtra raised as a plateau, real sunlight and
+ * soft shadows, haze, cloud banks the camera flies through, and dust in the air for depth.
+ *
  * Real: place positions, crisis scores and populations (/api/public/summary), district rainfall deficits (ERA5, same
  * endpoint), state and district outlines (geoBoundaries, /landing/geo.json).
  * Illustrative (and labelled so on the page): supply arcs and flow particles, the tanker run, the national arcs.
+ * Atmosphere (clouds, dust, the current of light) is decoration and carries no data.
  *
- * Every moving thing is a shader uniform or a small per-frame matrix update; nothing here re-renders React on scroll.
+ * Every moving thing is a shader uniform or a small per-frame update; nothing here re-renders React on scroll.
  */
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -17,18 +21,28 @@ import { cameraKeys, clock, phases, sampleKeys, type Phases } from './story';
 export type Quality = 'high' | 'low';
 export type Anchors = Record<string, HTMLElement | null>;
 
+export const SKY = '#eaf1f3';
 const C = {
-  bg: new THREE.Color('#04080c'),
-  dot: new THREE.Color('#25394a'),
-  dotHome: new THREE.Color('#42687e'),
-  water: new THREE.Color('#6cc3d5'),
-  waterDeep: new THREE.Color('#2f7f95'),
-  amber: new THREE.Color('#d8953f'),
-  rust: new THREE.Color('#df5a3b'),
-  chaos: new THREE.Color('#8a5a48'),
-  line: new THREE.Color('#284050'),
-  lineHome: new THREE.Color('#7fb2c3'),
+  haze: new THREE.Color('#e4edf0'),
+  sea: new THREE.Color('#cbdbe1'),
+  grid: new THREE.Color('#b9cbd2'),
+  land: new THREE.Color('#fbfcfc'),
+  home: new THREE.Color('#ffffff'),
+  dot: new THREE.Color('#9db1bb'),
+  dotHome: new THREE.Color('#4f7c8e'),
+  water: new THREE.Color('#0590ad'),
+  waterDeep: new THREE.Color('#2b8aa3'),
+  quiet: new THREE.Color('#8fb0bc'),
+  amber: new THREE.Color('#dc8424'),
+  rust: new THREE.Color('#cc3f1d'),
+  chaos: new THREE.Color('#a3826f'),
+  line: new THREE.Color('#a9bdc6'),
+  lineHome: new THREE.Color('#1f5a6d'),
+  ink: new THREE.Color('#13222b'),
 };
+const HOME_TOP = 0;       // Maharashtra's plateau
+const OTHER_TOP = -0.07;  // every other state sits a little lower
+const SEA_Y = -0.32;
 
 const shared = { uTime: { value: 0 } };
 /** Pixels per world unit at distance 1 (viewport height / (2 tan(fov/2))); point sizes are set in world units. */
@@ -36,7 +50,7 @@ const scaleU = { value: 1000 };
 
 // ---------------------------------------------------------------------------- shaders
 const DISC = /* glsl */ `
-  float disc() { vec2 c = gl_PointCoord - 0.5; float d = dot(c, c); return smoothstep(0.25, 0.05, d); }
+  float disc() { vec2 c = gl_PointCoord - 0.5; float d = dot(c, c); return smoothstep(0.25, 0.12, d); }
 `;
 
 const terrainVS = /* glsl */ `
@@ -46,23 +60,21 @@ const terrainVS = /* glsl */ `
   uniform vec3 uDot, uDotHome, uWater;
   void main() {
     vec3 p = position;
-    float w = sin(p.x * 0.55 + uTime * 0.35 + aSeed * 2.0) * 0.5 + sin(p.z * 0.7 - uTime * 0.27) * 0.5;
-    p.y += w * 0.05 * (1.0 - uCalm * 0.6);
-    // the coordination sweep: a band of light that crosses the country west to east
     float sx = mix(-11.0, 18.0, uSweep);
     float band = uSweep > 0.0 && uSweep < 1.0 ? exp(-pow((p.x - sx) * 0.42, 2.0)) : 0.0;
-    // a slow current of light drifting south-east across the country (atmosphere, not data)
+    // a slow current of colour drifting south-east across the country (atmosphere, not data)
     float cur = pow(0.5 + 0.5 * sin(p.x * 0.42 - p.z * 0.31 - uTime * 0.55 + sin(p.z * 0.6 + uTime * 0.2) * 1.4), 6.0);
+    p.y += band * 0.05;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     float depth = -mv.z;
-    gl_PointSize = clamp(uPx * (0.05 + aSeed * 0.025) * uScale / depth * (1.0 + band * 0.15), 1.9 * uPx, 7.0 * uPx);
-    vC = mix(uDot, uDotHome, aHome * uHome) + uWater * (band * 0.3 + cur * 0.5 * (1.0 - uCalm * 0.5));
-    vC *= 1.0 + smoothstep(14.0, 36.0, depth) * 0.9; // far away the dots are small: lift them so the country reads
-    vA = (0.6 + 0.4 * aSeed) * smoothstep(120.0, 40.0, depth) * smoothstep(0.4, 2.0, depth);
+    gl_PointSize = clamp(uPx * (0.042 + aSeed * 0.02) * uScale / depth * (1.0 + band * 0.4), 1.4 * uPx, 6.0 * uPx);
+    vec3 base = mix(uDot, uDotHome, aHome * uHome);
+    vC = mix(base, uWater, clamp(band * 0.85 + cur * 0.55 * (1.0 - uCalm * 0.5), 0.0, 1.0));
+    vA = (0.55 + 0.45 * aSeed) * (0.75 + band * 0.25) * smoothstep(120.0, 40.0, depth) * smoothstep(0.4, 2.0, depth);
   }
 `;
-const terrainFS = /* glsl */ `
+const pointFS = /* glsl */ `
   varying float vA; varying vec3 vC;
   ${DISC}
   void main() { float a = disc() * vA; if (a < 0.02) discard; gl_FragColor = vec4(vC, a); }
@@ -76,23 +88,18 @@ const placesVS = /* glsl */ `
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    float size = 0.012 + log(max(aPop, 100.0)) * 0.0042 + aCrisis * 0.00022;
-    float flick = mix(1.0, 0.35 + 0.65 * step(0.5, fract(aSeed * 13.0 + uTime * (0.6 + aSeed))), uChaos * step(40.0, aCrisis));
-    gl_PointSize = clamp(uPx * size * uScale / -mv.z, 1.5, 9.0 * uPx);
+    float size = (0.012 + log(max(aPop, 100.0)) * 0.0042 + aCrisis * 0.00022) * (aCrisis >= 40.0 ? 1.0 : 0.7);
+    float flick = mix(1.0, 0.3 + 0.7 * step(0.5, fract(aSeed * 13.0 + uTime * (0.6 + aSeed))), uChaos * step(40.0, aCrisis));
+    gl_PointSize = clamp(uPx * size * uScale / -mv.z, 1.6 * uPx, 9.0 * uPx);
     vC = aCrisis >= 70.0 ? uRust : aCrisis >= 40.0 ? uAmber : uCool;
-    vA = uAlpha * flick * (aCrisis >= 40.0 ? 1.0 : 0.55) * smoothstep(95.0, 20.0, -mv.z);
+    vA = uAlpha * flick * (aCrisis >= 40.0 ? 0.95 : 0.42) * smoothstep(120.0, 20.0, -mv.z);
   }
-`;
-const placesFS = /* glsl */ `
-  varying float vA; varying vec3 vC;
-  ${DISC}
-  void main() { float a = disc() * vA; if (a < 0.02) discard; gl_FragColor = vec4(vC, a); }
 `;
 
 /** Flow particles travel along a quadratic arc A→B. With uChaos they wander, scatter and lose their colour. */
 const flowVS = /* glsl */ `
   uniform float uTime, uChaos, uAlpha, uPx, uDim, uScale, uHot;
-  uniform vec3 uWater, uChaosC, uFocus;
+  uniform vec3 uWater, uChaosC;
   attribute vec4 aAB; attribute vec4 aMeta; // ax az bx bz | lift seed speed hot
   varying float vA; varying vec3 vC;
   void main() {
@@ -101,22 +108,19 @@ const flowVS = /* glsl */ `
     vec3 M = (A + B) * 0.5 + vec3(0.0, aMeta.x, 0.0);
     vec3 ordered = mix(mix(A, M, t), mix(M, B, t), t);
     float s = aMeta.y * 31.0;
-    // chaos: scattered over the region, drifting, unrelated to where the water is needed
     vec3 wander = (A + B) * 0.5 + vec3(sin(s * 1.7) * 2.6 + sin(t * 4.1 + s) * 0.9 + sin(uTime * 0.35 + s) * 0.5,
       0.04 + abs(sin(t * 3.0 + s)) * 0.3, cos(s * 2.3) * 2.2 + cos(t * 3.3 + s * 1.3) * 0.9);
     vec3 p = mix(ordered, wander, uChaos);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = clamp(uPx * (0.016 + aMeta.z * 0.2) * uScale / -mv.z, 1.0, 4.5 * uPx);
+    gl_PointSize = clamp(uPx * (0.018 + aMeta.z * 0.22) * uScale / -mv.z, 1.2 * uPx, 5.0 * uPx);
     float ends = sin(3.14159 * t);
-    float hot = mix(1.0, aMeta.w > 0.5 ? 1.7 : 0.22, uHot);
+    float hot = mix(1.0, aMeta.w > 0.5 ? 1.5 : 0.18, uHot);
     vC = mix(uWater, uChaosC, uChaos);
-    vA = uAlpha * ends * hot * (1.0 - 0.82 * uDim) * mix(0.7, 0.4, uChaos) * smoothstep(110.0, 6.0, -mv.z);
+    vA = clamp(uAlpha * ends * hot * (1.0 - 0.85 * uDim) * mix(0.95, 0.55, uChaos), 0.0, 1.0) * smoothstep(120.0, 6.0, -mv.z);
   }
 `;
-const flowFS = placesFS;
 
-/** Arc lines: fragment shader breaks them apart while the network is in chaos. */
 const arcVS = /* glsl */ `
   attribute float aSeg, aT;
   varying float vSeg, vT; varying float vDepth;
@@ -129,58 +133,137 @@ const arcFS = /* glsl */ `
     if (vSeg < uChaos * 0.8) discard;
     float pulse = 0.35 + 0.65 * smoothstep(0.1, 0.0, abs(fract(vT - uTime * 0.12) - 0.5) - 0.38);
     vec3 c = mix(uColor, uChaosC, uChaos);
-    gl_FragColor = vec4(c, uAlpha * pulse * (1.0 - 0.5 * uChaos) * smoothstep(95.0, 15.0, vDepth));
+    gl_FragColor = vec4(c, uAlpha * pulse * (1.0 - 0.5 * uChaos) * smoothstep(120.0, 15.0, vDepth));
   }
 `;
 
-const spikeVS = /* glsl */ `
-  uniform float uGrow, uTime; attribute float aCrisis, aFocus;
-  uniform vec3 uAmber, uRust, uWater;
-  varying vec3 vC; varying float vA, vY;
-  void main() {
-    vec3 p = position; p.y = (p.y + 0.5) * uGrow; vY = p.y + 0.5;
-    vec4 mv = modelViewMatrix * instanceMatrix * vec4(p, 1.0);
-    gl_Position = projectionMatrix * mv;
-    vC = aFocus > 0.5 ? uWater : (aCrisis >= 70.0 ? uRust : uAmber);
-    vA = (aFocus > 0.5 ? 0.95 : 0.55) * uGrow;
-  }
+const fillVS = /* glsl */ `
+  varying vec2 vXZ;
+  void main() { vec4 w = modelMatrix * vec4(position, 1.0); vXZ = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }
 `;
-const spikeFS = /* glsl */ `
-  varying vec3 vC; varying float vA, vY;
-  void main() { gl_FragColor = vec4(vC * (0.55 + 0.6 * vY), vA * (0.35 + 0.65 * vY)); }
-`;
-
 const fillFS = /* glsl */ `
   uniform float uAlpha, uTime; uniform vec3 uColor; varying vec2 vXZ; uniform vec2 uCentre;
   void main() {
     float r = distance(vXZ, uCentre);
     float ring = 0.5 + 0.5 * sin(r * 9.0 - uTime * 1.6);
-    gl_FragColor = vec4(uColor, uAlpha * (0.45 + 0.35 * ring));
+    gl_FragColor = vec4(uColor, uAlpha * (0.5 + 0.3 * ring));
   }
 `;
-const fillVS = /* glsl */ `
-  varying vec2 vXZ;
-  void main() { vec4 w = modelMatrix * vec4(position, 1.0); vXZ = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }
+
+/** Soft sprite clouds the camera flies through; they thin out as they get close so they never smother the view. */
+const cloudVS = /* glsl */ `
+  uniform float uTime, uPx, uScale, uAlpha;
+  attribute float aSize, aSeed;
+  varying float vA; varying float vSeed;
+  void main() {
+    vec3 p = position + vec3(sin(uTime * 0.03 + aSeed * 6.0) * 0.8, 0.0, uTime * 0.05 * (0.5 + aSeed));
+    p.z = mod(p.z + 15.0, 32.0) - 15.0;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    float depth = -mv.z;
+    gl_PointSize = min(uPx * aSize * uScale / depth, 1400.0);
+    vSeed = aSeed;
+    vA = uAlpha * smoothstep(1.2, 7.0, depth) * smoothstep(140.0, 50.0, depth);
+  }
+`;
+const cloudFS = /* glsl */ `
+  uniform sampler2D uTex; varying float vA; varying float vSeed;
+  void main() {
+    vec2 uv = gl_PointCoord;
+    float r = vSeed * 6.2831; uv = mat2(cos(r), -sin(r), sin(r), cos(r)) * (uv - 0.5) + 0.5;
+    vec4 t = texture2D(uTex, uv);
+    float a = t.a * vA;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(mix(vec3(0.95, 0.965, 0.975), vec3(1.0), t.r), a);
+  }
+`;
+
+const dustVS = /* glsl */ `
+  uniform float uTime, uPx, uScale, uAlpha; attribute float aSeed;
+  varying float vA; varying vec3 vC;
+  void main() {
+    vec3 p = position + vec3(sin(uTime * 0.2 + aSeed * 30.0) * 0.15, sin(uTime * 0.27 + aSeed * 17.0) * 0.08, cos(uTime * 0.18 + aSeed * 11.0) * 0.15);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = clamp(uPx * 0.012 * uScale / -mv.z, 0.8 * uPx, 7.0 * uPx);
+    vC = vec3(0.38, 0.47, 0.52);
+    vA = uAlpha * (0.25 + 0.35 * aSeed) * smoothstep(0.2, 1.2, -mv.z) * smoothstep(30.0, 8.0, -mv.z);
+  }
 `;
 
 const pointsMat = (vs: string, fs: string, uniforms: Record<string, THREE.IUniform>) =>
-  new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { ...uniforms, uTime: shared.uTime }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { ...uniforms, uTime: shared.uTime }, transparent: true, depthWrite: false });
+
+function cloudTexture() {
+  const s = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d')!;
+  const blob = (x: number, y: number, r: number, a: number) => {
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, `rgba(255,255,255,${a})`); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  };
+  // a puff: several soft lobes, brighter on top (red channel carries the light)
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2, d = 18 + ((i * 37) % 13);
+    blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d * 0.6, 30 + ((i * 11) % 14), 0.32);
+  }
+  blob(64, 60, 40, 0.5);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 // ---------------------------------------------------------------------------- layers
 interface Ctx { geo: GeoFile; places: Place[]; focus: { place: Place; name: string | null; district: string | null }; s: PublicSummary; q: Quality; px: number; run: THREE.Vector3[]; hub: Place }
-const live: { ph: Phases } = { ph: phases(0) };
+const live: { ph: Phases; speed: number } = { ph: phases(0), speed: 0 };
+
+const toShapes = (rings: [number, number][][]) => rings.filter(r => r.length > 3).map(r => new THREE.Shape(r.map(([lng, lat]) => { const [x, z] = project(lng, lat); return new THREE.Vector2(x, -z); })));
+
+/** The physical model: every state as a white relief block, Maharashtra a little higher; a pale sea with a graticule. */
+const Land: React.FC<{ c: Ctx }> = ({ c }) => {
+  const { others, home, grid } = useMemo(() => {
+    const extrude = (rings: [number, number][][], top: number, depth: number) => {
+      const g = new THREE.ExtrudeGeometry(toShapes(rings), { depth, bevelEnabled: false, curveSegments: 1 });
+      g.rotateX(-Math.PI / 2);
+      g.translate(0, top - depth, 0);
+      g.computeVertexNormals();
+      return g;
+    };
+    const otherRings = c.geo.states.filter(s => s.name !== c.geo.maharashtra).flatMap(s => s.rings);
+    const homeRings = c.geo.states.find(s => s.name === c.geo.maharashtra)?.rings ?? [];
+    const pts: number[] = [];
+    for (let lng = 65; lng <= 100; lng += 5) { const x = project(lng, 0)[0]; pts.push(x, SEA_Y + 0.002, -18, x, SEA_Y + 0.002, 18); }
+    for (let lat = 5; lat <= 40; lat += 5) { const z = project(0, lat)[1]; pts.push(-16, SEA_Y + 0.002, z, 22, SEA_Y + 0.002, z); }
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    return { others: extrude(otherRings, OTHER_TOP, 0.25), home: extrude(homeRings, HOME_TOP, 0.32), grid: gg };
+  }, [c.geo]);
+  const homeMat = useMemo(() => new THREE.MeshStandardMaterial({ color: C.home, roughness: 0.85, metalness: 0, emissive: new THREE.Color('#d9f1f6'), emissiveIntensity: 0 }), []);
+  useFrame(() => { homeMat.emissiveIntensity = 0.35 * live.ph.places * (1 - live.ph.calm * 0.5); });
+  return (
+    <group>
+      <mesh position={[3, SEA_Y, 0]} rotation-x={-Math.PI / 2} receiveShadow>
+        <planeGeometry args={[140, 140]} />
+        <meshStandardMaterial color={C.sea} roughness={1} />
+      </mesh>
+      <lineSegments geometry={grid}><lineBasicMaterial color={C.grid} transparent opacity={0.6} /></lineSegments>
+      <mesh geometry={others} castShadow receiveShadow><meshStandardMaterial color={C.land} roughness={0.95} /></mesh>
+      <mesh geometry={home} material={homeMat} castShadow receiveShadow />
+    </group>
+  );
+};
 
 const Terrain: React.FC<{ c: Ctx }> = ({ c }) => {
   const { geo, q, px } = c;
   const { geom, mat } = useMemo(() => {
-    const f = dotField(geo, q === 'high' ? 0.15 : 0.27);
+    const f = dotField(geo, q === 'high' ? 0.15 : 0.26);
+    for (let i = 0; i < f.home.length; i++) f.pos[i * 3 + 1] = (f.home[i] ? HOME_TOP : OTHER_TOP) + 0.004;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(f.pos, 3));
     g.setAttribute('aSeed', new THREE.BufferAttribute(f.seed, 1));
     g.setAttribute('aHome', new THREE.BufferAttribute(f.home, 1));
-    const m = pointsMat(terrainVS, terrainFS, { uSweep: { value: 0 }, uHome: { value: 0 }, uPx: { value: px }, uCalm: { value: 0 }, uScale: scaleU,
+    const m = pointsMat(terrainVS, pointFS, { uSweep: { value: 0 }, uHome: { value: 0 }, uPx: { value: px }, uCalm: { value: 0 }, uScale: scaleU,
       uDot: { value: C.dot }, uDotHome: { value: C.dotHome }, uWater: { value: C.water } });
-    m.blending = THREE.NormalBlending;
     return { geom: g, mat: m };
   }, [geo, q, px]);
   useFrame(() => {
@@ -193,26 +276,26 @@ const Terrain: React.FC<{ c: Ctx }> = ({ c }) => {
 };
 
 const Lines: React.FC<{ c: Ctx }> = ({ c }) => {
-  const { states, home, districts, dMat } = useMemo(() => {
+  const { states, home, districts, dMat, homeMat } = useMemo(() => {
     const mk = (arr: Float32Array) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3)); return g; };
     const other = c.geo.states.filter(s => s.name !== c.geo.maharashtra).flatMap(s => s.rings);
     const mh = c.geo.states.find(s => s.name === c.geo.maharashtra)?.rings ?? [];
     return {
-      states: mk(ringSegments(other, 0.01)),
-      home: mk(ringSegments(mh, 0.012)),
-      districts: mk(ringSegments(c.geo.districts.flatMap(d => d.rings), 0.008)),
+      states: mk(ringSegments(other, OTHER_TOP + 0.006)),
+      home: mk(ringSegments(mh, HOME_TOP + 0.008)),
+      districts: mk(ringSegments(c.geo.districts.flatMap(d => d.rings), HOME_TOP + 0.006)),
       dMat: new THREE.LineBasicMaterial({ color: C.line, transparent: true, opacity: 0 }),
+      homeMat: new THREE.LineBasicMaterial({ color: C.lineHome, transparent: true, opacity: 0.6 }),
     };
   }, [c.geo]);
-  const homeMat = useMemo(() => new THREE.LineBasicMaterial({ color: C.lineHome, transparent: true, opacity: 0.5 }), []);
   useFrame(() => {
     const ph = live.ph;
-    dMat.opacity = 0.75 * ph.districts;
-    homeMat.opacity = 0.35 + 0.5 * Math.max(ph.places, ph.districts) * (1 - 0.4 * ph.national);
+    dMat.opacity = 0.9 * ph.districts;
+    homeMat.opacity = 0.45 + 0.5 * Math.max(ph.places, ph.districts) * (1 - 0.4 * ph.national);
   });
   return (
     <group>
-      <lineSegments geometry={states}><lineBasicMaterial color={C.line} transparent opacity={0.85} /></lineSegments>
+      <lineSegments geometry={states}><lineBasicMaterial color={C.line} transparent opacity={0.9} /></lineSegments>
       <lineSegments geometry={home} material={homeMat} />
       <lineSegments geometry={districts} material={dMat} />
     </group>
@@ -223,15 +306,14 @@ const Places: React.FC<{ c: Ctx; onHover: (p: Place | null, x: number, y: number
   const { geom, mat } = useMemo(() => {
     const n = c.places.length;
     const pos = new Float32Array(n * 3), cr = new Float32Array(n), pop = new Float32Array(n), seed = new Float32Array(n);
-    c.places.forEach((p, i) => { pos[i * 3] = p.x; pos[i * 3 + 1] = 0.03; pos[i * 3 + 2] = p.z; cr[i] = p.crisis; pop[i] = p.pop; seed[i] = (Math.sin(i * 12.9898) * 43758.5453) % 1; });
+    c.places.forEach((p, i) => { pos[i * 3] = p.x; pos[i * 3 + 1] = HOME_TOP + 0.02; pos[i * 3 + 2] = p.z; cr[i] = p.crisis; pop[i] = p.pop; seed[i] = Math.abs((Math.sin(i * 12.9898) * 43758.5453) % 1); });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aCrisis', new THREE.BufferAttribute(cr, 1));
     g.setAttribute('aPop', new THREE.BufferAttribute(pop, 1));
-    g.setAttribute('aSeed', new THREE.BufferAttribute(seed.map(Math.abs), 1));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
     g.computeBoundingSphere();
-    const m = pointsMat(placesVS, placesFS, { uAlpha: { value: 0 }, uChaos: { value: 0 }, uPx: { value: c.px }, uScale: scaleU, uCool: { value: C.waterDeep }, uAmber: { value: C.amber }, uRust: { value: C.rust } });
-    m.blending = THREE.NormalBlending; // dense districts (Nagpur has ~700 places) would otherwise add up to a glow
+    const m = pointsMat(placesVS, pointFS, { uAlpha: { value: 0 }, uChaos: { value: 0 }, uPx: { value: c.px }, uScale: scaleU, uCool: { value: C.quiet }, uAmber: { value: C.amber }, uRust: { value: C.rust } });
     return { geom: g, mat: m };
   }, [c.places, c.px]);
   useFrame(() => { mat.uniforms.uAlpha.value = live.ph.places; mat.uniforms.uChaos.value = live.ph.chaos; });
@@ -262,20 +344,18 @@ const Flows: React.FC<{ c: Ctx }> = ({ c }) => {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aAB', new THREE.BufferAttribute(ab, 4));
     g.setAttribute('aMeta', new THREE.BufferAttribute(meta, 4));
-    const m = pointsMat(flowVS, flowFS, { uChaos: { value: 0 }, uAlpha: { value: 0 }, uPx: { value: c.px }, uDim: { value: 0 }, uScale: scaleU, uHot: { value: 0 },
-      uWater: { value: C.water }, uChaosC: { value: C.chaos }, uFocus: { value: new THREE.Vector3(c.focus.place.x, 0, c.focus.place.z) } });
-    // arc lines
+    const m = pointsMat(flowVS, pointFS, { uChaos: { value: 0 }, uAlpha: { value: 0 }, uPx: { value: c.px }, uDim: { value: 0 }, uScale: scaleU, uHot: { value: 0 },
+      uWater: { value: C.water }, uChaosC: { value: C.chaos } });
     const SEG = 22;
     const lp = new Float32Array(arcs.length * SEG * 6), ls = new Float32Array(arcs.length * SEG * 2), lt = new Float32Array(arcs.length * SEG * 2);
     arcs.forEach((a, i) => {
       const lift = 0.12 + Math.hypot(a.a.x - a.b.x, a.a.z - a.b.z) * 0.22;
       const at = (t: number) => {
-        const mx = (a.a.x + a.b.x) / 2, mz = (a.a.z + a.b.z) / 2;
-        const u = 1 - t;
+        const mx = (a.a.x + a.b.x) / 2, mz = (a.a.z + a.b.z) / 2, u = 1 - t;
         return [u * u * a.a.x + 2 * u * t * mx + t * t * a.b.x, 2 * u * t * lift, u * u * a.a.z + 2 * u * t * mz + t * t * a.b.z];
       };
       for (let k = 0; k < SEG; k++) {
-        const o = (i * SEG + k);
+        const o = i * SEG + k;
         lp.set([...at(k / SEG), ...at((k + 1) / SEG)], o * 6);
         const h = Math.abs(Math.sin(o * 91.7 + i)) % 1;
         ls.set([h, h], o * 2); lt.set([k / SEG, (k + 1) / SEG], o * 2);
@@ -285,8 +365,8 @@ const Flows: React.FC<{ c: Ctx }> = ({ c }) => {
     lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
     lg.setAttribute('aSeg', new THREE.BufferAttribute(ls, 1));
     lg.setAttribute('aT', new THREE.BufferAttribute(lt, 1));
-    const lm = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: C.waterDeep }, uChaosC: { value: C.chaos } } });
+    const lm = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false,
+      uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: C.water }, uChaosC: { value: C.chaos } } });
     return { geom: g, mat: m, arcGeom: lg, arcMat: lm };
   }, [c]);
   useFrame(() => {
@@ -296,34 +376,42 @@ const Flows: React.FC<{ c: Ctx }> = ({ c }) => {
     mat.uniforms.uDim.value = Math.max(ph.spikes * 0.7, ph.ops);
     mat.uniforms.uHot.value = ph.disaster;
     arcMat.uniforms.uChaos.value = ph.chaos;
-    arcMat.uniforms.uAlpha.value = 0.5 * ph.routes * (1 - 0.75 * Math.max(ph.spikes, ph.ops)) * (1 - 0.5 * ph.national) * (1 - 0.5 * ph.disaster);
+    arcMat.uniforms.uAlpha.value = 0.55 * ph.routes * (1 - 0.75 * Math.max(ph.spikes, ph.ops)) * (1 - 0.5 * ph.national) * (1 - 0.5 * ph.disaster);
   });
   return <group><lineSegments geometry={arcGeom} material={arcMat} frustumCulled={false} /><points geometry={geom} material={mat} frustumCulled={false} /></group>;
 };
 
+/** Crisis columns: solid, lit, casting shadows; they grow out of the plateau. */
 const Spikes: React.FC<{ c: Ctx }> = ({ c }) => {
-  const { mesh } = useMemo(() => {
+  const { mesh, list, base } = useMemo(() => {
     const list = c.places.filter(p => p.crisis >= 40 || p === c.focus.place);
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    const cr = new Float32Array(list.length), fo = new Float32Array(list.length);
-    const mat = new THREE.ShaderMaterial({ vertexShader: spikeVS, fragmentShader: spikeFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uGrow: { value: 0 }, uTime: shared.uTime, uAmber: { value: C.amber }, uRust: { value: C.rust }, uWater: { value: C.water } } });
+    const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.05 });
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
-    const m = new THREE.Matrix4();
-    list.forEach((p, i) => {
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+    const base = list.map(p => {
       const focus = p === c.focus.place;
-      const h = focus ? 1.15 : 0.12 + (p.crisis / 100) * 0.55;
-      const w = focus ? 0.035 : 0.014 + Math.min(0.02, Math.log10(Math.max(p.pop, 100)) * 0.003);
-      m.compose(new THREE.Vector3(p.x, 0, p.z), new THREE.Quaternion(), new THREE.Vector3(w, h, w));
-      mesh.setMatrixAt(i, m);
-      cr[i] = p.crisis; fo[i] = focus ? 1 : 0;
+      return { p, h: focus ? 1.15 : 0.12 + (p.crisis / 100) * 0.55, w: focus ? 0.04 : 0.016 + Math.min(0.02, Math.log10(Math.max(p.pop, 100)) * 0.003) };
     });
-    geo.setAttribute('aCrisis', new THREE.InstancedBufferAttribute(cr, 1));
-    geo.setAttribute('aFocus', new THREE.InstancedBufferAttribute(fo, 1));
-    mesh.frustumCulled = false;
-    return { mesh };
+    base.forEach(({ p }, i) => mesh.setColorAt(i, p === c.focus.place ? C.water : p.crisis >= 70 ? C.rust : C.amber));
+    return { mesh, list, base };
   }, [c]);
-  useFrame(() => { (mesh.material as THREE.ShaderMaterial).uniforms.uGrow.value = Math.max(live.ph.spikes, live.ph.focus * 0.0001); mesh.visible = live.ph.spikes > 0.001; });
+  const last = useRef(-1);
+  const m = useMemo(() => new THREE.Matrix4(), []);
+  useFrame(() => {
+    const g = live.ph.spikes;
+    mesh.visible = g > 0.001;
+    if (Math.abs(g - last.current) < 0.0005) return;
+    last.current = g;
+    for (let i = 0; i < list.length; i++) {
+      const { p, h, w } = base[i];
+      // stagger: taller (more critical) columns rise first
+      const k = THREE.MathUtils.clamp(g * 1.35 - (1 - h / 1.2) * 0.35, 0, 1);
+      m.makeScale(w, Math.max(0.0001, h * k * k * (3 - 2 * k)), w).setPosition(p.x, HOME_TOP, p.z);
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  });
   return <primitive object={mesh} />;
 };
 
@@ -333,21 +421,21 @@ const Focus: React.FC<{ c: Ctx }> = ({ c }) => {
   useFrame(({ clock: t }) => {
     const ph = live.ph;
     if (ring.current) {
-      const s = 1 + ((t.elapsedTime * 0.6) % 1) * 2.2;
-      ring.current.scale.setScalar(s * 0.09);
-      (ring.current.material as THREE.MeshBasicMaterial).opacity = ph.focus * (1 - ((t.elapsedTime * 0.6) % 1)) * 0.9;
+      const f = (t.elapsedTime * 0.6) % 1;
+      ring.current.scale.setScalar((1 + f * 2.2) * 0.09);
+      (ring.current.material as THREE.MeshBasicMaterial).opacity = ph.focus * (1 - f) * 0.9;
     }
     if (fence.current) {
       const arrive = ph.ops * THREE.MathUtils.smoothstep(ph.tanker, 0.72, 0.9);
-      (fence.current.material as THREE.MeshBasicMaterial).opacity = ph.ops * (0.25 + 0.55 * arrive);
+      (fence.current.material as THREE.MeshBasicMaterial).opacity = ph.ops * (0.35 + 0.6 * arrive);
       fence.current.scale.setScalar(0.16 * (1 + 0.08 * Math.sin(t.elapsedTime * 3) * arrive));
     }
   });
   const { x, z } = c.focus.place;
   return (
-    <group position={[x, 0.02, z]}>
-      <mesh ref={ring} rotation-x={-Math.PI / 2}><ringGeometry args={[0.9, 1, 64]} /><meshBasicMaterial color={C.water} transparent opacity={0} depthWrite={false} /></mesh>
-      <mesh ref={fence} rotation-x={-Math.PI / 2}><ringGeometry args={[0.96, 1, 96]} /><meshBasicMaterial color={C.water} transparent opacity={0} depthWrite={false} /></mesh>
+    <group position={[x, HOME_TOP + 0.012, z]}>
+      <mesh ref={ring} rotation-x={-Math.PI / 2}><ringGeometry args={[0.88, 1, 64]} /><meshBasicMaterial color={C.water} transparent opacity={0} depthWrite={false} /></mesh>
+      <mesh ref={fence} rotation-x={-Math.PI / 2}><ringGeometry args={[0.94, 1, 96]} /><meshBasicMaterial color={C.water} transparent opacity={0} depthWrite={false} /></mesh>
     </group>
   );
 };
@@ -373,16 +461,16 @@ const Run: React.FC<{ c: Ctx }> = ({ c }) => {
     const idx = Math.min(total - 2, Math.floor(t * (total - 1)));
     trail.setDrawRange(0, Math.max(2, idx + 2));
     fixes.setDrawRange(0, Math.floor(idx / 6) + 1);
-    trailMat.opacity = ph.ops * 0.95;
+    trailMat.opacity = ph.ops;
     fixMat.opacity = ph.ops;
     if (truck.current) {
       const f = t * (total - 1) - idx;
       tmp.a.copy(c.run[idx]).lerp(c.run[idx + 1], f);
-      tmp.b.copy(c.run[Math.min(total - 1, idx + 2)]);
-      truck.current.position.copy(tmp.a);
-      truck.current.lookAt(tmp.b.x, tmp.a.y, tmp.b.z);
+      tmp.b.copy(c.run[Math.min(total - 1, idx + 3)]);
+      truck.current.position.set(tmp.a.x, HOME_TOP, tmp.a.z);
+      truck.current.lookAt(tmp.b.x, HOME_TOP, tmp.b.z);
       truck.current.visible = ph.ops > 0.02;
-      truck.current.scale.setScalar(0.6 + 0.4 * ph.ops);
+      truck.current.scale.setScalar(1.5 * (0.6 + 0.4 * ph.ops));
     }
   });
   return (
@@ -390,8 +478,10 @@ const Run: React.FC<{ c: Ctx }> = ({ c }) => {
       <primitive object={trailLine} />
       <points geometry={fixes} material={fixMat} />
       <group ref={truck} visible={false}>
-        <mesh position={[0, 0.035, 0]}><boxGeometry args={[0.055, 0.05, 0.12]} /><meshBasicMaterial color="#e9f4f6" /></mesh>
-        <mesh position={[0, 0.002, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.12, 40]} /><meshBasicMaterial color={C.water} transparent opacity={0.25} depthWrite={false} /></mesh>
+        {/* cab in front (+z faces the direction of travel), tank behind */}
+        <mesh position={[0, 0.022, 0.042]} castShadow><boxGeometry args={[0.04, 0.036, 0.026]} /><meshStandardMaterial color={C.ink} roughness={0.5} /></mesh>
+        <mesh position={[0, 0.024, -0.008]} rotation-x={Math.PI / 2} castShadow><cylinderGeometry args={[0.019, 0.019, 0.07, 20]} /><meshStandardMaterial color={C.water} roughness={0.35} metalness={0.2} /></mesh>
+        <mesh position={[0, 0.003, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.09, 40]} /><meshBasicMaterial color={C.water} transparent opacity={0.18} depthWrite={false} /></mesh>
       </group>
     </group>
   );
@@ -405,19 +495,18 @@ const Deficit: React.FC<{ c: Ctx }> = ({ c }) => {
       const d = byKey.get(plain(r.district));
       if (!d) return null;
       const [cx, cz] = project(d.c[0], d.c[1]);
-      const shapes = d.rings.map(ring => new THREE.Shape(ring.map(([lng, lat]) => { const [x, z] = project(lng, lat); return new THREE.Vector2(x, -z); })));
-      const g = new THREE.ShapeGeometry(shapes);
+      const g = new THREE.ShapeGeometry(toShapes(d.rings));
       g.rotateX(-Math.PI / 2);
       const mat = new THREE.ShaderMaterial({ vertexShader: fillVS, fragmentShader: fillFS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
         uniforms: { uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: r.severity === 'Severe' ? C.rust : C.amber }, uCentre: { value: new THREE.Vector2(cx, cz) } } });
       return { g, mat, weight: Math.min(1, Math.abs(r.deviation) / 45) };
     }).filter(Boolean) as { g: THREE.BufferGeometry; mat: THREE.ShaderMaterial; weight: number }[];
   }, [c]);
-  useFrame(() => { for (const it of items) it.mat.uniforms.uAlpha.value = live.ph.disaster * 0.42 * it.weight; });
-  return <group position={[0, 0.004, 0]}>{items.map((it, i) => <mesh key={i} geometry={it.g} material={it.mat} />)}</group>;
+  useFrame(() => { for (const it of items) it.mat.uniforms.uAlpha.value = live.ph.disaster * 0.5 * it.weight; });
+  return <group position={[0, HOME_TOP + 0.003, 0]}>{items.map((it, i) => <mesh key={i} geometry={it.g} material={it.mat} />)}</group>;
 };
 
-/** Illustration of national scale: arcs from Maharashtra to every state. */
+/** Illustration of national scale: arcs from Maharashtra to every mainland state. */
 const National: React.FC<{ c: Ctx }> = ({ c }) => {
   const { geom, mat } = useMemo(() => {
     const centre = (rings: [number, number][][]) => {
@@ -432,7 +521,7 @@ const National: React.FC<{ c: Ctx }> = ({ c }) => {
     const pos = new Float32Array(targets.length * SEG * 6), seg = new Float32Array(targets.length * SEG * 2), tt = new Float32Array(targets.length * SEG * 2);
     targets.forEach(([bx, bz], i) => {
       const d = Math.hypot(bx - mh[0], bz - mh[1]);
-      const at = (t: number) => { const u = 1 - t; const mx = (mh[0] + bx) / 2, mz = (mh[1] + bz) / 2; return [u * u * mh[0] + 2 * u * t * mx + t * t * bx, 2 * u * t * (0.6 + d * 0.18), u * u * mh[1] + 2 * u * t * mz + t * t * bz]; };
+      const at = (t: number) => { const u = 1 - t, mx = (mh[0] + bx) / 2, mz = (mh[1] + bz) / 2; return [u * u * mh[0] + 2 * u * t * mx + t * t * bx, 2 * u * t * (0.6 + d * 0.18), u * u * mh[1] + 2 * u * t * mz + t * t * bz]; };
       for (let k = 0; k < SEG; k++) {
         const o = i * SEG + k;
         pos.set([...at(k / SEG), ...at((k + 1) / SEG)], o * 6);
@@ -443,22 +532,90 @@ const National: React.FC<{ c: Ctx }> = ({ c }) => {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aSeg', new THREE.BufferAttribute(seg, 1));
     g.setAttribute('aT', new THREE.BufferAttribute(tt, 1));
-    const m = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    const m = new THREE.ShaderMaterial({ vertexShader: arcVS, fragmentShader: arcFS, transparent: true, depthWrite: false,
       uniforms: { uChaos: { value: 0 }, uAlpha: { value: 0 }, uTime: shared.uTime, uColor: { value: C.water }, uChaosC: { value: C.chaos } } });
     return { geom: g, mat: m };
   }, [c.geo]);
-  useFrame(() => { mat.uniforms.uAlpha.value = live.ph.national * 0.9; });
+  useFrame(() => { mat.uniforms.uAlpha.value = live.ph.national * 0.95; });
   return <lineSegments geometry={geom} material={mat} frustumCulled={false} />;
 };
 
-// ---------------------------------------------------------------------------- camera + anchors
+/** Atmosphere: cloud banks at altitude and dust in the air above Maharashtra. Decoration only. */
+const Atmosphere: React.FC<{ c: Ctx }> = ({ c }) => {
+  const { clouds, cloudMat, dust, dustMat } = useMemo(() => {
+    const rnd = (i: number, k: number) => Math.abs((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1);
+    const n = c.q === 'high' ? 170 : 80;
+    const cp = new Float32Array(n * 3), cs = new Float32Array(n), cseed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      // two banks: a high one the opening shot looks through, a lower one the dive passes through
+      const high = i % 3 !== 0;
+      cp.set([-13 + rnd(i, 1) * 34, high ? 9 + rnd(i, 2) * 6 : 4.5 + rnd(i, 2) * 2.5, -15 + rnd(i, 3) * 32], i * 3);
+      cs[i] = (high ? 3.2 : 2.2) + rnd(i, 4) * 3.5; cseed[i] = rnd(i, 5);
+    }
+    const cg = new THREE.BufferGeometry();
+    cg.setAttribute('position', new THREE.BufferAttribute(cp, 3));
+    cg.setAttribute('aSize', new THREE.BufferAttribute(cs, 1));
+    cg.setAttribute('aSeed', new THREE.BufferAttribute(cseed, 1));
+    const cm = new THREE.ShaderMaterial({ vertexShader: cloudVS, fragmentShader: cloudFS, transparent: true, depthWrite: false,
+      uniforms: { uTime: shared.uTime, uPx: { value: c.px }, uScale: scaleU, uAlpha: { value: 0.85 }, uTex: { value: cloudTexture() } } });
+    const dn = c.q === 'high' ? 2600 : 900;
+    const dp = new Float32Array(dn * 3), ds = new Float32Array(dn);
+    for (let i = 0; i < dn; i++) { dp.set([-9 + rnd(i, 7) * 15, 0.1 + rnd(i, 8) * 4.5, -2 + rnd(i, 9) * 11], i * 3); ds[i] = rnd(i, 10); }
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+    dg.setAttribute('aSeed', new THREE.BufferAttribute(ds, 1));
+    const dm = pointsMat(dustVS, pointFS, { uPx: { value: c.px }, uScale: scaleU, uAlpha: { value: 1 } });
+    return { clouds: cg, cloudMat: cm, dust: dg, dustMat: dm };
+  }, [c.q, c.px]);
+  useFrame(() => {
+    const ph = live.ph;
+    // clouds thin out while the story is down at street level and while the impact numbers are read
+    cloudMat.uniforms.uAlpha.value = 0.9 * ph.clouds;
+    clouds.drawRange.count = ph.clouds > 0.003 ? Infinity : 0;
+    dustMat.uniforms.uAlpha.value = 0.6 + 0.4 * Math.max(ph.spikes, ph.ops);
+  });
+  return <group><points geometry={dust} material={dustMat} frustumCulled={false} /><points geometry={clouds} material={cloudMat} frustumCulled={false} renderOrder={10} /></group>;
+};
+
+// ---------------------------------------------------------------------------- light, camera, anchors
+const Sun: React.FC<{ q: Quality }> = ({ q }) => {
+  const light = useRef<THREE.DirectionalLight>(null);
+  useEffect(() => {
+    const l = light.current;
+    if (!l) return;
+    l.shadow.mapSize.set(q === 'high' ? 2048 : 1024, q === 'high' ? 2048 : 1024);
+    l.shadow.bias = -0.0004; l.shadow.normalBias = 0.02;
+  }, [q]);
+  useFrame(({ camera }) => {
+    // the sun follows the camera's target so shadows stay crisp from country scale down to one village
+    const l = light.current;
+    if (!l) return;
+    const t = rigTarget, dist = camera.position.distanceTo(t), sf = THREE.MathUtils.clamp(dist / 18, 0.12, 2.6);
+    l.position.set(t.x - 7 * sf, 13 * sf, t.z + 6 * sf);
+    l.target.position.copy(t);
+    l.target.updateMatrixWorld();
+    const cam = l.shadow.camera, half = dist * 0.95 + 1;
+    if (Math.abs(cam.right - half) > 0.01) {
+      cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half; cam.near = 0.1; cam.far = 40 * sf + 20;
+      cam.updateProjectionMatrix();
+    }
+  });
+  return (
+    <>
+      <hemisphereLight args={['#ffffff', '#b8c9cf', 1.25]} />
+      <directionalLight ref={light} intensity={2.1} color="#fff6ea" castShadow={q === 'high'} />
+    </>
+  );
+};
+const rigTarget = new THREE.Vector3();
+
 const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapterFrame?: (p: number) => void }> = ({ c, anchors, onChapterFrame }) => {
   const { camera, size } = useThree();
   const cam = camera as THREE.PerspectiveCamera;
   const portrait = size.height > size.width * 1.1;
   const keys = useMemo(() => cameraKeys(c.focus.place, c.hub, portrait), [c, portrait]);
   const s = useMemo(() => ({ pos: [0, 0, 0] as [number, number, number], target: [0, 0, 0] as [number, number, number], fov: 38 }), []);
-  const v = useMemo(() => ({ look: new THREE.Vector3(), w: new THREE.Vector3(), par: new THREE.Vector2() }), []);
+  const v = useMemo(() => ({ look: new THREE.Vector3(), w: new THREE.Vector3(), par: new THREE.Vector2(), prev: new THREE.Vector3(), right: new THREE.Vector3(), roll: 0, kick: 0, init: false }), []);
   const anchorPts = useMemo(() => {
     const byKey = new Map(c.geo.districts.map(d => [d.key, d]));
     const out: Record<string, THREE.Vector3> = { focus: new THREE.Vector3(c.focus.place.x, 0.62, c.focus.place.z) };
@@ -471,31 +628,51 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
   const truckPos = useMemo(() => new THREE.Vector3(), []);
   const placed = useMemo<[number, number][]>(() => [], []);
 
-  useFrame((_, dt) => {
-    // ease the story clock toward the scrollbar; a reduced-motion visitor gets a short, direct settle
-    const k = clock.reduce ? 14 : 3.2;
-    clock.p += (clock.target - clock.p) * (1 - Math.exp(-Math.min(dt, 0.1) * k));
+  useFrame((st, dt) => {
+    dt = Math.min(dt, 0.1);
+    // ease the story clock toward the scrollbar: a long, gliding settle (short and direct with reduced motion)
+    const k = clock.reduce ? 14 : 2.6;
+    clock.p += (clock.target - clock.p) * (1 - Math.exp(-dt * k));
     if (Math.abs(clock.target - clock.p) < 1e-5) clock.p = clock.target;
     live.ph = phases(clock.p);
-    if (!clock.reduce) shared.uTime.value += Math.min(dt, 0.1);
+    if (!clock.reduce) shared.uTime.value += dt;
     onChapterFrame?.(clock.p);
 
     sampleKeys(keys, clock.p, s);
+    rigTarget.set(s.target[0], s.target[1], s.target[2]);
     const dist = Math.hypot(s.pos[0] - s.target[0], s.pos[1] - s.target[1], s.pos[2] - s.target[2]);
-    // a little depth response to the pointer, proportional to how far away the camera is
+    const t = st.clock.elapsedTime;
     v.par.lerp(new THREE.Vector2(clock.pointerX, clock.pointerY), clock.reduce ? 1 : 0.04);
     const par = clock.reduce ? 0 : dist * 0.03;
-    cam.position.set(s.pos[0] + v.par.x * par, s.pos[1] - v.par.y * par * 0.5, s.pos[2]);
-    v.look.set(s.target[0], s.target[1], s.target[2]);
+    // flight feel: a hand-held drift that grows with speed
+    const shake = clock.reduce ? 0 : dist * (0.0018 + Math.min(0.006, live.speed * 0.00025));
+    cam.position.set(
+      s.pos[0] + v.par.x * par + Math.sin(t * 0.9) * shake + Math.sin(t * 2.3) * shake * 0.35,
+      s.pos[1] - v.par.y * par * 0.5 + Math.sin(t * 1.3 + 1) * shake * 0.6,
+      s.pos[2] + Math.cos(t * 0.7) * shake);
+    if (!v.init) { v.prev.copy(cam.position); v.init = true; }
+    // speed: widens the lens; sideways speed banks the camera into the turn
+    const vel = v.w.copy(cam.position).sub(v.prev).divideScalar(Math.max(dt, 1e-3));
+    v.prev.copy(cam.position);
+    const speed = vel.length();
+    live.speed += (speed - live.speed) * (1 - Math.exp(-dt * 4));
+    v.look.copy(rigTarget);
     cam.lookAt(v.look);
-    if (Math.abs(cam.fov - s.fov) > 0.01) { cam.fov = s.fov; cam.updateProjectionMatrix(); }
-
+    v.right.setFromMatrixColumn(cam.matrixWorld, 0);
+    const lateral = clock.reduce ? 0 : THREE.MathUtils.clamp(-vel.dot(v.right) * 0.004, -0.09, 0.09);
+    v.roll += (lateral - v.roll) * (1 - Math.exp(-dt * 3));
+    cam.rotateZ(v.roll);
+    const kick = clock.reduce ? 0 : Math.min(9, live.speed * 0.32);
+    v.kick += (kick - v.kick) * (1 - Math.exp(-dt * 3));
+    const fov = s.fov + v.kick;
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     scaleU.value = size.height / (2 * Math.tan((cam.fov * Math.PI) / 360));
+
     // anchored labels: project world points to the screen and move the DOM labels there; later labels give way
     placed.length = 0;
     const ph = live.ph;
-    const t = ph.tanker, run = c.run, i = Math.min(run.length - 1, Math.floor(t * (run.length - 1)));
-    truckPos.copy(run[i]).setY(0.08);
+    const run = c.run, i = Math.min(run.length - 1, Math.floor(ph.tanker * (run.length - 1)));
+    truckPos.copy(run[i]).setY(0.1);
     const place = (key: string, p: THREE.Vector3 | undefined, alpha: number) => {
       const el = anchors.current[key];
       if (!el || !p) return;
@@ -511,12 +688,12 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
     place('focus', anchorPts.focus, Math.max(ph.focus * (1 - ph.ops), 0));
     place('truck', truckPos, ph.ops);
     place('d0', anchorPts.d0, ph.disaster);
-    place('d1', anchorPts.d1, ph.disaster * ramp01((ph.disaster - 0.3) / 0.7));
-    place('d2', anchorPts.d2, ph.disaster * ramp01((ph.disaster - 0.5) / 0.5));
+    place('d1', anchorPts.d1, ph.disaster * clamp01((ph.disaster - 0.3) / 0.7));
+    place('d2', anchorPts.d2, ph.disaster * clamp01((ph.disaster - 0.5) / 0.5));
   });
   return null;
 };
-const ramp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 // ---------------------------------------------------------------------------- scene root
 export interface WorldProps {
@@ -536,7 +713,7 @@ function buildRun(focus: Place, places: Place[]): { hub: Place; run: THREE.Vecto
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const bend = Math.sin(t * Math.PI) * 0.18 * len + Math.sin(t * 17.0) * 0.012 + Math.sin(t * 41.0) * 0.005;
-    run.push(new THREE.Vector3(hub.x + dx * t + nx * bend, 0.03, hub.z + dz * t + nz * bend));
+    run.push(new THREE.Vector3(hub.x + dx * t + nx * bend, HOME_TOP + 0.012, hub.z + dz * t + nz * bend));
   }
   return { hub, run };
 }
@@ -551,7 +728,9 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
   useEffect(() => { onReady?.({ focusName: ctx.focus.name, focusDistrict: ctx.focus.district, focusCrisis: ctx.focus.place.crisis, focusPop: ctx.focus.place.pop }); }, [ctx, onReady]);
   return (
     <>
-      <color attach="background" args={[C.bg]} />
+      <fog attach="fog" args={[C.haze, 34, 110]} />
+      <Sun q={quality} />
+      <Land c={ctx} />
       <Terrain c={ctx} />
       <Lines c={ctx} />
       <Deficit c={ctx} />
@@ -561,6 +740,7 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
       <Spikes c={ctx} />
       <Focus c={ctx} />
       <Run c={ctx} />
+      <Atmosphere c={ctx} />
       <Rig c={ctx} anchors={anchors} onChapterFrame={onFrame} />
     </>
   );
@@ -570,8 +750,10 @@ export default function World(props: WorldProps) {
   const dpr: [number, number] = props.quality === 'high' ? [1, 1.75] : [1, 1.25];
   const px = Math.min(window.devicePixelRatio || 1, dpr[1]);
   return (
-    <Canvas dpr={dpr} gl={{ antialias: props.quality === 'high', powerPreference: 'high-performance', alpha: false }}
-      camera={{ fov: 36, near: 0.05, far: 200, position: [0, 36, 23] }}
+    <Canvas dpr={dpr} shadows={props.quality === 'high' ? 'soft' : false}
+      gl={{ antialias: props.quality === 'high', powerPreference: 'high-performance', alpha: true }}
+      onCreated={({ gl }) => { gl.setClearColor(0x000000, 0); gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.05; }}
+      camera={{ fov: 36, near: 0.05, far: 220, position: [0, 36, 23] }}
       raycaster={{ params: { Points: { threshold: 0.06 } } as THREE.RaycasterParameters }}
       onPointerMove={e => { clock.pointerX = (e.clientX / window.innerWidth) * 2 - 1; clock.pointerY = (e.clientY / window.innerHeight) * 2 - 1; }}>
       <SceneRoot {...props} px={px} />

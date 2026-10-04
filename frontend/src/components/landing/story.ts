@@ -29,6 +29,8 @@ export const band = (p: number, a: number, b: number, c: number, d: number) => M
 export interface Phases {
   chaos: number; sweep: number; places: number; routes: number; spikes: number; focus: number;
   tanker: number; ops: number; disaster: number; national: number; districts: number; calm: number;
+  /** cloud banks: only while the camera dives into Maharashtra and climbs back out to India */
+  clouds: number;
 }
 
 export function phases(p: number): Phases {
@@ -45,6 +47,7 @@ export function phases(p: number): Phases {
     national: Math.max(band(p, 0.76, 0.81, 0.85, 0.89), 0.55 * ramp(p, 0.95, 1)),
     districts: band(p, 0.3, 0.38, 0.76, 0.82),
     calm: ramp(p, 0.84, 0.9),
+    clouds: Math.max(band(p, 0.05, 0.1, 0.17, 0.22), band(p, 0.74, 0.78, 0.83, 0.88)),
   };
 }
 
