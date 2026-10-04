@@ -4,7 +4,7 @@ import { liveState, useApp, useNow } from '../context/AppContext';
 import { DataTable } from '../components/DataTable';
 import { api } from '../services/api';
 import { VehiclePanel } from '../components/panels';
-import { Button, Chip, Dialog, Empty, Field, OriginLabel, PageHeader, Panel, StatusChip, TrackingBadge } from '../components/ui';
+import { Button, Dialog, Field, PageHeader, StatusChip, TrackingBadge } from '../components/ui';
 
 const SOURCE: Record<string, string> = { phone_gps: 'Phone GPS', vltd: 'VLTD', ais140: 'AIS-140', manual: 'Manual' };
 

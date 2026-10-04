@@ -4,7 +4,7 @@ import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { DataTable } from '../components/DataTable';
 import { AlertPanel } from '../components/panels';
-import { Button, Chip, Empty, KindLabel, PageHeader, Panel, SeverityChip, StatusChip, Provenance } from '../components/ui';
+import { Button, Chip, KindLabel, PageHeader, SeverityChip, StatusChip, Provenance } from '../components/ui';
 import { dt, timeAgo } from '../utils/format';
 
 const SEV: Record<string, number> = { Extreme: 4, Severe: 3, Moderate: 2, Minor: 1, Unknown: 0 };

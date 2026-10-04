@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Crosshair, Map as MapIcon, Pencil, Plus, Search, Warehouse } from '../components/icons';
+import React, { useEffect, useState } from 'react';
+import { Crosshair, Map as MapIcon, Pencil, Plus, Warehouse } from '../components/icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { MAP_COLORS, OpsMap } from '../components/map/OpsMap';
-import { Button, Chip, Dialog, Empty, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, SlideOver, StatusChip } from '../components/ui';
+import { Button, Chip, Dialog, Field, KindLabel, KV, Loading, OriginLabel, PageHeader, SlideOver, StatusChip } from '../components/ui';
 import { DataTable } from '../components/DataTable';
 import type { Community } from '../types';
 import { districtName, litres, timeAgo } from '../utils/format';
