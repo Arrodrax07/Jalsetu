@@ -90,41 +90,20 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## IN PROGRESS (2026-10-04 afternoon): landing "Google Earth" pass — resume here
-User brief: one continuous scroll-driven shot INDIA -> region -> city -> street -> people at a water tanker -> back up to
-India above the clouds; photoreal (Google Earth 3D feel, not stylised), and SCROLL SMOOTHNESS IS PRIORITY #1.
-Plan, in order (tick as done, commit after each):
-1. [x] Scroll (728fbf6 + prewarm): remove the custom wheel hijack (double smoothing with trackpads), drive the story clock with one
-       critically damped spring + velocity cap so big jumps fly instead of snap; read scroll in rAF. (story.ts stepClock,
-       Landing.tsx wheel effect)
-2. [x] Frame rate (see DONE below): DONE gating + shader/shadow prewarm (spikes 661->~70 ms at the columns). OPEN: a ~500 ms one-off
-       spike near p=0.44 and ~180 ms at 0.566; measurements were contaminated by the user's Brave tab using 53% GPU,
-       re-measure with it closed (scratchpad smooth3.js on the prod build). Originally: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
-       every frame at every altitude); measure per chapter with `?debug=` flags on the prod build (scratchpad jank.js).
-3. [ ] DECIDED by user 2026-10-04: Google Photorealistic 3D Tiles primary (3d-tiles-renderer + GoogleCloudAuthPlugin,
-       key in frontend `VITE_GOOGLE_MAPS_API_KEY`, Google attribution on screen); automatic fallback to our own
-       NASA/Sentinel/SRTM world on missing key, quota/billing/network error, slow tiles or weak device. The fallback must
-       NOT be recorded from Google tiles (Map Tiles ToS forbids caching/prefetch). Human tanker moment = real licensed
-       footage/photo (credited) in BOTH modes. No key exists yet: the user must create one (Map Tiles API enabled).
-       Original note: Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
-       Google attribution) vs. real licensed footage/photo of a tanker queue blended at the end of the descent. Ask.
-3b.[x] Real photo for the human moment: `public/landing/shirur-2016.jpg` (+ `-portrait`, `.json` credits) — Shirur
-       Kasar, Beed district, 20 May 2016, Sanjeev Bonde, CC BY-SA 4.0 (Wikimedia Commons). Caption with real date, never
-       "live". Plan: camera descends to the water point, cross-fades into the photo with a slow push-in, holds, lifts off.
-3c.[x] (code done, UNTESTED: no API key yet; servers were stopped for low memory) GoogleTiles.tsx: TilesRenderer + GoogleCloudAuthPlugin + ReorientationPlugin at the village lat/lon, mounted in
-       the Ground group slot (same camera/clouds); shown only after tiles load, our SRTM/Sentinel terrain underneath
-       otherwise (automatic fallback: no key / 4xx / quota / network / slow / weak device -> never an error on screen).
-       Snap height by raycasting the tiles at the origin. Hide the stylised people/pots (photo replaces them).
-3d.[x] Photo moment in Landing.tsx (PHOTO timing in story.ts), modelled people/pots removed, Google attribution
-       overlay, key documented in frontend/.env.example (VITE_GOOGLE_MAPS_API_KEY in frontend/.env.local, restricted).
-DONE 2026-10-04: fallback path verified in Playwright (prod build): aerial zoom-through into the photo, no toy close-ups;
-       full-journey smoothness run (wheel bursts, steady pass, scrollbar jump + back): ~140 fps, 2 frames >34 ms
-       (worst 73 ms), max clock step 0.008/frame. Full-screen backdrop blur removed from the impact scrim.
-NEXT: with a key: verify
-       axis/height alignment of the tiles (holder.rotation.y = PI, raycast height fix), switching only inside clouds,
-       attribution, quota failure -> fallback (test with an invalid key). Then 5.
-4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
-5. [ ] Aggressive scroll tests (wheel, fast jumps, scrollbar drag, touch) in Playwright; fix jank; commit; update docs.
+## IN PROGRESS (2026-10-04 evening): free Google-Earth-like descent — resume here
+User (latest): REMOVE the photo/footage ground scene and the Google 3D Tiles route; use a genuinely free/legal open
+3D Earth stack; explorable; smooth descent India -> terrain -> city -> streets; no AI imagery.
+Research result: Cesium ion free tier = non-commercial only, excludes government projects; Esri World Imagery needs an
+ArcGIS licence; Google tiles are paid. Chosen key-free stack: MapLibre GL v5 (already a dependency; globe projection,
+3D terrain, sky/atmosphere, fill-extrusion) + Sentinel-2 cloudless 2016 by EOX (CC BY 4.0, 10 m, overzoomed) + AWS
+Terrarium DEM (Mapzen/SRTM, open) + OpenFreeMap vector tiles (OSM: buildings with heights, roads, labels; ODbL).
+Limitation to state honestly: no free sub-metre imagery exists for India, so street-level ground is 10 m imagery; OSM
+roads/buildings give the crisp street layer. OSM building coverage in Beed is sparse -> consider Overture/Google Open
+Buildings footprints (CC BY 4.0 / ODbL) exported for Beed town.
+Steps: 1 [ ] EarthDescent.tsx (MapLibre canvas, scroll-driven jumpTo from the story clock, prefetch before the chapter,
+hand-over hidden in the three.js cloud whiteout, interactive "look around" during the hold); 2 [ ] remove photo layer,
+GoogleTiles.tsx, 3d-tiles-renderer, Google attribution, shirur assets; 3 [ ] building footprints for Beed if OSM sparse;
+4 [ ] Playwright smoothness + visual pass; commit after each.
 
 ## Landing page: one continuous 3D world (2026-10-04)
 - `/` and `/welcome`: scroll drives one WebGL scene (`components/landing/World.tsx`, React Three Fiber, no new deps)
