@@ -15,9 +15,8 @@ import * as THREE from 'three';
 import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { px, pz } from './geo';
-import { G, clamp01, googleState, groundState, smooth } from './story';
+import { G, clamp01, groundState, smooth } from './story';
 import { live } from './live';
-import { GoogleTiles } from './GoogleTiles';
 
 export const M = 110700;                 // metres per world unit
 export const KM = M / 1000;
@@ -582,8 +581,6 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
     const near = live.dist < 0.25;
     grp.visible = live.ph.inGround > 0 || live.dist < 0.9;
     if (village.current) village.current.visible = near;
-    // Google mode: photogrammetry replaces our terrain and buildings; the tanker and its trail stay
-    if (terrainRef.current) terrainRef.current.visible = !googleState.active;
 
     // the tanker's drive: eases to a stop at the water point
     const u = 1 - Math.pow(1 - ph.drive, 2.3);
@@ -631,7 +628,6 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
   return (
     <group ref={group} position={[d.vx, d.lift, d.vz]} scale={1 / M}>
       <mesh ref={terrainRef} geometry={t.geo} material={t.mat} receiveShadow renderOrder={-8} />
-      <GoogleTiles lat={d.meta.centre[1]} lon={d.meta.centre[0]} enabled={q === 'high'} />
       <group ref={village}>
         <mesh geometry={model.road} renderOrder={-7} receiveShadow>
           <meshStandardMaterial color="#9c7c5a" roughness={1} alphaMap={model.roadAlpha} transparent depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
