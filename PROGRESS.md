@@ -106,6 +106,12 @@ Last updated: 2026-10-03.
   giant drifting chapter numerals. Atmosphere is decoration, not data.
 - Verified with Playwright at 1440/820/390 px + reduced motion + no-WebGL. Prod build: ~165 fps unthrottled; at 4x CPU
   throttle ~164 fps when settled, 45-60 fps while the camera is moving.
+- Cinema pass: ground is NASA Blue Marble shaded relief + bathymetry (public domain, fetched from GIBS WMS into
+  `public/landing/earth.jpg` 3072x2560 and `earth-mh.jpg` for the Maharashtra plateau), soft-edged into the haze. Film
+  pipeline (three's EffectComposer, no new deps): tilt-shift focus (stronger close to the ground), speed zoom blur,
+  lens fringing, grade, vignette, grain; switches itself off if the device can't hold ~45 fps. Story clock is a
+  critically damped spring. Letterbox bars during the flights, 3D page-turn on headlines, pointer-tilting 3D cards
+  (Framer Motion springs), spring-flipped impact slabs, extruded 3D wordmark, scroll hint, error boundary -> static map.
 
 ## State (2026-10-04 midday): Phase 2 (frontend transformation) complete
 

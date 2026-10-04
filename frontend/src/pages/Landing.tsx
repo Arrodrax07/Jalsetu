@@ -10,6 +10,7 @@
  * without WebGL the page falls back to a static version of it.
  */
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useSpring } from 'motion/react';
 import { ArrowRight, ArrowUpRight } from '../components/icons';
 import { api } from '../services/api';
 import type { PublicSummary } from '../types';
@@ -17,10 +18,18 @@ import { Mark } from '../components/shell/Shell';
 import { cx } from '../components/ui';
 import { districtName } from '../utils/format';
 import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
-import { CHAPTERS, band, chapterAt, clock, phases, ramp } from '../components/landing/story';
+import { CHAPTERS, band, chapterAt, clock, phases, ramp, stepClock } from '../components/landing/story';
 import type { Anchors, Quality } from '../components/landing/World';
 
 const World = React.lazy(() => import('../components/landing/World'));
+
+/** If the 3D world fails to load or crashes (old GPU, network), the page falls back to the static map instead of a blank screen. */
+class WorldBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e: unknown) { console.warn('Landing world unavailable, showing the static map', e); }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
+}
 
 const EnterContext = React.createContext<(() => void) | undefined>(undefined);
 const EnterLink: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => {
@@ -71,6 +80,34 @@ const Live: React.FC<{ at?: string }> = ({ at }) => (
 
 const H = 'font-display font-semibold tracking-[-0.035em] [font-variation-settings:"wdth"_112]';
 
+/** A surface that leans toward the pointer on springs; children can sit at different depths (translateZ). */
+const TiltCard: React.FC<{ children: React.ReactNode; className?: string; strength?: number }> = ({ children, className, strength = 1 }) => {
+  const rx = useSpring(0, { stiffness: 110, damping: 18 }), ry = useSpring(0, { stiffness: 110, damping: 18 });
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !window.matchMedia('(pointer: fine)').matches) return;
+    const on = (e: PointerEvent) => { ry.set(((e.clientX / window.innerWidth) - 0.5) * 18 * strength); rx.set(-((e.clientY / window.innerHeight) - 0.5) * 12 * strength); };
+    window.addEventListener('pointermove', on);
+    return () => window.removeEventListener('pointermove', on);
+  }, [rx, ry, strength]);
+  return <motion.div style={{ rotateX: rx, rotateY: ry, transformStyle: 'preserve-3d', transformPerspective: 900 }} className={className}>{children}</motion.div>;
+};
+
+/** Extruded 3D type: stacked layers receding in depth, the whole word turning with the pointer. */
+const Wordmark3D: React.FC<{ text: string; className?: string }> = ({ text, className }) => (
+  <TiltCard strength={1.4} className="relative">
+    <span className={cx(className, 'relative block')} style={{ transform: 'translateZ(0px)' }}>{text}</span>
+    {Array.from({ length: 9 }, (_, i) => (
+      <span key={i} aria-hidden className={cx(className, 'pointer-events-none absolute inset-0 block')}
+        style={{ transform: `translateZ(${-(i + 1) * 3.5}px)`, color: `rgba(10,127,153,${(0.55 - i * 0.055).toFixed(3)})` }}>{text}</span>
+    ))}
+  </TiltCard>
+);
+
+const slab = {
+  hidden: (i: number) => ({ opacity: 0, rotateX: -78, y: 50, transition: { duration: 0.35, delay: i * 0.02 } }),
+  show: (i: number) => ({ opacity: 1, rotateX: 0, y: 0, transition: { type: 'spring' as const, stiffness: 120, damping: 16, delay: 0.08 + i * 0.07 } }),
+};
+
 const Scatter: React.FC<{ text: string; className?: string }> = ({ text, className }) => (
   <span className={className} aria-hidden>
     {[...text].map((ch, i) => {
@@ -95,6 +132,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const bar = useRef<HTMLDivElement>(null);
   const truckText = useRef<HTMLSpanElement>(null);
   const numeral = useRef<HTMLSpanElement>(null);
+  const barTop = useRef<HTMLDivElement>(null), barBottom = useRef<HTMLDivElement>(null);
+  const header = useRef<HTMLElement>(null), hint = useRef<HTMLDivElement>(null);
   const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
 
   useEffect(() => {
@@ -157,7 +196,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
     if (stage.current) mo.observe(stage.current, { childList: true, subtree: true });
     const tick = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
-      if (!worldDriving) clock.p += (clock.target - clock.p) * (1 - Math.exp(-dt * (reduce ? 14 : 4)));
+      if (!worldDriving) stepClock(dt);
       const p = clock.p;
       for (const el of els) {
         const c = CHAPTERS[+el.dataset.ch!];
@@ -168,9 +207,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         if (b >= 1 && +el.dataset.ch! === CHAPTERS.length - 1) o = ramp(lp, a, a + f);
         const depth = +el.dataset.depth!;
         const mid = (a + b) / 2;
-        const z = (lp - mid) / Math.max(0.2, b - a);
+        let z = (lp - mid) / Math.max(0.2, b - a);
+        if (el.dataset.first && lp < mid) z = 0; // the opening frame starts flat and still
         el.style.opacity = o.toFixed(3);
-        el.style.transform = reduce ? 'none' : `translate3d(0, ${(-z * 46 * depth).toFixed(1)}px, 0) scale(${(1 + z * 0.045 * depth).toFixed(4)})`;
+        el.style.transform = reduce ? 'none' : `translate3d(0, ${(-z * 46 * depth).toFixed(1)}px, ${(-Math.abs(z) * 120 * depth).toFixed(1)}px) rotateX(${(-z * 26 * depth).toFixed(2)}deg)`;
         el.style.filter = reduce || o > 0.98 ? 'none' : `blur(${((1 - o) * 5).toFixed(2)}px)`;
         el.style.visibility = o < 0.005 ? 'hidden' : 'visible';
       }
@@ -182,6 +222,13 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         el.style.transform = `translate3d(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px, 0) rotate(${(r * k).toFixed(1)}deg)`;
       }
       if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
+      // cinema bars slide in while the camera flies (the dive, the reorganisation, the climb); the chrome steps aside
+      const ph = phases(p);
+      const bars = reduce ? 0 : Math.max(ph.clouds, band(p, 0.225, 0.25, 0.3, 0.33) * 0.8);
+      if (barTop.current) barTop.current.style.transform = `scaleY(${bars.toFixed(3)})`;
+      if (barBottom.current) barBottom.current.style.transform = `scaleY(${bars.toFixed(3)})`;
+      if (header.current) { header.current.style.opacity = (1 - Math.min(1, bars * 1.6)).toFixed(3); header.current.style.visibility = bars > 0.6 ? 'hidden' : 'visible'; }
+      if (hint.current) hint.current.style.opacity = (1 - ramp(p, 0.002, 0.02)).toFixed(3);
       if (numeral.current) {
         const c = CHAPTERS[chapterAt(p)], lp = (p - c.start) / (c.end - c.start);
         numeral.current.style.transform = reduce ? 'none' : `translate3d(${((0.5 - lp) * 60).toFixed(1)}px, ${((0.5 - lp) * 160).toFixed(1)}px, 0)`;
@@ -226,25 +273,29 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
     <EnterContext.Provider value={onEnter}>
       <div className="landing relative bg-[#eaf1f3] text-[#13222b] antialiased selection:bg-[#0a7f99]/20">
         {/* ------------------------------------------------ stage (fixed) */}
-        <div ref={stage} className="fixed inset-0 overflow-hidden" aria-hidden>
+        <div ref={stage} className="fixed inset-0 overflow-hidden [perspective:1400px]" aria-hidden>
           <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]" />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-end overflow-hidden pr-[3vw]">
             <span ref={numeral} className="select-none font-display text-[46vw] font-semibold leading-none tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgba(19,34,43,0.07)] will-change-transform md:text-[34vw]">01</span>
           </div>
           {worldDriving && ready && (
-            <Suspense fallback={null}>
-              <div className="absolute inset-0 animate-[landingIn_1.6s_ease-out_both]">
-                <World geo={geo!} summary={s!} quality={quality} anchors={anchors} onHover={onHover} onReady={setFocus} />
-              </div>
-            </Suspense>
+            <WorldBoundary fallback={<StaticMap s={s} geo={geo} />}>
+              <Suspense fallback={null}>
+                <div className="absolute inset-0 animate-[landingIn_1.6s_ease-out_both]">
+                  <World geo={geo!} summary={s!} quality={quality} anchors={anchors} onHover={onHover} onReady={setFocus} />
+                </div>
+              </Suspense>
+            </WorldBoundary>
           )}
           {(!worldDriving || failed) && <StaticMap s={s} geo={geo} />}
           {/* vignette and horizon haze keep type readable over the world */}
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/90 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/80 to-transparent" />
+          {quality === 'low' && <div className="landing-grain pointer-events-none absolute inset-[-50%] opacity-[0.07] mix-blend-multiply" />}
 
           {/* readability scrims for the chapters that sit over a busy scene */}
+          <Layer ch={0} a={0} b={1} depth={0} first className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/90 from-25% via-[#eef4f6]/50 via-50% to-transparent to-75% md:w-[62vw] md:bg-gradient-to-r md:from-[#eef4f6]/95 md:from-0% md:via-[#eef4f6]/60 md:via-55% md:to-transparent md:to-100%" />
           {[3, 4, 5].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
           <Layer ch={7} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/70 backdrop-blur-[2px]" />
 
@@ -270,7 +321,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <p className={cx(H, 'mt-2 text-[14vw] leading-none text-[#c0621c] md:text-[7vw]')}>It’s coordination.</p>
           </Layer>
           {s && (
-            <Layer ch={1} a={0.1} b={1} depth={0.3} className="bottom-[9vh] left-5 md:bottom-[10vh] md:left-[8vw]">
+            <Layer ch={1} a={0.1} b={1} depth={0.3} className="bottom-[15vh] left-5 md:left-[8vw]">
               <Live at={at} />
               <p className="mt-2 font-mono text-[13px] text-[#23343d]"><span className="text-[22px] text-[#c0621c]">{num(s.inCrisis)}</span> places under water stress · <span className="text-[#c23b1b]">{num(s.critical)} critical</span></p>
             </Layer>
@@ -293,17 +344,19 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.</p>
           </Layer>
           <div ref={el => { anchors.current.focus = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
-            <div className="w-max translate-y-10 -translate-x-1/2 border-t border-[#0a7f99] bg-white/85 px-3 py-2 shadow-[0_20px_50px_-24px_rgba(19,34,43,0.45)] backdrop-blur-md sm:w-auto sm:-translate-y-1/2 sm:translate-x-6 sm:border-l sm:border-t-0 sm:pl-3 sm:pr-4">
-              <p className={cx(H, 'text-[22px] leading-none')}>{focus?.focusName ?? 'Highest-crisis place'}</p>
+            <div className="w-max translate-y-10 -translate-x-1/2 sm:w-auto sm:-translate-y-1/2 sm:translate-x-6">
+            <TiltCard className="border-t border-[#0a7f99] bg-white/85 px-3 py-2 shadow-[0_30px_60px_-28px_rgba(19,34,43,0.55)] backdrop-blur-md sm:border-l sm:border-t-0 sm:pl-3 sm:pr-4">
+              <p className={cx(H, 'text-[22px] leading-none [transform:translateZ(40px)]')}>{focus?.focusName ?? 'Highest-crisis place'}</p>
               {focus?.focusDistrict && <p className="mt-1 text-[12px] text-[#4d626b]">{districtName(focus.focusDistrict)} district</p>}
-              <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 font-mono text-[11px]">
+              <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 font-mono text-[11px] [transform:translateZ(22px)]">
                 <dt className="text-[#6a7f88]">Crisis score</dt><dd className="text-[#c23b1b]">{focus?.focusCrisis ?? '—'}/100</dd>
                 <dt className="text-[#6a7f88]">Population</dt><dd>{focus ? num(focus.focusPop) : '—'}</dd>
                 {topDeficit && focus?.focusDistrict && plain(topDeficit.district) === plain(focus.focusDistrict) && (
                   <><dt className="text-[#6a7f88]">Monsoon rain</dt><dd className="text-[#c0621c]">{topDeficit.deviation}% vs 10-yr</dd></>
                 )}
               </dl>
-              <div className="mt-2"><Live at={at} /></div>
+              <div className="mt-2 [transform:translateZ(12px)]"><Live at={at} /></div>
+            </TiltCard>
             </div>
           </div>
 
@@ -346,7 +399,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           {s && (
             <Layer ch={7} a={0.03} b={0.97} depth={0.6} className="inset-x-5 top-[14vh] md:inset-x-[8vw] md:top-[24vh]">
               <div className="flex items-center justify-between"><Eyebrow>08 · Right now</Eyebrow><Live at={at} /></div>
-              <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12">
+              <TiltCard strength={0.5}>
+              <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12 [transform-style:preserve-3d]">
                 {[
                   [num(s.places), 'places monitored', 'OSM + Census 2011 populations'],
                   [millions(s.people), 'people in those places', 'demand at CPHEEO/JJM norms'],
@@ -354,14 +408,16 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
                   [millions(s.peopleInCrisis), 'people in stressed places', 'from the crisis score'],
                   [num(s.newsReports), 'news reports read', 'Marathi + English, unverified until confirmed'],
                   [`${s.tankers} / ${s.depots}`, 'tankers / depots on real GPS', 'depots on real water sites'],
-                ].map(([v, l, n]) => (
-                  <div key={l} className="border-t border-[#c4d3d9] pt-3">
+                ].map(([v, l, n], i) => (
+                  <motion.div key={l} custom={i} variants={slab} initial="hidden" animate={chapter === 7 ? 'show' : 'hidden'}
+                    style={{ transformPerspective: 900, transformOrigin: '50% 100%' }} className="border-t border-[#c4d3d9] pt-3">
                     <dt className="text-[12px] text-[#4d626b] md:text-[13px]">{l}</dt>
-                    <dd className={cx(H, 'mt-1 text-[11vw] leading-none md:text-[4.6vw]')}>{v}</dd>
+                    <dd className={cx(H, 'mt-1 text-[11vw] leading-none md:text-[4.6vw] [transform:translateZ(30px)]')}>{v}</dd>
                     <dd className="mt-2 font-mono text-[10.5px] text-[#6a7f88]">{n}</dd>
-                  </div>
+                  </motion.div>
                 ))}
               </dl>
+              </TiltCard>
             </Layer>
           )}
 
@@ -382,7 +438,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         </div>
 
         {/* ------------------------------------------------ chrome */}
-        <header className="fixed inset-x-0 top-0 z-30">
+        <header ref={header} className="fixed inset-x-0 top-0 z-30">
           <div className="flex h-16 items-center justify-between px-5 md:px-8">
             <a href="/welcome" className="flex items-center gap-2.5 text-[#13222b]" aria-label="JalSetu home">
               <Mark className="h-7 w-7 text-[#0a7f99]" /><span className={cx(H, 'text-[22px] leading-none')}>JalSetu</span>
@@ -400,6 +456,16 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           </div>
           <div className="h-px bg-[#cfdce1]"><div ref={bar} className="h-px origin-left scale-x-0 bg-[#0a7f99]" /></div>
         </header>
+
+        <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 z-[25] h-[11vh] origin-top scale-y-0 bg-[#0a1217]" ref={barTop} />
+        <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-0 z-[25] h-[11vh] origin-bottom scale-y-0 bg-[#0a1217]" ref={barBottom} />
+        <div ref={hint} aria-hidden className="pointer-events-none fixed inset-x-0 bottom-7 z-20 flex flex-col items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#3d7486]">Scroll to travel</span>
+          <span className="relative h-9 w-[22px] rounded-full border border-[#3d7486]/50">
+            <motion.span className="absolute left-1/2 top-1.5 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[#0a7f99]"
+              animate={reduce ? undefined : { y: [0, 14, 0], opacity: [1, 0.2, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }} />
+          </span>
+        </div>
 
         <nav aria-label="Chapters" className="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
           <ol className="space-y-2.5">
@@ -427,7 +493,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             {/* final chapter: real, focusable content that arrives with the end of the journey */}
             <section id="return" aria-labelledby="return-title" className="absolute inset-x-0 bottom-0 flex h-[100svh] flex-col items-center justify-end px-5 pb-[10vh] text-center [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
               <h2 id="return-title" className="sr-only">From water movement to intelligent response</h2>
-              <p className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')}>JalSetu</p>
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[75%] bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(238,244,246,0.94)_0%,rgba(238,244,246,0.7)_45%,transparent_75%)]" />
+              <div className="pointer-events-none [perspective:1200px]"><Wordmark3D text="JalSetu" className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')} /></div>
               <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#2d6c7f] md:text-[13px]">Connect · Coordinate · Respond</p>
               <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
                 <EnterLink className="group inline-flex items-center gap-2 rounded-full bg-[#0a7f99] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_18px_40px_-18px_rgba(10,127,153,0.8)] transition-[background-color,transform] hover:bg-[#0b6e85] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
@@ -442,13 +509,16 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               </div>
               <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
-                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Supply arcs, the tanker run and national arcs are illustrations.
+                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
               </p>
             </section>
           </div>
         </main>
       </div>
-      <style>{`@keyframes landingIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
+      <style>{`@keyframes landingIn { from { opacity: 0 } to { opacity: 1 } }
+.landing-grain { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); animation: landingGrain 0.9s steps(6) infinite; }
+@keyframes landingGrain { 0% { transform: translate(0,0) } 20% { transform: translate(-3%,2%) } 40% { transform: translate(2%,-3%) } 60% { transform: translate(-2%,-1%) } 80% { transform: translate(3%,3%) } 100% { transform: translate(0,0) } }
+@media (prefers-reduced-motion: reduce) { .landing-grain { animation: none } }`}</style>
     </EnterContext.Provider>
   );
 };

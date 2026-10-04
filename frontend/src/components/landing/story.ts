@@ -17,7 +17,21 @@ export const CHAPTERS: Chapter[] = [
 ];
 
 /** Shared, mutable story clock. `target` follows the scrollbar; `p` eases toward it in the render loop. */
-export const clock = { target: 0, p: 0, pointerX: 0, pointerY: 0, reduce: false };
+export const clock = { target: 0, p: 0, v: 0, pointerX: 0, pointerY: 0, reduce: false };
+
+/** Advance the story clock with a critically damped spring: every move eases in and settles, never snaps. */
+export function stepClock(dt: number) {
+  const K = clock.reduce ? 600 : 22, D = 2 * Math.sqrt(K);
+  let rem = Math.min(dt, 0.1);
+  while (rem > 0) {
+    const h = Math.min(rem, 1 / 120);
+    clock.v += ((clock.target - clock.p) * K - clock.v * D) * h;
+    clock.p += clock.v * h;
+    rem -= h;
+  }
+  if (clock.p < 0) { clock.p = 0; clock.v = 0; } else if (clock.p > 1) { clock.p = 1; clock.v = 0; }
+  if (Math.abs(clock.target - clock.p) < 1e-5 && Math.abs(clock.v) < 1e-4) { clock.p = clock.target; clock.v = 0; }
+}
 
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 export const smooth = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
