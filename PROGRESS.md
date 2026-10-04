@@ -108,6 +108,13 @@ Plan, in order (tick as done, commit after each):
        footage/photo (credited) in BOTH modes. No key exists yet: the user must create one (Map Tiles API enabled).
        Original note: Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
        Google attribution) vs. real licensed footage/photo of a tanker queue blended at the end of the descent. Ask.
+3b.[x] Real photo for the human moment: `public/landing/shirur-2016.jpg` (+ `-portrait`, `.json` credits) — Shirur
+       Kasar, Beed district, 20 May 2016, Sanjeev Bonde, CC BY-SA 4.0 (Wikimedia Commons). Caption with real date, never
+       "live". Plan: camera descends to the water point, cross-fades into the photo with a slow push-in, holds, lifts off.
+3c.[ ] GoogleTiles.tsx: TilesRenderer + GoogleCloudAuthPlugin + ReorientationPlugin at the village lat/lon, mounted in
+       the Ground group slot (same camera/clouds); shown only after tiles load, our SRTM/Sentinel terrain underneath
+       otherwise (automatic fallback: no key / 4xx / quota / network / slow / weak device -> never an error on screen).
+       Snap height by raycasting the tiles at the origin. Hide the stylised people/pots (photo replaces them).
 4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
 5. [ ] Aggressive scroll tests (wheel, fast jumps, scrollbar drag, touch) in Playwright; fix jank; commit; update docs.
 
