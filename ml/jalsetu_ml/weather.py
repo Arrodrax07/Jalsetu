@@ -2,6 +2,7 @@
 
 * ``fetch_history`` pulls daily ERA5-based reanalysis from the archive API and caches it as CSV.
 * ``fetch_forecast`` pulls the 16-day daily forecast used at inference time.
+* ``fetch_forecast_many`` does the same for many points, batching them into a few multi-location requests.
 """
 from __future__ import annotations
 
@@ -83,6 +84,33 @@ def fetch_forecast(lat: float, lng: float, days: int = 7, past_days: int = 30, t
     resp = httpx.get(config.OPEN_METEO_FORECAST_URL, params=params, timeout=timeout)
     resp.raise_for_status()
     return _to_frame(resp.json())
+
+
+FORECAST_BATCH = 100  # Open-Meteo accepts comma-separated coordinates; keep URLs a sane length
+
+
+def fetch_forecast_many(points: list[tuple[float, float]], days: int = 7, past_days: int = 30,
+                        timeout: float = 20.0) -> list[pd.DataFrame]:
+    """``fetch_forecast`` for many points, in input order. Raises if any batch fails."""
+    out: list[pd.DataFrame] = []
+    for i in range(0, len(points), FORECAST_BATCH):
+        chunk = points[i:i + FORECAST_BATCH]
+        params = {
+            "latitude": ",".join(f"{lat:.4f}" for lat, _ in chunk),
+            "longitude": ",".join(f"{lng:.4f}" for _, lng in chunk),
+            "daily": ",".join(config.WEATHER_DAILY_VARS),
+            "forecast_days": max(1, min(days, 16)),
+            "past_days": max(0, min(past_days, 92)),
+            "timezone": "Asia/Kolkata",
+        }
+        resp = httpx.get(config.OPEN_METEO_FORECAST_URL, params=params, timeout=timeout)
+        resp.raise_for_status()
+        payload = resp.json()
+        items = payload if isinstance(payload, list) else [payload]  # a single point comes back as an object
+        if len(items) != len(chunk):
+            raise ValueError(f"Open-Meteo returned {len(items)} locations for {len(chunk)} requested")
+        out.extend(_to_frame(p) for p in items)
+    return out
 
 
 def climatology_fallback(start: date, days: int) -> pd.DataFrame:

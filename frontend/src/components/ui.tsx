@@ -57,7 +57,7 @@ export const Panel: React.FC<{ title?: React.ReactNode; actions?: React.ReactNod
         <header className={cx('flex flex-wrap items-center justify-between gap-x-3 gap-y-2', flush ? 'pb-3' : 'border-b border-cc-border px-5 py-3')}>
           <div className="min-w-0">
             {eyebrow && <p className="mb-0.5 text-[11px] font-medium text-cc-faint">{eyebrow}</p>}
-            {title && <h2 className="truncate text-[14px] font-semibold text-cc-text">{title}</h2>}
+            {title && <h2 className="text-balance text-[14px] font-semibold text-cc-text">{title}</h2>}
           </div>
           {actions && <div className="flex flex-shrink-0 items-center gap-2">{actions}</div>}
         </header>
@@ -270,13 +270,13 @@ export const Kpi: React.FC<{ label: string; value: React.ReactNode; sub?: React.
     const numeric = typeof value === 'number';
     return (
       <motion.button type="button" onClick={onClick} disabled={!onClick} variants={itemVariants}
-        className={cx('group relative min-w-0 rounded-card px-4 py-3.5 text-left transition-colors duration-150 disabled:cursor-default',
+        className={cx('group relative min-w-0 rounded-card px-3 py-3.5 text-left sm:px-4 transition-colors duration-150 disabled:cursor-default',
           onClick && 'hover:bg-cc-hover/70 focus-visible:bg-cc-hover/70', className)}>
         <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-cc-muted">
           {icon && <span className="kpi-icon flex-shrink-0 text-cc-faint transition-colors group-hover:text-cc-text">{icon}</span>}
           <span className="truncate">{label}</span>
         </p>
-        <p className={cx('display mt-1.5 truncate text-[30px] leading-none', KPI_VALUE[tone])}>
+        <p className={cx('display mt-1.5 truncate text-[24px] leading-none sm:text-[30px]', KPI_VALUE[tone])}>
           {numeric ? <CountUp value={value as number} /> : value}
         </p>
         {sub && <p className="mt-1.5 truncate text-[12px] text-cc-muted">{sub}</p>}

@@ -2,6 +2,8 @@
 yet the value is null and the UI says so, instead of showing a placeholder."""
 from __future__ import annotations
 
+import threading
+import time
 from collections import Counter, defaultdict
 from datetime import timedelta
 
@@ -101,18 +103,33 @@ def activity(window: str = Query("7d", alias="range", pattern="^(today|7d|30d)$"
             "hourly": hourly, "daily": [{"date": k, **v} for k, v in sorted(daily.items())]}
 
 
+_forecast_memo: dict[tuple, tuple[float, dict]] = {}
+_forecast_lock = threading.Lock()
+FORECAST_MEMO_S = 300  # weather refreshes every 3 h; the memo only spares concurrent and repeat page loads
+
+
 @router.get("/analytics/forecast")
-def city_forecast(days: int = Query(7, ge=1, le=14), db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+def city_forecast(days: int = Query(7, ge=1, le=14), per_place: bool = Query(False, alias="perPlace"),
+                  db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
     communities = db.scalars(select(Community).where(Community.is_active.is_(True))).all()
     if not communities:
         return {"days": [], "communities": [], "weatherSource": None}
-    total: dict[str, dict] = {}
-    per = []
-    source = None
-    try:
-        for c in communities:
-            rows, source = ml.forecast_demand(c.lat, c.lng, c.daily_demand, c.vulnerability_score, days=days)
-            per.append({"communityId": c.id, "name": c.name, "baseline": c.daily_demand, "days": rows})
+    # Any change to the places or their demand changes the key, so an edit is never served stale
+    key = (days, per_place, hash(tuple((c.id, c.lat, c.lng, c.daily_demand, c.vulnerability_score) for c in communities)))
+    with _forecast_lock:  # concurrent page loads wait for one computation instead of each running it
+        hit = _forecast_memo.get(key)
+        if hit and time.time() - hit[0] < FORECAST_MEMO_S:
+            return hit[1]
+        try:
+            forecasts, sources = ml.forecast_demand_many(
+                [(c.lat, c.lng, c.daily_demand, c.vulnerability_score) for c in communities], days=days)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        total: dict[str, dict] = {}
+        per = []
+        for c, rows in zip(communities, forecasts):
+            if per_place:
+                per.append({"communityId": c.id, "name": c.name, "baseline": c.daily_demand, "days": rows})
             for r in rows:
                 agg = total.setdefault(r["date"], {"date": r["date"], "p10": 0, "p50": 0, "p90": 0, "baseline": 0,
                                                    "tempMax": r["temp_max"], "precipMm": r["precip_mm"]})
@@ -120,10 +137,11 @@ def city_forecast(days: int = Query(7, ge=1, le=14), db: Session = Depends(get_d
                 agg["p50"] += r["litres_p50"]
                 agg["p90"] += r["litres_p90"]
                 agg["baseline"] += c.daily_demand
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc)) from exc
-    return {"days": sorted(total.values(), key=lambda r: r["date"]), "communities": per, "weatherSource": source,
-            "model": (ml.forecaster().meta if ml.forecaster() else None)}
+        out = {"days": sorted(total.values(), key=lambda r: r["date"]), "places": len(communities), "communities": per,
+               "weatherSource": ",".join(sorted(sources)) or None, "model": (ml.forecaster().meta if ml.forecaster() else None)}
+        _forecast_memo.clear()
+        _forecast_memo[key] = (time.time(), out)
+        return out
 
 
 @router.get("/analytics/impact")

@@ -193,7 +193,7 @@ export interface DashboardStats {
   coverageBalance: number | null; coverageEquality: number | null; minCoveragePct: number | null; lastPlanFairnessGain: number | null;
   routeTrips30d: number; routeAvgKmSaved: number | null; routeAvgFuelSavedInr: number | null;
 }
-export interface CityForecast { days: { date: string; p10: number; p50: number; p90: number; baseline: number; tempMax: number; precipMm: number }[]; weatherSource: string | null; communities: unknown[]; model: Record<string, unknown> | null }
+export interface CityForecast { days: { date: string; p10: number; p50: number; p90: number; baseline: number; tempMax: number; precipMm: number }[]; weatherSource: string | null; places?: number; communities: unknown[]; model: Record<string, unknown> | null }
 export interface ActivityProfile { range: string; origin?: 'all' | 'real'; syntheticRecords?: number; hourly: { hour: string; requests: number; complaints: number }[]; daily: { date: string; requests: number; complaints: number }[] }
 export interface ImpactStats {
   fairnessSeries: { date: string; before: number; after: number; minCoverageAfter: number | null }[];

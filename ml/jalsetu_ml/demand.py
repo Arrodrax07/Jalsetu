@@ -193,6 +193,63 @@ class DemandForecaster:
         self.features = b["features"]
         self.meta, self.metrics = b["meta"], b["metrics"]
 
+    def _features(self, weather: pd.DataFrame) -> pd.DataFrame:
+        """Weather features, memoised per weather frame (callers cache frames for hours and reuse them)."""
+        memo = self.__dict__.setdefault("_feature_memo", {})
+        hit = memo.get(id(weather))
+        if hit is not None and hit[0] is weather:
+            return hit[1]
+        if len(memo) > 4096:
+            memo.clear()
+        f = add_weather_features(weather)
+        memo[id(weather)] = (weather, f)
+        return f
+
+    def forecast_many(self, weather: pd.DataFrame, items: list[tuple[float, float]], start_date=None) -> list[list[dict]]:
+        """``forecast`` for many (baseline_litres, vulnerability_score) pairs sharing one weather series."""
+        return self.forecast_groups([(weather, items)], start_date)[0]
+
+    def forecast_groups(self, groups: list[tuple[pd.DataFrame, list[tuple[float, float]]]], start_date=None) -> list[list[list[dict]]]:
+        """Many weather series, each with many (baseline_litres, vulnerability_score) pairs. Same numbers as calling
+        ``forecast`` for every pair, but everything goes through each model in a single predict call."""
+        frames, blocks = [], []
+        vcol = self.features.index("vulnerability_score")
+        for weather, items in groups:
+            f = self._features(weather)
+            if start_date is not None:
+                f = f[pd.to_datetime(f["date"]) >= pd.Timestamp(start_date)]
+            f = f.reset_index(drop=True)
+            frames.append(f)
+            if items:
+                base = f.assign(vulnerability_score=0.0)[self.features].to_numpy(dtype=float)
+                block = np.tile(base, (len(items), 1))
+                block[:, vcol] = np.repeat([float(v) for _, v in items], len(f))
+                blocks.append(block)
+        if not blocks:
+            return [[] for _ in groups]
+        X = pd.DataFrame(np.vstack(blocks), columns=self.features)
+        mid = self.median.predict(X)
+        lo = np.minimum(self.p10.predict(X), mid)
+        hi = np.maximum(self.p90.predict(X), mid)
+        out, i = [], 0
+        for f, (_, items) in zip(frames, groups):
+            dates = [pd.Timestamp(d).date().isoformat() for d in f["date"]]
+            tmax = [round(float(t), 1) for t in f["temp_max"]]
+            rain = [round(float(p), 1) for p in f["precip"]]
+            g = []
+            for base, _ in items:
+                rows = []
+                for j in range(len(f)):
+                    rows.append({
+                        "date": dates[j], "demand_index": round(float(mid[i]), 3),
+                        "litres_p10": int(round(base * lo[i], -2)), "litres_p50": int(round(base * mid[i], -2)),
+                        "litres_p90": int(round(base * hi[i], -2)), "temp_max": tmax[j], "precip_mm": rain[j],
+                    })
+                    i += 1
+                g.append(rows)
+            out.append(g)
+        return out
+
     def forecast(self, weather: pd.DataFrame, baseline_litres: float, vulnerability_score: float, start_date=None) -> list[dict]:
         """``weather`` should include ~30 past days (for rolling rain) plus the forecast horizon."""
         f = add_weather_features(weather)

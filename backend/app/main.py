@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         from .ingestion.jobs import loop
 
         task = asyncio.create_task(loop())
+        threading.Thread(target=ml.warm_state_forecast, daemon=True).start()
     yield
     if task:
         task.cancel()

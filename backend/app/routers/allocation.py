@@ -31,16 +31,14 @@ def fleet_supply(db: Session, trips_per_day: int) -> int:
 
 
 def forecast_demands(communities: list[Community]) -> tuple[dict[str, int], str]:
-    out, sources = {}, set()
-    for c in communities:
-        try:
-            rows, src = ml.forecast_demand(c.lat, c.lng, c.daily_demand, c.vulnerability_score, days=1)
-            out[c.id] = rows[0]["litres_p50"]
-            sources.add(src)
-        except Exception as exc:  # noqa: BLE001 — fall back to baseline for this community
-            log.warning("forecast failed for %s: %s", c.id, exc)
-    if len(out) != len(communities):
+    try:
+        rows, sources = ml.forecast_demand_many([(c.lat, c.lng, c.daily_demand, c.vulnerability_score) for c in communities], days=1)
+    except Exception as exc:  # noqa: BLE001 — fall back to baseline for every community
+        log.warning("forecast failed (%s); using baseline demand", exc)
         return {c.id: c.daily_demand for c in communities}, "baseline"
+    if any(not r for r in rows):
+        return {c.id: c.daily_demand for c in communities}, "baseline"
+    out = {c.id: r[0]["litres_p50"] for c, r in zip(communities, rows)}
     return out, "PREDICTED: ml-forecast (" + ",".join(sorted(sources)) + "); advisory, needs real observations for calibration"
 
 

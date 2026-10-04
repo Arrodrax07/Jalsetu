@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, shortDate, tooltipStyle } from '../components/charts/theme';
@@ -8,6 +8,16 @@ import { FlaskConical } from '../components/icons';
 import type { CityForecast, ImpactStats, OperationsMetrics } from '../types';
 import { km, litres, num, pct } from '../utils/format';
 
+
+// Every check in domain.ANOMALY_KINDS, so a zero reads as "checked, none found" rather than missing.
+const ANOMALIES: [string, string, string][] = [
+  ['telemetry_stale', 'Telemetry stale', 'Active trip with no fix for longer than the offline threshold'],
+  ['route_deviation', 'Route deviation', 'Sustained distance from the planned route'],
+  ['prolonged_stop', 'Prolonged stop', 'Stationary on an active trip, away from any stop'],
+  ['gps_jump', 'GPS jump', 'Implied speed between two fixes is physically implausible'],
+  ['low_accuracy', 'Low accuracy', 'Reported accuracy worse than the threshold for consecutive fixes'],
+  ['invalid_fix', 'Invalid fix', 'Out-of-range or null-island coordinates, rejected'],
+];
 
 export const Analytics: React.FC = () => {
   const { fail } = useApp();
@@ -51,26 +61,37 @@ export const Analytics: React.FC = () => {
             <Kpi label="Request → fulfilment" value={ops.avgRequestToFulfilmentHours != null ? `${ops.avgRequestToFulfilmentHours} h` : '—'} sub={`${ops.requestsFulfilled}/${ops.requestsCreated} fulfilled`} />
             <Kpi label="Fleet utilisation" value={pct(ops.fleetUtilisationPct, 1)} sub="time on started trips" />
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Panel title="Daily completed trips and litres delivered (IST)">
+          <div className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+            <Panel title="Litres delivered and trips completed, per day (IST)">
               {ops.daily.length === 0 ? <Empty title="No completed trips or deliveries in this window" /> : (
-                <div className="h-64"><ResponsiveContainer><BarChart data={ops.daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <div className="h-64 xl:h-[22rem]"><ResponsiveContainer><ComposedChart data={ops.daily} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke={GRID} vertical={false} /><XAxis dataKey="date" tickFormatter={shortDate} tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis yAxisId="l" tickFormatter={kLitres} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => [n === 'litres' ? litres(v) : v, n === 'litres' ? 'Litres delivered' : 'Trips completed']} />
-                  <Legend wrapperStyle={{ fontSize: 12, color: '#94a3bd' }} formatter={(v) => v === 'litres' ? 'Litres delivered' : v} />
-                  <Bar yAxisId="l" dataKey="litres" fill={SERIES[0]} radius={[4, 4, 0, 0]} maxBarSize={24} />
-                </BarChart></ResponsiveContainer></div>
+                  <YAxis yAxisId="t" orientation="right" allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => n === 'Litres delivered' ? [litres(v), n] : [v, n]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar yAxisId="l" dataKey="litres" name="Litres delivered" fill={SERIES[0]} fillOpacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Line yAxisId="t" dataKey="trips" name="Trips completed" stroke={SERIES[2]} strokeWidth={2} dot={false} type="monotone" />
+                </ComposedChart></ResponsiveContainer></div>
               )}
             </Panel>
-            <Panel title="GPS anomalies recorded" actions={<span className="text-2xs text-cc-muted">route deviations: {ops.routeDeviations}</span>}>
-              {Object.keys(ops.anomaliesByKind).length === 0 ? <Empty title="No anomalies in this window" /> : (
-                <ul className="space-y-2">{Object.entries(ops.anomaliesByKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
-                  const max = Math.max(...Object.values(ops.anomaliesByKind));
-                  return <li key={k} className="text-sm"><div className="flex justify-between"><span className="capitalize">{k.replace(/_/g, ' ')}</span><span className="num">{v}</span></div>
-                    <div className="mt-1 h-1.5 rounded-full bg-cc-bg"><div className="h-full rounded-full" style={{ width: `${(100 * v) / max}%`, background: SERIES[1] }} /></div></li>;
-                })}</ul>
-              )}
+            <Panel title="Telemetry checks" eyebrow="Anomalies raised by the tracker in this window">
+              <ul className="divide-y divide-cc-border/70">
+                {ANOMALIES.map(([k, label, hint]) => {
+                  const v = ops.anomaliesByKind[k] ?? 0;
+                  const max = Math.max(1, ...Object.values(ops.anomaliesByKind));
+                  return (
+                    <li key={k} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 py-2">
+                      <div className="min-w-0">
+                        <p className={v ? 'text-[13px] font-medium text-cc-text' : 'text-[13px] text-cc-muted'}>{label}</p>
+                        <p className="truncate text-[11.5px] text-cc-faint" title={hint}>{hint}</p>
+                        {v > 0 && <div className="mt-1 h-1 rounded-full bg-cc-hover"><div className="h-full rounded-full bg-cc-warn" style={{ width: `${(100 * v) / max}%` }} /></div>}
+                      </div>
+                      <span className={v ? 'num text-right text-[15px] font-semibold text-cc-text' : 'num text-right text-[13px] text-cc-faint'}>{v}</span>
+                    </li>
+                  );
+                })}
+              </ul>
             </Panel>
           </div>
         </>
@@ -83,7 +104,7 @@ export const Analytics: React.FC = () => {
             <>
               <div className="h-60"><ResponsiveContainer><ComposedChart data={fc} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} /><XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={kLitres} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} />
+                <YAxis tickFormatter={kLitres} tick={AXIS_TICK} axisLine={false} tickLine={false} width={56} domain={['auto', 'auto']} />
                 <Tooltip {...tooltipStyle} formatter={(v: any, n: any) => Array.isArray(v) ? [`${litres(v[0])} – ${litres(v[1])}`, '80% interval'] : [litres(v), n]} />
                 <Legend wrapperStyle={{ fontSize: 12, color: '#94a3bd' }} />
                 <Area dataKey="band" name="80% interval" stroke="none" fill={SERIES[0]} fillOpacity={0.15} isAnimationActive={false} />
