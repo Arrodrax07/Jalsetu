@@ -267,7 +267,7 @@ export const api = {
   retrain: (target: 'all' | 'complaints' | 'demand') => post<{ started: boolean }>(`/ml/retrain?target=${target}`),
   retrainStatus: () => get<{ running: boolean; log: string; returncode: number | null }>('/ml/retrain'),
   audit: (q = '') => get<any[]>(`/audit${q}`),
-  downloadReport: async (kind: 'communities' | 'requests' | 'complaints' | 'deliveries' | 'allocation') => {
+  downloadReport: async (kind: 'trips' | 'communities' | 'requests' | 'complaints' | 'deliveries' | 'allocation') => {
     const url = await blobUrl(`/reports/${kind}.csv`);
     const a = document.createElement('a');
     a.href = url;

@@ -22,16 +22,17 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
           <span className="mt-1 block text-[10px] font-medium uppercase tracking-[0.2em] text-cc-faint">Water operations · Maharashtra</span></span>
       </motion.div>
       <div className="relative">
-        <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.8, ease: EASE }}
-          className="display max-w-xl text-[64px] leading-[0.98] text-cc-text xl:text-[76px]">
-          Every litre,<br /><em className="text-cc-accent">accounted for.</em>
-        </motion.h1>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45, duration: 0.6 }} className="mt-5 max-w-md text-[15px] leading-relaxed text-cc-muted">
-          The control room for tanker water supply across 1,263 towns and villages: who needs water, which truck goes, and proof that it arrived.
-        </motion.p>
-        <div className="pointer-events-none absolute -right-10 top-1/2 w-[52%] -translate-y-1/2 opacity-90 xl:-right-4">
+        {/* The state sits behind the headline as a watermark, so type and map never compete */}
+        <div className="pointer-events-none absolute -right-32 top-1/2 w-[60%] -translate-y-1/2 opacity-[0.32] xl:-right-24" aria-hidden>
           <MaharashtraArt delay={0.3} labels={false} />
         </div>
+        <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.8, ease: EASE }}
+          className="relative display max-w-xl text-[64px] leading-[0.98] text-cc-text xl:text-[76px]">
+          Every litre,<br /><em className="text-cc-accent">accounted for.</em>
+        </motion.h1>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45, duration: 0.6 }} className="relative mt-5 max-w-md text-[15px] leading-relaxed text-cc-muted">
+          The control room for tanker water supply across 1,263 towns and villages: who needs water, which truck goes, and proof that it arrived.
+        </motion.p>
       </div>
       <Stagger className="grid max-w-2xl grid-cols-3 gap-6" delay={0.6} step={0.08}>
         {FACTS.map(f => (
