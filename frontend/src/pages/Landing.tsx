@@ -304,7 +304,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           {/* readability scrims for the chapters that sit over a busy scene */}
           <Layer ch={0} a={0} b={1} depth={0} first className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/90 from-25% via-[#eef4f6]/50 via-50% to-transparent to-75% md:w-[62vw] md:bg-gradient-to-r md:from-[#eef4f6]/95 md:from-0% md:via-[#eef4f6]/60 md:via-55% md:to-transparent md:to-100%" />
           {[3, 4, 6].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
-          <Layer ch={8} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/70 backdrop-blur-[2px]" />
+          <Layer ch={8} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/78" />
 
           {/* Chapter 1: scale */}
           <Layer ch={0} a={0} b={0.62} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">

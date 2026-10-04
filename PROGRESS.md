@@ -97,7 +97,7 @@ Plan, in order (tick as done, commit after each):
 1. [x] Scroll (728fbf6 + prewarm): remove the custom wheel hijack (double smoothing with trackpads), drive the story clock with one
        critically damped spring + velocity cap so big jumps fly instead of snap; read scroll in rAF. (story.ts stepClock,
        Landing.tsx wheel effect)
-2. [~] Frame rate: DONE gating + shader/shadow prewarm (spikes 661->~70 ms at the columns). OPEN: a ~500 ms one-off
+2. [x] Frame rate (see DONE below): DONE gating + shader/shadow prewarm (spikes 661->~70 ms at the columns). OPEN: a ~500 ms one-off
        spike near p=0.44 and ~180 ms at 0.566; measurements were contaminated by the user's Brave tab using 53% GPU,
        re-measure with it closed (scratchpad smooth3.js on the prod build). Originally: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
        every frame at every altitude); measure per chapter with `?debug=` flags on the prod build (scratchpad jank.js).
@@ -117,7 +117,10 @@ Plan, in order (tick as done, commit after each):
        Snap height by raycasting the tiles at the origin. Hide the stylised people/pots (photo replaces them).
 3d.[x] Photo moment in Landing.tsx (PHOTO timing in story.ts), modelled people/pots removed, Google attribution
        overlay, key documented in frontend/.env.example (VITE_GOOGLE_MAPS_API_KEY in frontend/.env.local, restricted).
-NEXT: user restarts servers (memory), Playwright run of the ground chapter in fallback mode; then with a key: verify
+DONE 2026-10-04: fallback path verified in Playwright (prod build): aerial zoom-through into the photo, no toy close-ups;
+       full-journey smoothness run (wheel bursts, steady pass, scrollbar jump + back): ~140 fps, 2 frames >34 ms
+       (worst 73 ms), max clock step 0.008/frame. Full-screen backdrop blur removed from the impact scrim.
+NEXT: with a key: verify
        axis/height alignment of the tiles (holder.rotation.y = PI, raycast height fix), switching only inside clouds,
        attribution, quota failure -> fallback (test with an invalid key). Then 5.
 4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
