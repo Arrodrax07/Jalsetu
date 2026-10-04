@@ -20,7 +20,7 @@ export const CHAPTERS: Chapter[] = [
 /** The descent to the ground is inserted into the map story: during it the map timeline holds still. `base` maps
  *  page progress onto the map timeline every other phase and camera key was tuned on. */
 const NEW = [0, 0.09, 0.19, 0.29, 0.4, 0.5, 0.66, 0.76, 0.85, 0.93, 1];
-const OLD = [0, 0.1, 0.22, 0.34, 0.48, 0.62, 0.62, 0.74, 0.84, 0.93, 1];
+const OLD = [0, 0.1, 0.22, 0.34, 0.48, 0.62, 0.645, 0.74, 0.84, 0.93, 1]; // live-ops labels finish while the Earth covers the screen
 export function base(p: number) {
   if (p <= 0) return 0;
   for (let i = 1; i < NEW.length; i++) if (p <= NEW[i]) return OLD[i - 1] + ((p - NEW[i - 1]) / (NEW[i] - NEW[i - 1])) * (OLD[i] - OLD[i - 1]);

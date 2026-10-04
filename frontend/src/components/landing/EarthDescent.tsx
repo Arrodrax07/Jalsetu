@@ -82,43 +82,45 @@ const STYLE: StyleSpecification = {
     { id: 'road-case', type: 'line', source: 'osm', 'source-layer': 'transportation', minzoom: 12,
       filter: ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service'], true, false],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#5b5048', 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13.5, 0.5],
-        'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, 1, 15, 4, 18, 22] } },
+      paint: { 'line-color': '#3d3832', 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 15, 0.22],
+        'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, 1, 15, 3.2, 18, 18], 'line-blur': 1.2 } },
     { id: 'road', type: 'line', source: 'osm', 'source-layer': 'transportation', minzoom: 12,
       filter: ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service'], true, false],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], '#efe2c4', '#e9e3d6'],
-        'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13.5, 0.75],
-        'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, 0.5, 15, 2.6, 18, 17] } },
+      paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary'], '#6d6860', ['minor', 'service'], '#9c8a74', '#7d7468'],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13.5, 0.35, 16, 0.6],
+        'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, 0.4, 15, 2.2, 18, 14], 'line-blur': 0.6 } },
     { id: 'buildings', type: 'fill-extrusion', source: 'osm', 'source-layer': 'building', minzoom: 13.5,
       paint: {
-        'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 6], 3, '#d9cfc2', 12, '#e7e1d8', 40, '#f2efea'],
+        'fill-extrusion-color': ['match', ['%', ['to-number', ['coalesce', ['id'], ['get', 'render_height'], 0]], 7],
+          0, '#d8cbb6', 1, '#e6ddcf', 2, '#c9b597', 3, '#ddd3c3', 4, '#bfae96', 5, '#e9e2d6', '#cfc2ad'],
         'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-        'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14.5, 0.92],
+        'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14.5, 0.96],
         'fill-extrusion-vertical-gradient': true,
       } },
     { id: 'road-names', type: 'symbol', source: 'osm', 'source-layer': 'transportation_name', minzoom: 15,
       layout: { 'symbol-placement': 'line', 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Regular'], 'text-size': 12 },
       paint: { 'text-color': '#2b2622', 'text-halo-color': '#f4efe6', 'text-halo-width': 1.4 } },
+    // names stay sparse, like a globe viewer: towns from afar, a few villages only once you are low
     { id: 'places', type: 'symbol', source: 'osm', 'source-layer': 'place', minzoom: 8, maxzoom: 15,
-      filter: ['match', ['get', 'class'], ['city', 'town', 'village'], true, false],
+      filter: ['any', ['match', ['get', 'class'], ['city', 'town'], true, false], ['all', ['==', ['get', 'class'], 'village'], ['>=', ['zoom'], 12.8]]],
       layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Regular'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 13, 15], 'text-letter-spacing': 0.04 },
+        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 12, 13, 14], 'text-letter-spacing': 0.04, 'symbol-sort-key': ['match', ['get', 'class'], 'city', 0, 'town', 1, 2], 'text-padding': 24 },
       paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(20,30,36,0.65)', 'text-halo-width': 1.5 } },
   ],
 };
 
 export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null), mapEl = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = box.current;
-    if (!el) return;
+    const el = box.current, mapBox = mapEl.current;
+    if (!el || !mapBox) return;
     let map: MLMap | null = null;
     try {
       const c = cameraAt(EARTH.in0);
       map = new maplibregl.Map({
-        container: el, style: STYLE, center: c.center, zoom: c.zoom, pitch: c.pitch, bearing: c.bearing,
+        container: mapBox, style: STYLE, center: c.center, zoom: c.zoom, pitch: c.pitch, bearing: c.bearing,
         maxPitch: 80, interactive: true, attributionControl: { compact: true }, fadeDuration: 200,
         // a page-length scroll story: the wheel always scrolls the page; drags look around during the hold
         scrollZoom: false, boxZoom: false, doubleClickZoom: false, keyboard: false, cooperativeGestures: false,
@@ -130,9 +132,14 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
       return;
     }
     const m = map;
+    if (new URLSearchParams(window.location.search).get('debug')?.includes('expose')) (window as unknown as { __earth: MLMap }).__earth = m;
     m.dragPan.disable(); m.dragRotate.disable(); m.touchZoomRotate.disable(); m.touchPitch.disable();
     m.on('error', ev => { if (!earthState.ready) console.warn('Open Earth tile error', ev.error?.message); });
-    m.once('load', () => { earthState.ready = true; earthState.mode = 'ready'; });
+    m.once('load', () => {
+      // late-morning sun from the south-east, warm, so walls and roofs separate
+      m.setLight({ anchor: 'map', position: [1.4, 150, 42], color: '#fff3df', intensity: 0.42 });
+      earthState.ready = true; earthState.mode = 'ready';
+    });
 
     // the visitor's own look-around (during the hold) rides on top of the scripted shot, and eases away on scroll
     const user = { bearing: 0, pitch: 0, active: false };
@@ -175,7 +182,12 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
     return () => { cancelAnimationFrame(raf); m.remove(); earthState.ready = false; earthState.opacity = 0; };
   }, [reduce]);
 
-  return <div ref={box} aria-label="3D Earth around Beed: drag to look around" className="landing-earth absolute inset-0 opacity-0" style={{ visibility: 'hidden', pointerEvents: 'none' }} />;
+  // MapLibre makes its container position:relative, so the full-screen frame is a separate wrapper
+  return (
+    <div ref={box} className="landing-earth absolute inset-0 opacity-0" style={{ visibility: 'hidden', pointerEvents: 'none' }}>
+      <div ref={mapEl} aria-label="3D Earth around Beed: drag to look around" className="h-full w-full" />
+    </div>
+  );
 };
 
 export default EarthDescent;

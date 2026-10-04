@@ -18,7 +18,7 @@ import { Mark } from '../components/shell/Shell';
 import { cx } from '../components/ui';
 import { districtName } from '../utils/format';
 import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
-import { CHAPTERS, band, base, chapterAt, clock, earthState, groundState, phases, ramp, stepClock } from '../components/landing/story';
+import { CHAPTERS, band, base, chapterAt, clock, groundState, phases, ramp, stepClock } from '../components/landing/story';
 import type { Anchors, Quality } from '../components/landing/World';
 
 const World = React.lazy(() => import('../components/landing/World'));
@@ -135,7 +135,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const numeral = useRef<HTMLSpanElement>(null);
   const groundText = useRef<HTMLSpanElement>(null);
   const haze = useRef<HTMLDivElement>(null);
-  const earthCredit = useRef<HTMLDivElement>(null);
   const barTop = useRef<HTMLDivElement>(null), barBottom = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null), hint = useRef<HTMLDivElement>(null);
   const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
@@ -216,7 +215,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       }
       // the page's paper haze steps aside while the camera is low over real ground
       if (haze.current) haze.current.style.opacity = (1 - band(p, 0.53, 0.55, 0.625, 0.645)).toFixed(3);
-      if (earthCredit.current) earthCredit.current.style.opacity = earthState.opacity.toFixed(3);
       if (groundText.current) {
         const g = groundState.delivering ? 'Delivering · proof of delivery next' : groundState.arrived ? 'Arrived · inside the 150 m geofence' : 'En route · live GPS';
         if (groundText.current.textContent !== g) groundText.current.textContent = g;
@@ -380,9 +378,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           </div>
 
           {worldDriving && ready && <Suspense fallback={null}><EarthDescent reduce={reduce} /></Suspense>}
-          <div ref={earthCredit} className="pointer-events-none absolute bottom-3 left-3 max-w-[70vw] rounded bg-white/75 px-2 py-1 text-[10px] leading-snug text-[#3f525b] opacity-0">
-            3D Earth: MapLibre · imagery Sentinel-2 cloudless 2016 by EOX (CC BY 4.0) · elevation Mapzen Terrarium (SRTM) · buildings, roads © OpenStreetMap contributors (ODbL) via OpenFreeMap
-          </div>
 
           {/* Chapter 7: disaster response */}
           <Layer ch={6} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
