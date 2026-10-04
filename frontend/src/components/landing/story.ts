@@ -30,6 +30,13 @@ export function base(p: number) {
  *  then climb back out to the exact map view the descent started from. */
 export const G = { start: 0.5, drone: 0.555, hold: 0.615, end: 0.66 };
 
+export type GoogleMode = 'off' | 'probing' | 'ready' | 'fallback';
+/** Google 3D Tiles health (written by GoogleTiles.tsx in the lazy 3D chunk, read by the page for attribution). */
+export const googleState: { mode: GoogleMode; active: boolean; attribution: string; reason: string } = { mode: 'off', active: false, attribution: '', reason: '' };
+
+/** The real photograph that closes the descent (page progress): fade in, hold, fade out as the camera lifts. */
+export const PHOTO = { in0: 0.584, in1: 0.596, out0: 0.613, out1: 0.625 };
+
 /** Written by the world every frame, read by the page's type layer. */
 export const groundState = { arrived: false, stopped: false, delivering: false };
 

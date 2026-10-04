@@ -18,7 +18,7 @@ import { Mark } from '../components/shell/Shell';
 import { cx } from '../components/ui';
 import { districtName } from '../utils/format';
 import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
-import { CHAPTERS, band, base, chapterAt, clock, groundState, phases, ramp, stepClock } from '../components/landing/story';
+import { CHAPTERS, PHOTO, band, base, chapterAt, clock, googleState, groundState, phases, ramp, stepClock } from '../components/landing/story';
 import type { Anchors, Quality } from '../components/landing/World';
 
 const World = React.lazy(() => import('../components/landing/World'));
@@ -134,6 +134,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const numeral = useRef<HTMLSpanElement>(null);
   const groundText = useRef<HTMLSpanElement>(null);
   const haze = useRef<HTMLDivElement>(null);
+  const photo = useRef<HTMLDivElement>(null), photoImg = useRef<HTMLImageElement>(null);
+  const gAttr = useRef<HTMLDivElement>(null), gAttrText = useRef<HTMLSpanElement>(null);
   const barTop = useRef<HTMLDivElement>(null), barBottom = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null), hint = useRef<HTMLDivElement>(null);
   const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
@@ -214,8 +216,27 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       }
       // the page's paper haze steps aside while the camera is low over real ground
       if (haze.current) haze.current.style.opacity = (1 - band(p, 0.53, 0.55, 0.625, 0.645)).toFixed(3);
+      // the real photograph: the descent's forward motion continues into it as a slow push-in, then it lets go
+      const ph5 = band(p, PHOTO.in0, PHOTO.in1, PHOTO.out0, PHOTO.out1);
+      if (photo.current) {
+        photo.current.style.opacity = ph5.toFixed(3);
+        photo.current.style.visibility = ph5 < 0.003 ? 'hidden' : 'visible';
+        if (photoImg.current) {
+          const k = Math.min(1, Math.max(0, (p - PHOTO.in0) / (PHOTO.out1 - PHOTO.in0)));
+          const sc = reduce ? 1.04 : 1.22 - 0.16 * (1 - Math.pow(1 - k, 2));
+          photoImg.current.style.transform = `scale(${sc.toFixed(4)}) translate3d(0, ${reduce ? 0 : ((0.5 - k) * 1.2).toFixed(2)}%, 0)`;
+          photoImg.current.style.filter = reduce || ph5 > 0.97 ? 'none' : `blur(${((1 - ph5) * 8).toFixed(2)}px)`;
+        }
+      }
+      // Google's logo and data attributions whenever their tiles are on screen
+      if (gAttr.current) {
+        const on = googleState.active && p > 0.49 && p < 0.67;
+        gAttr.current.style.opacity = on ? '1' : '0';
+        if (on && gAttrText.current && gAttrText.current.textContent !== googleState.attribution) gAttrText.current.textContent = googleState.attribution;
+      }
       if (groundText.current) {
         const g = groundState.delivering ? 'Delivering · proof of delivery next' : groundState.arrived ? 'Arrived · inside the 150 m geofence' : 'En route · live GPS';
+        const lbl = anchors.current.gtruck; if (lbl && ph5 > 0.05) lbl.style.opacity = String(Math.min(+lbl.style.opacity || 0, 1 - ph5));
         if (groundText.current.textContent !== g) groundText.current.textContent = g;
       }
       if (truckText.current) {
@@ -364,18 +385,35 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <Eyebrow className="mb-3">06 · On the ground</Eyebrow>
             <p className={cx(H, 'text-[9vw] leading-[0.95] text-white [text-shadow:0_2px_30px_rgba(10,30,40,0.45)] md:text-[4.4vw]')}>From orbit to the road.</p>
           </Layer>
-          <Layer ch={5} a={0.36} b={0.74} depth={0.4} className="bottom-[13vh] left-5 max-w-[88vw] md:left-[6vw] md:max-w-[34vw]">
-            <div className="rounded-xl bg-white/80 p-5 shadow-[0_30px_60px_-30px_rgba(19,34,43,0.55)] backdrop-blur-md">
-              <p className={cx(H, 'text-[7.5vw] leading-[0.98] md:text-[2.6vw]')}>For the people waiting,<br /><span className="text-[#0a7f99]">the tanker is the plan.</span></p>
-              <p className="mt-3 text-[13.5px] leading-relaxed text-[#3f525b]">Arrival is confirmed by a 150 m geofence on the driver’s phone. The delivery is signed, photographed and verified by an officer.</p>
-              <div className="mt-3 flex flex-wrap gap-2"><Illustration>a delivery near Beed</Illustration>
-                <span className="inline-flex items-center gap-1.5 rounded-[3px] border border-[#3d7486]/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#2d6c7f]">Real terrain · Sentinel-2</span></div>
+          <Layer ch={5} a={0.2} b={0.52} depth={0.4} className="bottom-[13vh] left-5 max-w-[88vw] md:left-[6vw] md:max-w-[30vw]">
+            <div className="rounded-xl bg-white/80 p-4 shadow-[0_30px_60px_-30px_rgba(19,34,43,0.55)] backdrop-blur-md">
+              <p className="text-[13.5px] leading-relaxed text-[#3f525b]">The tanker crosses the 150 m geofence; the driver’s phone confirms arrival. Delivery is signed, photographed and verified by an officer.</p>
+              <div className="mt-2 flex flex-wrap gap-2"><Illustration>the tanker’s run</Illustration></div>
             </div>
           </Layer>
           <div ref={el => { anchors.current.gtruck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
             <div className="-translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
               <span className="mr-2 text-[#0a7f99]">●</span><span ref={groundText}>En route · live GPS</span>
             </div>
+          </div>
+
+          <div ref={photo} className="absolute inset-0 overflow-hidden bg-[#2a2620] opacity-0" style={{ visibility: 'hidden' }}>
+            <picture>
+              <source media="(orientation: portrait)" srcSet="/landing/shirur-2016-portrait.jpg" />
+              <img ref={photoImg} src="/landing/shirur-2016.jpg" alt="" loading="lazy" decoding="async"
+                className="h-full w-full object-cover will-change-transform" style={{ transform: 'scale(1.22)' }} />
+            </picture>
+            <div className="absolute inset-x-0 bottom-0 h-[46%] bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+            <div className="absolute bottom-[8vh] left-5 right-5 max-w-[46rem] md:left-[6vw]">
+              <p className={cx(H, 'text-[8vw] leading-[0.98] text-white md:text-[3.4vw]')}>For the people waiting,<br /><span className="text-[#8fe3f2]">the tanker is the plan.</span></p>
+              <p className="mt-3 font-mono text-[11px] leading-relaxed text-white/80">
+                Shirur Kasar, Beed district · 20 May 2016, the Marathwada drought · Photo: Sanjeev Bonde, CC BY-SA 4.0, via Wikimedia Commons (cropped)
+              </p>
+            </div>
+          </div>
+          <div ref={gAttr} className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 opacity-0 transition-opacity duration-300">
+            <span className="rounded bg-white/85 px-1.5 py-0.5 font-[Arial,sans-serif] text-[13px] font-bold tracking-tight text-[#5f6368]">Google</span>
+            <span ref={gAttrText} className="max-w-[60vw] truncate rounded bg-white/70 px-1.5 py-0.5 text-[10px] text-[#3c4043]" />
           </div>
 
           {/* Chapter 7: disaster response */}
@@ -514,7 +552,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               </div>
               <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
-                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS; Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). The village scene near Beed is an illustration. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
+                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS; Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). The tanker’s run is an illustration. Street-level photograph: Shirur Kasar, Beed, May 2016, by Sanjeev Bonde (CC BY-SA 4.0). Where shown, 3D imagery is Google Photorealistic 3D Tiles. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
               </p>
             </section>
           </div>
@@ -534,7 +572,7 @@ const SR_TEXT: ((s: PublicSummary | null) => string)[] = [
   () => 'JalSetu turns scattered requests into one picture of need and one plan for every tanker, prioritising by live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.',
   () => 'Every place is scored and explained: rainfall deficit, news from the ground, vulnerability and distance to water combine into a crisis score.',
   () => "Every tanker is tracked on real GPS from the driver's phone. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.",
-  () => 'On the ground: the camera descends from orbit through the clouds to real terrain near Beed, where people wait with pots at a village water point as a tanker arrives. Arrival is confirmed by a 150 metre geofence; the delivery is signed, photographed and verified. The village scene is an illustration.',
+  () => 'On the ground: the camera descends from orbit through the clouds to real terrain near Beed and follows a tanker to a village water point. A photograph from Shirur Kasar in Beed district, May 2016, shows children filling water cans during the Marathwada drought. Arrival is confirmed by a 150 metre geofence; the delivery is signed, photographed and verified.',
   s => `When the monsoon fails, the plan moves.${s?.rainfall[0] ? ` ${districtName(s.rainfall[0].district)} district has ${s.rainfall[0].deviation}% monsoon rainfall against its 10-year mean.` : ''} Official alerts and news re-rank every place and dispatch follows.`,
   s => `${s ? num(s.places) : 'Over a thousand'} towns and villages are monitored today, and the model is built for every state.`,
   s => (s ? `Right now: ${num(s.places)} places monitored with ${millions(s.people)} people; ${num(s.inCrisis)} places under water stress with ${millions(s.peopleInCrisis)} people; ${num(s.newsReports)} news reports read; ${s.tankers} tankers at ${s.depots} depots on real GPS.` : 'Live figures are loading.'),

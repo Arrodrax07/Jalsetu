@@ -111,10 +111,15 @@ Plan, in order (tick as done, commit after each):
 3b.[x] Real photo for the human moment: `public/landing/shirur-2016.jpg` (+ `-portrait`, `.json` credits) — Shirur
        Kasar, Beed district, 20 May 2016, Sanjeev Bonde, CC BY-SA 4.0 (Wikimedia Commons). Caption with real date, never
        "live". Plan: camera descends to the water point, cross-fades into the photo with a slow push-in, holds, lifts off.
-3c.[ ] GoogleTiles.tsx: TilesRenderer + GoogleCloudAuthPlugin + ReorientationPlugin at the village lat/lon, mounted in
+3c.[x] (code done, UNTESTED: no API key yet; servers were stopped for low memory) GoogleTiles.tsx: TilesRenderer + GoogleCloudAuthPlugin + ReorientationPlugin at the village lat/lon, mounted in
        the Ground group slot (same camera/clouds); shown only after tiles load, our SRTM/Sentinel terrain underneath
        otherwise (automatic fallback: no key / 4xx / quota / network / slow / weak device -> never an error on screen).
        Snap height by raycasting the tiles at the origin. Hide the stylised people/pots (photo replaces them).
+3d.[x] Photo moment in Landing.tsx (PHOTO timing in story.ts), modelled people/pots removed, Google attribution
+       overlay, key documented in frontend/.env.example (VITE_GOOGLE_MAPS_API_KEY in frontend/.env.local, restricted).
+NEXT: user restarts servers (memory), Playwright run of the ground chapter in fallback mode; then with a key: verify
+       axis/height alignment of the tiles (holder.rotation.y = PI, raycast height fix), switching only inside clouds,
+       attribution, quota failure -> fallback (test with an invalid key). Then 5.
 4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
 5. [ ] Aggressive scroll tests (wheel, fast jumps, scrollbar drag, touch) in Playwright; fix jank; commit; update docs.
 

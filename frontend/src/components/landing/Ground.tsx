@@ -15,8 +15,9 @@ import * as THREE from 'three';
 import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { px, pz } from './geo';
-import { G, clamp01, groundState, smooth } from './story';
+import { G, clamp01, googleState, groundState, smooth } from './story';
 import { live } from './live';
+import { GoogleTiles } from './GoogleTiles';
 
 export const M = 110700;                 // metres per world unit
 export const KM = M / 1000;
@@ -467,6 +468,8 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
   const t = useTerrain(d, q);
   const group = useRef<THREE.Group>(null);
   const village = useRef<THREE.Group>(null);
+  const terrainRef = useRef<THREE.Mesh>(null);
+  const villageMesh = useRef<THREE.Mesh>(null);
   const tanker = useRef<THREE.Group>(null);
   const peopleRefs = useRef<(THREE.Mesh | null)[]>([]);
 
@@ -579,6 +582,9 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
     const near = live.dist < 0.25;
     grp.visible = live.ph.inGround > 0 || live.dist < 0.9;
     if (village.current) village.current.visible = near;
+    // Google mode: photogrammetry replaces our terrain and buildings; the tanker and its trail stay
+    if (terrainRef.current) terrainRef.current.visible = !googleState.active;
+    if (villageMesh.current) villageMesh.current.visible = !googleState.active;
 
     // the tanker's drive: eases to a stop at the water point
     const u = 1 - Math.pow(1 - ph.drive, 2.3);
@@ -625,16 +631,16 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
 
   return (
     <group ref={group} position={[d.vx, d.lift, d.vz]} scale={1 / M}>
-      <mesh geometry={t.geo} material={t.mat} receiveShadow renderOrder={-8} />
+      <mesh ref={terrainRef} geometry={t.geo} material={t.mat} receiveShadow renderOrder={-8} />
+      <GoogleTiles lat={d.meta.centre[1]} lon={d.meta.centre[0]} enabled={q === 'high'} />
       <group ref={village}>
         <mesh geometry={model.road} renderOrder={-7} receiveShadow>
           <meshStandardMaterial color="#9c7c5a" roughness={1} alphaMap={model.roadAlpha} transparent depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
         </mesh>
         <primitive object={model.forest} />
         <primitive object={model.tuft} />
-        <mesh geometry={model.village} material={vmat} castShadow receiveShadow />
-        <primitive object={model.pots} />
-        {model.people.map((p, i) => <mesh key={i} ref={el => { peopleRefs.current[i] = el; }} geometry={p.geo} material={vmat} castShadow receiveShadow />)}
+        {/* People are not modelled: the close-up is a real photograph from this district (Landing.tsx). */}
+        <mesh ref={villageMesh} geometry={model.village} material={vmat} castShadow receiveShadow />
         <group ref={tanker}>
           <mesh geometry={model.tk.body} material={vmat} castShadow receiveShadow />
           <mesh geometry={model.tk.wheels} material={vmat} castShadow />
