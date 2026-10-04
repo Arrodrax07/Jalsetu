@@ -90,6 +90,19 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
+## Landing page: one continuous 3D world (2026-10-04)
+- `/` and `/welcome`: scroll drives one WebGL scene (`components/landing/World.tsx`, React Three Fiber, no new deps)
+  through nine chapters (`landing/story.ts`: camera keys + phase values); DOM type and world-anchored labels follow the
+  same clock from one frame loop, so scrolling never re-renders React.
+- Real: 1,263 places, crisis scores, populations and district rainfall deficits from `/api/public/summary`; India state +
+  Maharashtra district outlines from `public/landing/geo.json` (geoBoundaries, regenerate with
+  `python -m scripts.export_landing_geo ../frontend/public/landing/geo.json` in backend/). Illustrations, labelled on
+  the page: supply arcs/flow particles, the tanker run, national arcs.
+- Quality tiers (fewer particles, lower DPR on phones/weak devices), reduced motion (direct camera settles, letters
+  pre-formed, no drift), static SVG fallback without WebGL, screen-reader copy of every chapter, keyboard chapter rail.
+- Verified with Playwright at 1440/820/390 px + reduced motion + no-WebGL; prod build at 4x CPU throttle: desktop
+  ~164 fps, phone 65-90 fps in the heaviest chapters.
+
 ## State (2026-10-04 midday): Phase 2 (frontend transformation) complete
 
 Phase 1 is complete (see Done). Real phone GPS: accepted by the user on the 2026-10-03 run.

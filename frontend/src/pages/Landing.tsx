@@ -1,23 +1,27 @@
 /**
- * Public landing page: what is happening to water in Maharashtra right now, and how JalSetu responds.
- * Every number on this page is live (GET /api/public/summary): real places, Census populations,
- * measured rainfall deficit and published news. Scroll drives the story.
+ * Public landing page: one continuous world (components/landing/World.tsx) that scroll travels through.
+ *
+ * The page is a tall scroll track behind a fixed stage. Scroll sets the story clock (landing/story.ts); the camera,
+ * the scene's shaders, the type and the labels anchored in the world all read that one value. Nothing re-renders
+ * React while scrolling: one animation-frame loop writes styles directly.
+ *
+ * Numbers on this page are live (GET /api/public/summary). The tanker run, the supply arcs and the national arcs are
+ * illustrations of how JalSetu works and are labelled as such. Screen readers get the same story as plain sections;
+ * without WebGL the page falls back to a static version of it.
  */
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform, MotionValue } from 'motion/react';
-import { ArrowRight, ArrowUpRight, CheckCircle2, CloudRain, MapPin, Navigation, Newspaper, Radio, Route, Scale, ShieldCheck, Truck } from '../components/icons';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, ArrowUpRight } from '../components/icons';
 import { api } from '../services/api';
 import type { PublicSummary } from '../types';
 import { Mark } from '../components/shell/Shell';
-import { CountUp, cx, EASE } from '../components/ui';
-import { districtName, timeAgo } from '../utils/format';
+import { cx } from '../components/ui';
+import { districtName } from '../utils/format';
+import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
+import { CHAPTERS, band, chapterAt, clock, phases, ramp } from '../components/landing/story';
+import type { Anchors, Quality } from '../components/landing/World';
 
-const WaterScene = React.lazy(() => import('../components/landing/WaterScene'));
+const World = React.lazy(() => import('../components/landing/World'));
 
-const fmtM = (n: number) => `${(n / 1e6).toFixed(1)}M`;
-
-/** "Open the control room": enters the app in place when the landing page is the app's front door,
- *  or navigates to sign-in when shown standalone (/welcome). */
 const EnterContext = React.createContext<(() => void) | undefined>(undefined);
 const EnterLink: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => {
   const enter = React.useContext(EnterContext);
@@ -26,369 +30,417 @@ const EnterLink: React.FC<{ className?: string; children: React.ReactNode }> = (
     : <a href="/login" className={className}>{children}</a>;
 };
 
-// ---------------------------------------------------------------------------- small pieces
-const Reveal: React.FC<{ children: React.ReactNode; className?: string; delay?: number; y?: number }> = ({ children, className, delay = 0, y = 24 }) => (
-  <motion.div className={className} initial={{ opacity: 0, y }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-12% 0px' }}
-    transition={{ duration: 0.8, delay, ease: EASE }}>{children}</motion.div>
-);
+const num = (n: number) => n.toLocaleString('en-IN');
+const millions = (n: number) => `${(n / 1e6).toFixed(1)}M`;
+const istTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 
-const SplitWords: React.FC<{ text: string; className?: string; delay?: number }> = ({ text, className, delay = 0 }) => (
-  <span className={className} aria-label={text}>
-    {text.split(' ').map((w, i) => (
-      <span key={i} className="inline-block overflow-hidden pb-[0.08em] align-bottom" aria-hidden>
-        <motion.span className="inline-block" initial={{ y: '105%' }} animate={{ y: 0 }} transition={{ delay: delay + i * 0.06, duration: 0.9, ease: EASE }}>
-          {w}&nbsp;
-        </motion.span>
-      </span>
-    ))}
+function webglOk() {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch { return false; }
+}
+function pickQuality(): Quality {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const small = window.innerWidth < 900 || window.matchMedia('(pointer: coarse)').matches;
+  const weak = (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
+  return small || weak ? 'low' : 'high';
+}
+
+// ---------------------------------------------------------------------------- type layers
+/** A text layer bound to a slice of one chapter (local progress a..b). The frame loop sets its opacity and depth. */
+const Layer: React.FC<{ ch: number; a?: number; b?: number; className?: string; children?: React.ReactNode; depth?: number; first?: boolean }> =
+  ({ ch, a = 0, b = 1, className, children, depth = 1, first }) => (
+    <div data-ch={ch} data-a={a} data-b={b} data-depth={depth} data-first={first ? 1 : undefined}
+      className={cx('pointer-events-none absolute opacity-0 will-change-[opacity,transform]', className)}>{children}</div>
+  );
+
+const Eyebrow: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
+  <p className={cx('font-mono text-[11px] uppercase tracking-[0.22em] text-[#7fa9b8]', className)}>{children}</p>
+);
+const Illustration: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-[3px] border border-dashed border-[#7fa9b8]/50 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#9db8c2]">
+    Illustration{children ? <span className="normal-case tracking-normal text-[#7f97a1]">· {children}</span> : null}
+  </span>
+);
+const Live: React.FC<{ at?: string }> = ({ at }) => (
+  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8fd3a8]">
+    <span className="h-1.5 w-1.5 rounded-full bg-[#5fcf8a]" />Live data{at ? <span className="text-[#7f97a1]"> · {at} IST</span> : null}
   </span>
 );
 
-const Ticker: React.FC<{ items: PublicSummary['headlines'] }> = ({ items }) => {
-  if (!items.length) return null;
-  const row = [...items, ...items];
-  return (
-    <div className="relative overflow-hidden border-y border-cc-border bg-cc-surface/70 py-3 backdrop-blur [mask-image:linear-gradient(90deg,transparent,black_8%,black_92%,transparent)]">
-      <div className="flex w-max ticker gap-10 hover:[animation-play-state:paused]">
-        {row.map((h, i) => (
-          <a key={i} href={h.url} target="_blank" rel="noreferrer noopener" className="flex items-center gap-2 whitespace-nowrap text-[13px] text-cc-muted hover:text-cc-text">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#c2361f]" />
-            <span className="font-medium text-cc-text">{h.publisher}</span>
-            <span className="max-w-[46ch] truncate">{h.title}</span>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-};
+const H = 'font-display font-semibold tracking-[-0.035em] [font-variation-settings:"wdth"_112]';
 
-// ---------------------------------------------------------------------------- nav
-const Nav: React.FC<{ scrolled: boolean }> = ({ scrolled }) => (
-  <motion.header initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6, ease: EASE, delay: 0.2 }}
-    className={cx('fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-500', scrolled ? 'border-b border-cc-border bg-cc-bg/80 backdrop-blur-md' : 'bg-transparent')}>
-    <div className="mx-auto flex h-16 max-w-[1320px] items-center justify-between px-5 md:px-8">
-      <a href="/" className="flex items-center gap-2.5"><Mark className="h-8 w-8 text-cc-accent" /><span className="display text-[26px] leading-none">JalSetu</span></a>
-      <nav className="hidden items-center gap-8 text-sm text-cc-muted md:flex">
-        <a href="#situation" className="transition-colors hover:text-cc-text">The situation</a>
-        <a href="#how" className="transition-colors hover:text-cc-text">How it works</a>
-        <a href="#evidence" className="transition-colors hover:text-cc-text">Evidence</a>
-        <a href="/report" className="transition-colors hover:text-cc-text">Report a problem</a>
-      </nav>
-      <EnterLink className="group flex items-center gap-1.5 rounded-full bg-cc-ink px-4 py-2 text-sm font-medium text-cc-on-ink shadow-[0_8px_20px_-10px_rgb(19_31_42/0.7)] transition hover:bg-[#0b1621]">
-        Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-      </EnterLink>
-    </div>
-  </motion.header>
-);
-
-// ---------------------------------------------------------------------------- hero
-const Hero: React.FC<{ s: PublicSummary | null; progress: React.MutableRefObject<number>; scrollY: MotionValue<number> }> = ({ s, progress, scrollY }) => {
-  const reduce = useReducedMotion();
-  const y = useTransform(scrollY, [0, 700], [0, -120]);
-  const fade = useTransform(scrollY, [0, 520], [1, 0]);
-  return (
-    <section className="relative min-h-[100svh] overflow-hidden">
-      <div className="absolute inset-0 contours opacity-70" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_60%_at_70%_45%,rgb(12_110_150/0.08),transparent_70%)]" />
-      {/* phones: model sits under the copy; desktop: to the right of it */}
-      <div className="absolute inset-x-[-15%] bottom-[4%] top-[55%] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,black_70%,transparent_100%)] md:inset-x-auto md:inset-y-0 md:right-[-6%] md:w-[66%]">
-        <Suspense fallback={null}><WaterScene progress={progress} reduce={!!reduce} className="!h-full !w-full" /></Suspense>
-      </div>
-      <motion.div style={reduce ? undefined : { y, opacity: fade }} className="pointer-events-none relative mx-auto flex min-h-[100svh] max-w-[1320px] flex-col justify-start px-5 pb-[48svh] pt-28 md:justify-center md:pb-0 md:pt-20 md:px-8">
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mb-5 flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.2em] text-cc-muted">
-          <span className="relative flex h-2 w-2"><span className="absolute inset-0 animate-ping rounded-full bg-[#c2361f] opacity-60" /><span className="relative h-2 w-2 rounded-full bg-[#c2361f]" /></span>
-          Maharashtra · live water picture
-        </motion.p>
-        <h1 className="display max-w-[11ch] text-[64px] leading-[0.92] text-cc-text sm:text-[88px] lg:text-[118px]">
-          <SplitWords text="Water, where" delay={0.35} /><br />
-          <SplitWords text="it is needed" delay={0.5} className="italic text-cc-accent" /><br />
-          <SplitWords text="most." delay={0.65} />
-        </h1>
-        <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.05, duration: 0.7, ease: EASE }}
-          className="mt-7 max-w-[46ch] text-[17px] leading-relaxed text-cc-muted">
-          {s ? <>Right now <b className="font-semibold text-cc-text">{s.inCrisis.toLocaleString('en-IN')} towns and villages</b> show signs of water stress,{' '}
-            <b className="font-semibold text-[#a8301c]">{s.critical} of them critical</b>. JalSetu finds them from rainfall and news, sends the right tanker, and proves the water arrived.</>
-            : 'JalSetu finds where water is short from rainfall and news, sends the right tanker, and proves the water arrived.'}
-        </motion.p>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2, duration: 0.7, ease: EASE }} className="pointer-events-auto mt-9 flex flex-wrap gap-3">
-          <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-ink px-6 py-3.5 text-[15px] font-medium text-cc-on-ink shadow-[0_14px_30px_-14px_rgb(19_31_42/0.8)] transition hover:-translate-y-0.5">
-            Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </EnterLink>
-          <a href="/report" className="flex items-center gap-2 rounded-full border border-cc-border bg-cc-surface/80 px-6 py-3.5 text-[15px] font-medium backdrop-blur transition hover:border-cc-strong">
-            Report a water problem
-          </a>
-        </motion.div>
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.8 }} className="mt-12 hidden items-center gap-2 text-[12px] text-cc-muted md:flex">
-          <span className="relative flex h-2 w-2"><span className="absolute inset-0 animate-ping rounded-full bg-cc-accent opacity-50" /><span className="relative h-2 w-2 rounded-full bg-cc-accent" /></span>
-          Touch the water
-        </motion.p>
-      </motion.div>
-      <div className="absolute inset-x-0 bottom-0">{s && <Ticker items={s.headlines} />}</div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------------- situation (sticky scrollytelling)
-const Situation: React.FC<{ s: PublicSummary }> = ({ s }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
-  const [beat, setBeat] = useState(0);
-  useMotionValueEvent(scrollYProgress, 'change', v => setBeat(v < 0.34 ? 0 : v < 0.67 ? 1 : 2));
-  const bar = useSpring(scrollYProgress, { stiffness: 120, damping: 30 });
-  const beats = [
-    { n: s.inCrisis, unit: 'places', title: 'under water stress', body: `Out of ${s.places.toLocaleString('en-IN')} towns and villages we track, these show a measured monsoon deficit, or have been named in recent reports of shortage, tankers or drought.`, color: '#b46d06' },
-    { n: s.peopleInCrisis, unit: 'people', title: 'live in those places', body: `Census populations, not estimates. That is ${Math.round((100 * s.peopleInCrisis) / s.people)}% of everyone in the places JalSetu covers.`, color: '#131f2a', fmt: fmtM },
-    { n: s.critical, unit: 'critical', title: 'need water first', body: 'Named in the news and in a district with a severe rainfall deficit. These are where JalSetu proposes the next tanker trips.', color: '#a8301c' },
-  ];
-  const b = beats[beat];
-  return (
-    <section id="situation" ref={ref} className="relative h-[300vh]">
-      <div className="sticky top-0 flex h-[100svh] items-center overflow-hidden">
-        <div className="mx-auto grid w-full max-w-[1320px] gap-10 px-5 md:grid-cols-[1.1fr_1fr] md:px-8">
-          <div>
-            <p className="eyebrow mb-6">01 · The situation, today</p>
-            <motion.div key={beat} initial={{ opacity: 0, y: 30, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.7, ease: EASE }}>
-              <p className="display text-[96px] leading-[0.9] md:text-[160px]" style={{ color: b.color }}>
-                <CountUp value={b.n} format={b.fmt} duration={1.2} />
-              </p>
-              <p className="display mt-2 text-[40px] leading-tight md:text-[56px]"><span className="text-cc-muted">{b.unit}</span> {b.title}</p>
-              <p className="mt-5 max-w-[48ch] text-[17px] leading-relaxed text-cc-muted">{b.body}</p>
-            </motion.div>
-            <div className="mt-10 flex items-center gap-3">
-              {beats.map((_, i) => <span key={i} className={cx('h-1 rounded-full transition-[width,background-color] duration-500', i === beat ? 'w-10 bg-cc-ink' : 'w-4 bg-cc-strong')} />)}
-            </div>
-          </div>
-          <div className="relative hidden md:block">
-            <div className="panel overflow-hidden p-0">
-              <div className="flex items-center justify-between border-b border-cc-border px-5 py-3.5">
-                <p className="text-sm font-semibold">Most critical right now</p>
-                <span className="flex items-center gap-1.5 text-[11px] text-cc-muted"><Radio className="h-3.5 w-3.5 text-[#c2361f]" />live</span>
-              </div>
-              <ul>
-                {s.criticalPlaces.slice(0, 8).map((p, i) => (
-                  <motion.li key={p.name} initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
-                    transition={{ delay: i * 0.06, duration: 0.5, ease: EASE }} className="flex items-center gap-3 border-b border-cc-border/70 px-5 py-3 last:border-0">
-                    <span className="num w-5 text-xs text-cc-faint">{String(i + 1).padStart(2, '0')}</span>
-                    <span className="flex-1"><span className="block text-[15px] font-medium">{p.name}</span><span className="block text-xs text-cc-muted">{districtName(p.district)} district</span></span>
-                    <span className="flex w-28 items-center gap-2">
-                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-cc-hover">
-                        <motion.span className="block h-full rounded-full bg-[#c2361f]" initial={{ width: 0 }} whileInView={{ width: `${p.crisis}%` }} viewport={{ once: true }} transition={{ delay: 0.3 + i * 0.06, duration: 0.9, ease: EASE }} />
-                      </span>
-                      <span className="num w-6 text-right text-xs">{p.crisis}</span>
-                    </span>
-                  </motion.li>
-                ))}
-              </ul>
-            </div>
-            <motion.div className="absolute -left-6 top-0 h-full w-[3px] origin-top rounded-full bg-cc-ink/80" style={{ scaleY: bar }} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------------- how it works (pinned horizontal scroll)
-const STEPS = [
-  { icon: CloudRain, k: 'Sense', title: 'Find stress before the calls come', body: 'Monsoon rainfall for every district is compared with its last ten years, and Marathi and English news is matched to towns and villages. Every signal links to its source.' },
-  { icon: Scale, k: 'Prioritise', title: 'Rank need fairly, and explain it', body: 'A transparent score weighs shortfall, population, vulnerability, recent deliveries and live crisis signals. A survival floor comes first for everyone.' },
-  { icon: Route, k: 'Dispatch', title: 'Propose the right truck', body: 'The planner pairs each available tanker with the place one load helps most, nearby stops included, then a dispatcher approves with one click.' },
-  { icon: Navigation, k: 'Track', title: 'Real GPS from the driver’s phone', body: 'No simulated dots. Arrival is detected by geofence from consecutive fixes; route deviations and stops are flagged as they happen.' },
-  { icon: ShieldCheck, k: 'Prove', title: 'Proof that water arrived', body: 'Receiver, signature and meter photo at the stop, verified by an operator before the trip closes. Every action is audit-logged.' },
-];
-
-const How: React.FC = () => {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
-  const x = useTransform(scrollYProgress, [0.05, 0.95], ['0%', '-62%']);
-  const line = useSpring(useTransform(scrollYProgress, [0.05, 0.95], [0, 1]), { stiffness: 140, damping: 30 });
-  return (
-    <section id="how" ref={ref} className="relative h-[320vh] bg-cc-ink text-[#f5f3ee]">
-      <div className="sticky top-0 flex h-[100svh] flex-col justify-center overflow-hidden">
-        <div className="mx-auto w-full max-w-[1320px] px-5 md:px-8">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">02 · How JalSetu works</p>
-          <h2 className="display max-w-[16ch] text-[52px] leading-[0.95] md:text-[80px]">From a headline to a <em className="text-[#7cc4e4]">delivered litre</em>.</h2>
-        </div>
-        <motion.div style={{ x }} className="mt-14 flex gap-6 pl-5 md:pl-[max(2rem,calc((100vw-1320px)/2+2rem))]">
-          {STEPS.map((s, i) => (
-            <div key={s.k} className="group relative w-[340px] flex-shrink-0 rounded-3xl border border-white/10 bg-white/[0.04] p-7 backdrop-blur transition-colors hover:bg-white/[0.07] md:w-[420px]">
-              <div className="flex items-center justify-between">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-[#7cc4e4] transition-transform duration-500 group-hover:rotate-[-8deg] group-hover:scale-110"><s.icon className="h-6 w-6" /></span>
-                <span className="display text-[64px] leading-none text-white/10">0{i + 1}</span>
-              </div>
-              <p className="mt-8 text-[12px] font-semibold uppercase tracking-[0.16em] text-[#7cc4e4]">{s.k}</p>
-              <p className="display mt-2 text-[32px] leading-[1.05]">{s.title}</p>
-              <p className="mt-4 text-[15px] leading-relaxed text-white/65">{s.body}</p>
-            </div>
-          ))}
-        </motion.div>
-        <div className="mx-auto mt-14 w-full max-w-[1320px] px-5 md:px-8">
-          <div className="relative h-[3px] rounded-full bg-white/10">
-            <motion.div className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-gradient-to-r from-[#7cc4e4] to-white" style={{ scaleX: line }} />
-            <motion.span className="absolute -top-[5px] h-[13px] w-[13px] rounded-full bg-white shadow-[0_0_0_6px_rgb(124_196_228/0.25)]" style={{ left: useTransform(line, v => `calc(${v * 100}% - 6px)`) }} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------------- evidence
-const Evidence: React.FC<{ s: PublicSummary }> = ({ s }) => {
-  const max = Math.max(...s.rainfall.map(r => Math.abs(r.deviation)), 1);
-  return (
-    <section id="evidence" className="relative py-32">
-      <div className="mx-auto max-w-[1320px] px-5 md:px-8">
-        <Reveal><p className="eyebrow mb-4">03 · Evidence, not guesses</p></Reveal>
-        <Reveal delay={0.05}><h2 className="display max-w-[18ch] text-[52px] leading-[0.95] md:text-[76px]">The monsoon fell short. <em className="text-cc-muted">Here is where.</em></h2></Reveal>
-        <div className="mt-16 grid gap-12 lg:grid-cols-[1.15fr_1fr]">
-          <Reveal className="panel p-6 md:p-8">
-            <div className="mb-6 flex items-end justify-between">
-              <div><p className="text-sm font-semibold">Monsoon rainfall vs 10-year average</p><p className="text-xs text-cc-muted">1 June to date, by district · Open-Meteo ERA5 reanalysis</p></div>
-              <CloudRain className="h-5 w-5 text-cc-accent" />
-            </div>
-            <ul className="space-y-3.5">
-              {s.rainfall.map((r, i) => (
-                <li key={r.district} className="grid grid-cols-[120px_1fr_56px] items-center gap-4">
-                  <span className="truncate text-sm">{districtName(r.district)}</span>
-                  <span className="relative h-7 overflow-hidden rounded-lg bg-cc-hover">
-                    <motion.span className="absolute inset-y-0 left-0 rounded-lg" style={{ background: r.deviation <= -40 ? '#c2361f' : r.deviation <= -25 ? '#d48806' : '#0c6e96' }}
-                      initial={{ width: 0 }} whileInView={{ width: `${(Math.abs(r.deviation) / max) * 100}%` }} viewport={{ once: true, margin: '-10% 0px' }}
-                      transition={{ delay: i * 0.07, duration: 1, ease: EASE }} />
-                  </span>
-                  <span className="num text-right text-sm font-semibold">{r.deviation.toFixed(0)}%</span>
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-          <div>
-            <Reveal className="mb-5 flex items-center justify-between">
-              <p className="text-sm font-semibold">{s.newsReports} reports matched to places this fortnight</p><Newspaper className="h-5 w-5 text-cc-accent" />
-            </Reveal>
-            <div className="grid gap-3">
-              {s.headlines.slice(0, 5).map((h, i) => (
-                <Reveal key={h.url} delay={i * 0.06} y={16}>
-                  <a href={h.url} target="_blank" rel="noreferrer noopener" className="group block rounded-2xl border border-cc-border bg-cc-surface p-4 transition hover:-translate-y-0.5 hover:border-cc-strong hover:shadow-lift">
-                    <div className="flex items-center gap-2 text-[11px] text-cc-muted"><span className="font-semibold text-cc-text">{h.publisher}</span>·<span>{timeAgo(h.publishedAt)}</span>
-                      {h.places.length > 0 && <span className="ml-auto flex items-center gap-1 text-[#a8301c]"><MapPin className="h-3 w-3" />{h.places.join(', ')}</span>}</div>
-                    <p className="mt-1.5 text-[15px] leading-snug group-hover:text-cc-accent-strong">{h.title} <ArrowUpRight className="inline h-3.5 w-3.5 opacity-40" /></p>
-                  </a>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------------- field app (3D tilting phone)
-const Field: React.FC = () => {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const rotY = useTransform(scrollYProgress, [0, 0.5, 1], [-28, -8, 14]);
-  const rotX = useTransform(scrollYProgress, [0, 0.5, 1], [16, 6, -6]);
-  const yv = useTransform(scrollYProgress, [0, 1], [80, -80]);
-  const steps = ['Accept', 'Start', 'On the way', 'Arrived', 'Delivering', 'Done'];
-  return (
-    <section ref={ref} className="relative overflow-hidden py-32">
-      <div className="absolute inset-0 contours opacity-60" />
-      <div className="relative mx-auto grid max-w-[1320px] items-center gap-16 px-5 md:grid-cols-2 md:px-8">
-        <div>
-          <Reveal><p className="eyebrow mb-4">04 · In the field</p></Reveal>
-          <Reveal delay={0.05}><h2 className="display text-[52px] leading-[0.95] md:text-[72px]">A phone is the <em className="text-cc-accent">tracker</em>.</h2></Reveal>
-          <Reveal delay={0.1}><p className="mt-6 max-w-[44ch] text-[17px] leading-relaxed text-cc-muted">Drivers open a web link, accept the trip and press start. Their phone’s GPS streams to the control room, keeps working through dead zones, and unlocks “Arrived” only when they are really there.</p></Reveal>
-          <Reveal delay={0.15}>
-            <ul className="mt-8 grid gap-3 text-[15px]">
-              {['No app install, works on any smartphone', 'Offline buffer: fixes upload when signal returns', 'Arrival by geofence, delivery with signature and photo'].map(t => (
-                <li key={t} className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 flex-shrink-0 text-cc-accent" />{t}</li>
-              ))}
-            </ul>
-          </Reveal>
-        </div>
-        <div className="flex justify-center [perspective:1400px]">
-          <motion.div style={{ rotateY: rotY, rotateX: rotX, y: yv }} className="relative w-[300px] [transform-style:preserve-3d]">
-            <div className="rounded-[46px] border border-black/10 bg-[#131f2a] p-3 shadow-[0_60px_80px_-40px_rgb(19_31_42/0.6),0_30px_40px_-30px_rgb(19_31_42/0.5)]">
-              <div className="overflow-hidden rounded-[36px] bg-cc-bg">
-                <div className="flex items-center justify-between px-5 pb-2 pt-4 text-[11px] font-semibold"><span>9:41</span><span className="h-5 w-20 rounded-full bg-[#131f2a]" /><span>5G</span></div>
-                <div className="space-y-3 px-4 pb-6">
-                  <div className="flex items-center gap-2"><Mark className="h-6 w-6 text-cc-accent" /><span className="display text-lg">JalSetu <span className="text-cc-muted">Driver</span></span></div>
-                  <div className="rounded-2xl bg-cc-surface p-3 shadow-panel">
-                    <div className="relative mx-1 mt-1">
-                      <div className="absolute left-0 right-0 top-[8px] h-[2px] bg-cc-hover" />
-                      <motion.div className="absolute left-0 top-[8px] h-[2px] bg-cc-accent" initial={{ width: 0 }} whileInView={{ width: '60%' }} viewport={{ once: true }} transition={{ duration: 1.4, ease: EASE, delay: 0.3 }} />
-                      <div className="relative flex justify-between">{steps.map((s, i) => (
-                        <span key={s} className={cx('h-[18px] w-[18px] rounded-full border-2', i < 3 ? 'border-cc-accent bg-cc-accent' : i === 3 ? 'border-cc-accent bg-cc-surface' : 'border-cc-border bg-cc-surface')} />))}</div>
-                    </div>
-                    <p className="mt-2 text-center text-[10px] text-cc-muted">On the way · stop 1 of 2</p>
-                  </div>
-                  <div className="rounded-2xl bg-cc-surface p-4 shadow-panel">
-                    <p className="eyebrow">Destination</p>
-                    <p className="display text-2xl leading-tight">Tarodi Khurd</p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-xl bg-cc-raised p-2.5"><p className="text-[9px] uppercase tracking-wider text-cc-faint">Distance</p><p className="display text-2xl leading-none">2.4 km</p></div>
-                      <div className="rounded-xl bg-cc-raised p-2.5"><p className="text-[9px] uppercase tracking-wider text-cc-faint">Deliver</p><p className="display text-2xl leading-none">8,000 L</p></div>
-                    </div>
-                  </div>
-                  <div className="rounded-2xl bg-cc-surface p-3 shadow-panel">
-                    <div className="flex items-center justify-between text-[11px]"><span className="flex items-center gap-1.5 font-semibold"><span className="relative flex h-1.5 w-1.5"><span className="absolute inset-0 animate-ping rounded-full bg-cc-live opacity-60" /><span className="relative h-1.5 w-1.5 rounded-full bg-cc-live" /></span>GPS live</span><span className="text-cc-muted">± 6 m</span></div>
-                  </div>
-                  <div className="rounded-2xl bg-cc-ink py-3 text-center text-sm font-semibold text-cc-on-ink">ARRIVED · unlocks at 150 m</div>
-                </div>
-              </div>
-            </div>
-            <div className="absolute -right-24 top-24 hidden w-48 rounded-2xl border border-cc-border bg-cc-surface p-3 shadow-pop lg:block [transform:translateZ(60px)]">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold"><Truck className="h-3.5 w-3.5 text-cc-accent" />MH-01-WT-1740</p>
-              <p className="mt-1 text-[10px] text-cc-muted">Live in the control room · 3 s ago</p>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------------- closing
-const Closing: React.FC<{ s: PublicSummary | null }> = ({ s }) => (
-  <section className="relative overflow-hidden bg-cc-surface py-32">
-    <div className="mx-auto max-w-[1320px] px-5 text-center md:px-8">
-      <Reveal><h2 className="display mx-auto max-w-[18ch] text-[56px] leading-[0.95] md:text-[96px]">Every litre, <em className="whitespace-nowrap text-cc-accent">accounted for.</em></h2></Reveal>
-      <Reveal delay={0.1}><p className="mx-auto mt-6 max-w-[52ch] text-[17px] leading-relaxed text-cc-muted">
-        {s ? `${s.places.toLocaleString('en-IN')} places · ${fmtM(s.people)} people · ${s.tankers} tankers · ${s.depots} depots sited on real water infrastructure.` : ''}
-      </p></Reveal>
-      <Reveal delay={0.18} className="mt-10 flex flex-wrap justify-center gap-3">
-        <EnterLink className="group flex items-center gap-2 rounded-full bg-cc-ink px-7 py-4 text-[15px] font-medium text-cc-on-ink transition hover:-translate-y-0.5">Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></EnterLink>
-        <a href="/report" className="flex items-center gap-2 rounded-full border border-cc-border px-7 py-4 text-[15px] font-medium transition hover:border-cc-strong">Report a water problem</a>
-      </Reveal>
-    </div>
-    <footer className="mx-auto mt-28 flex max-w-[1320px] flex-col gap-4 border-t border-cc-border px-5 pt-8 text-[12px] text-cc-muted md:flex-row md:items-center md:justify-between md:px-8">
-      <span className="flex items-center gap-2"><Mark className="h-5 w-5 text-cc-accent" />JalSetu · water operations for Maharashtra</span>
-      <span>Data: OpenStreetMap contributors (ODbL) · Census of India · Open-Meteo ERA5 (CC BY 4.0) · NDMA SACHET · publishers via Google News</span>
-    </footer>
-  </section>
+const Scatter: React.FC<{ text: string; className?: string }> = ({ text, className }) => (
+  <span className={className} aria-hidden>
+    {[...text].map((ch, i) => {
+      const r = (k: number) => Math.sin((i + 1) * 12.9898 * k) * 43758.5453 % 1;
+      return <span key={i} data-scatter={`${(r(1) * 260).toFixed(0)},${(r(2) * 140).toFixed(0)},${(r(3) * 50).toFixed(0)}`} className="inline-block will-change-transform">{ch}</span>;
+    })}
+  </span>
 );
 
 // ---------------------------------------------------------------------------- page
 export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const [s, setS] = useState<PublicSummary | null>(null);
-  const { scrollY } = useScroll(); // the landing page scrolls the document itself
-  const progress = useRef(0);
-  const [scrolled, setScrolled] = useState(false);
-  useMotionValueEvent(scrollY, 'change', v => { progress.current = Math.min(1, v / 900); setScrolled(v > 40); });
-  useEffect(() => { api.publicSummary().then(setS).catch(() => undefined); }, []);
-  const page = useMemo(() => s, [s]);
+  const [geo, setGeo] = useState<GeoFile | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [gl] = useState(webglOk);
+  const [quality] = useState(pickQuality);
+  const [focus, setFocus] = useState<{ focusName: string | null; focusDistrict: string | null; focusCrisis: number; focusPop: number } | null>(null);
+  const [chapter, setChapter] = useState(0);
+  const anchors = useRef<Anchors>({});
+  const stage = useRef<HTMLDivElement>(null);
+  const tip = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  const truckText = useRef<HTMLSpanElement>(null);
+  const reduce = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
+
+  useEffect(() => {
+    api.publicSummary().then(setS).catch(() => setFailed(true));
+    loadGeo().then(setGeo).catch(() => setFailed(true));
+  }, []);
+
+  // the landing page owns the document scroll; the app shell sets overflow on <html>/<body>
+  useEffect(() => {
+    const prev = [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background];
+    document.documentElement.style.overflowY = 'auto'; document.body.style.overflowY = 'visible';
+    document.documentElement.style.background = '#04080c';
+    clock.reduce = reduce;
+    return () => { [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background] = prev; };
+  }, [reduce]);
+
+  // scroll -> story target
+  useEffect(() => {
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      clock.target = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
+  }, []);
+
+  // one frame loop for all DOM layers (the WebGL world advances the clock; without it, this loop does)
+  const worldDriving = gl && !failed;
+  useEffect(() => {
+    let raf = 0, last = performance.now(), lastCh = -1;
+    const layers = () => Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-ch]') ?? []);
+    let els = layers(), scat = Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-scatter]') ?? []);
+    const mo = new MutationObserver(() => { els = layers(); scat = Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-scatter]') ?? []); });
+    if (stage.current) mo.observe(stage.current, { childList: true, subtree: true });
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      if (!worldDriving) clock.p += (clock.target - clock.p) * (1 - Math.exp(-dt * (reduce ? 14 : 4)));
+      const p = clock.p;
+      for (const el of els) {
+        const c = CHAPTERS[+el.dataset.ch!];
+        const lp = (p - c.start) / (c.end - c.start);
+        const a = +el.dataset.a!, b = +el.dataset.b!, f = Math.min(0.18, (b - a) / 3);
+        let o = band(lp, a, a + f, b - f, b);
+        if (el.dataset.first && p < c.start + (c.end - c.start) * (a + f)) o = Math.max(o, 1 - ramp(lp, b - f, b));
+        if (b >= 1 && +el.dataset.ch! === CHAPTERS.length - 1) o = ramp(lp, a, a + f);
+        const depth = +el.dataset.depth!;
+        const mid = (a + b) / 2;
+        const z = (lp - mid) / Math.max(0.2, b - a);
+        el.style.opacity = o.toFixed(3);
+        el.style.transform = reduce ? 'none' : `translate3d(0, ${(-z * 46 * depth).toFixed(1)}px, 0) scale(${(1 + z * 0.045 * depth).toFixed(4)})`;
+        el.style.filter = reduce || o > 0.98 ? 'none' : `blur(${((1 - o) * 5).toFixed(2)}px)`;
+        el.style.visibility = o < 0.005 ? 'hidden' : 'visible';
+      }
+      // JalSetu letters converge as the network reorganises
+      const conv = ramp(p, 0.225, 0.29);
+      for (const el of scat) {
+        const [dx, dy, r] = el.dataset.scatter!.split(',').map(Number);
+        const k = reduce ? 0 : 1 - conv;
+        el.style.transform = `translate3d(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px, 0) rotate(${(r * k).toFixed(1)}deg)`;
+      }
+      if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
+      if (truckText.current) {
+        const t = phases(p).tanker;
+        const label = t < 0.08 ? 'Accepted · waiting for a fresh GPS fix' : t < 0.82 ? 'En route · live GPS' : t < 0.95 ? 'Arrived · inside the geofence' : 'Delivered · proof of delivery recorded';
+        if (truckText.current.textContent !== label) truckText.current.textContent = label;
+      }
+      const ch = chapterAt(p);
+      if (ch !== lastCh) { lastCh = ch; setChapter(ch); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); mo.disconnect(); };
+  }, [worldDriving, reduce]);
+
+  const onHover = useCallback((pl: Place | null, x: number, y: number) => {
+    const el = tip.current;
+    if (!el) return;
+    if (!pl) { el.style.opacity = '0'; document.body.style.cursor = ''; return; }
+    el.style.opacity = '1';
+    el.style.transform = `translate3d(${x + 14}px, ${y + 14}px, 0)`;
+    el.querySelector('[data-k="crisis"]')!.textContent = `${pl.crisis}/100`;
+    el.querySelector('[data-k="pop"]')!.textContent = num(pl.pop);
+    el.querySelector('[data-k="ll"]')!.textContent = `${pl.lat.toFixed(2)}°N ${pl.lng.toFixed(2)}°E`;
+    document.body.style.cursor = 'crosshair';
+  }, []);
+
+  const goTo = (i: number) => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const c = CHAPTERS[i];
+    window.scrollTo({ top: (c.start + (c.end - c.start) * (i === 0 ? 0 : 0.42)) * max, behavior: reduce ? 'auto' : 'smooth' });
+  };
+
+  const at = s ? istTime(s.generatedAt) : undefined;
+  const topDeficit = s?.rainfall[0];
+  const ready = !!(s && geo);
+
   return (
     <EnterContext.Provider value={onEnter}>
-    <div className="min-h-full overflow-x-clip bg-cc-bg">
-      <Nav scrolled={scrolled} />
-      <Hero s={page} progress={progress} scrollY={scrollY} />
-      {page && <Situation s={page} />}
-      <How />
-      {page && <Evidence s={page} />}
-      <Field />
-      <Closing s={page} />
-    </div>
+      <div className="landing relative bg-[#04080c] text-[#e6eef1] antialiased selection:bg-[#6cc3d5]/30">
+        {/* ------------------------------------------------ stage (fixed) */}
+        <div ref={stage} className="fixed inset-0 overflow-hidden" aria-hidden>
+          {worldDriving && ready && (
+            <Suspense fallback={null}>
+              <div className="absolute inset-0 animate-[landingIn_1.6s_ease-out_both]">
+                <World geo={geo!} summary={s!} quality={quality} anchors={anchors} onHover={onHover} onReady={setFocus} />
+              </div>
+            </Suspense>
+          )}
+          {(!worldDriving || failed) && <StaticMap s={s} geo={geo} />}
+          {/* vignette and horizon haze keep type readable over the world */}
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_40%,rgba(2,5,8,0.75)_100%)]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[38vh] bg-gradient-to-t from-[#04080c] via-[#04080c]/70 to-transparent md:h-[30vh]" />
+
+          {/* readability scrims for the chapters that sit over a busy scene */}
+          {[3, 4, 5].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#04080c]/95 from-30% via-[#04080c]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#04080c]/90 md:from-0% md:via-[#04080c]/55 md:via-50% md:to-transparent md:to-100%" />)}
+          <Layer ch={7} a={0} b={1} depth={0} className="inset-0 bg-[#04080c]/60" />
+
+          {/* Chapter 1: scale */}
+          <Layer ch={0} a={0} b={0.62} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">
+            <Eyebrow className="mb-6">Maharashtra · {s ? `${num(s.places)} towns and villages` : 'loading the country'}</Eyebrow>
+            <h1 className={cx(H, 'text-[13vw] leading-[0.9] md:text-[5.6vw]')}>Water moves.<br /><span className="text-[#6cc3d5]">So should intelligence.</span></h1>
+          </Layer>
+          <Layer ch={0} a={0.55} b={1} depth={1.4} className="inset-x-5 bottom-[16vh] md:left-[8vw] md:right-auto">
+            <p className={cx(H, 'text-[18vw] leading-none md:text-[9vw]')}>JalSetu</p>
+            <p className="mt-3 max-w-[34ch] text-[17px] leading-snug text-[#b7c7cd] md:text-[19px]">Intelligent water logistics and emergency response, live across water-stressed Maharashtra.</p>
+          </Layer>
+
+          {/* Chapter 2: the problem */}
+          <Layer ch={1} a={0} b={0.36} className="inset-x-5 top-[22vh] md:left-[8vw] md:right-auto">
+            <p className={cx(H, 'text-[12vw] leading-[0.92] md:text-[6vw]')}>Demand doesn’t wait.</p>
+          </Layer>
+          <Layer ch={1} a={0.3} b={0.66} className="inset-x-5 top-[22vh] md:left-auto md:right-[8vw] md:text-right">
+            <p className={cx(H, 'text-[12vw] leading-[0.92] md:text-[6vw]')}>Emergencies don’t<br />follow schedules.</p>
+          </Layer>
+          <Layer ch={1} a={0.6} b={1} className="inset-x-5 top-[22vh] md:left-[8vw] md:right-auto">
+            <p className="text-[19px] text-[#9fb2b9] md:text-[24px]">The challenge isn’t only water.</p>
+            <p className={cx(H, 'mt-2 text-[14vw] leading-none text-[#e3a26a] md:text-[7vw]')}>It’s coordination.</p>
+          </Layer>
+          {s && (
+            <Layer ch={1} a={0.1} b={1} depth={0.3} className="bottom-[9vh] left-5 md:bottom-[10vh] md:left-[8vw]">
+              <Live at={at} />
+              <p className="mt-2 font-mono text-[13px] text-[#c9d6da]"><span className="text-[22px] text-[#e3a26a]">{num(s.inCrisis)}</span> places under water stress · <span className="text-[#df5a3b]">{num(s.critical)} critical</span></p>
+            </Layer>
+          )}
+
+          {/* Chapter 3: JalSetu enters */}
+          <Layer ch={2} a={0.05} b={1} depth={0.5} className="inset-x-0 top-[20vh] text-center md:top-[18vh]">
+            <Scatter text="JalSetu" className={cx(H, 'text-[22vw] leading-none md:text-[13vw]')} />
+          </Layer>
+          <Layer ch={2} a={0.45} b={1} className="inset-x-5 bottom-[12vh] text-center">
+            <p className={cx(H, 'text-[7vw] leading-tight md:text-[2.8vw]')}>One picture of need. One plan for every tanker.</p>
+            <p className="mx-auto mt-3 max-w-[56ch] text-[14px] text-[#9fb2b9] md:text-[16px]">Priority from live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.</p>
+            <div className="mt-4 flex justify-center"><Illustration>supply arcs</Illustration></div>
+          </Layer>
+
+          {/* Chapter 4: intelligence */}
+          <Layer ch={3} a={0.05} b={0.95} className="left-5 top-[18vh] max-w-[90vw] md:left-[6vw] md:max-w-[28vw]">
+            <Eyebrow className="mb-4">04 · Intelligence</Eyebrow>
+            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every place, scored.<br /><span className="text-[#6cc3d5]">And explained.</span></p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.</p>
+          </Layer>
+          <div ref={el => { anchors.current.focus = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
+            <div className="w-max translate-y-10 -translate-x-1/2 border-t border-[#6cc3d5] bg-[#04080c]/85 px-3 py-2 backdrop-blur-sm sm:w-auto sm:-translate-y-1/2 sm:translate-x-6 sm:border-l sm:border-t-0 sm:pl-3 sm:pr-4">
+              <p className={cx(H, 'text-[22px] leading-none')}>{focus?.focusName ?? 'Highest-crisis place'}</p>
+              {focus?.focusDistrict && <p className="mt-1 text-[12px] text-[#9fb2b9]">{districtName(focus.focusDistrict)} district</p>}
+              <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 font-mono text-[11px]">
+                <dt className="text-[#7f97a1]">Crisis score</dt><dd className="text-[#df5a3b]">{focus?.focusCrisis ?? '—'}/100</dd>
+                <dt className="text-[#7f97a1]">Population</dt><dd>{focus ? num(focus.focusPop) : '—'}</dd>
+                {topDeficit && focus?.focusDistrict && plain(topDeficit.district) === plain(focus.focusDistrict) && (
+                  <><dt className="text-[#7f97a1]">Monsoon rain</dt><dd className="text-[#e3a26a]">{topDeficit.deviation}% vs 10-yr</dd></>
+                )}
+              </dl>
+              <div className="mt-2"><Live at={at} /></div>
+            </div>
+          </div>
+
+          {/* Chapter 5: live operations */}
+          <Layer ch={4} a={0.04} b={0.96} className="left-5 top-[18vh] max-w-[90vw] md:left-[6vw] md:max-w-[30vw]">
+            <Eyebrow className="mb-4">05 · Live operations</Eyebrow>
+            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every tanker,<br />on real GPS.</p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">The driver’s phone is the tracker. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.</p>
+            <div className="mt-4"><Illustration>the tracking workflow, not live telemetry</Illustration></div>
+          </Layer>
+          <div ref={el => { anchors.current.truck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
+            <div className="-translate-x-1/2 -translate-y-[calc(100%+18px)] whitespace-nowrap bg-[#04080c]/85 px-3 py-1.5 font-mono text-[11px] backdrop-blur-sm">
+              <span className="mr-2 text-[#6cc3d5]">●</span><span ref={truckText}>Accepted</span>
+            </div>
+          </div>
+
+          {/* Chapter 6: disaster response */}
+          <Layer ch={5} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
+            <Eyebrow className="mb-4">06 · Disaster response</Eyebrow>
+            <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>When the monsoon fails,<br /><span className="text-[#e3a26a]">the plan moves.</span></p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#9fb2b9] md:text-[15px]">Shaded districts: monsoon rainfall far below their own 10-year mean (Open-Meteo ERA5). Official NDMA alerts and news re-rank every place, and dispatch follows the new priorities.</p>
+            <div className="mt-4"><Live at={at} /></div>
+          </Layer>
+          {s?.rainfall.slice(0, 3).map((r, i) => (
+            <div key={r.district} ref={el => { anchors.current[`d${i}`] = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
+              <div className="-translate-x-1/2 -translate-y-1/2 text-center">
+                <p className="font-mono text-[18px] text-[#f0b483] md:text-[22px]">{r.deviation}%</p>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[#d9c2b2]">{districtName(r.district)}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* Chapter 7: the network */}
+          <Layer ch={6} a={0.05} b={0.95} className="inset-x-5 top-[16vh] text-center">
+            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[4.6vw]')}>{s ? num(s.places) : '1,263'} towns and villages today.<br /><span className="text-[#6cc3d5]">Built for every state.</span></p>
+            <div className="mt-5 flex justify-center"><Illustration>national arcs show the design, not current coverage</Illustration></div>
+          </Layer>
+
+          {/* Chapter 8: impact (live numbers only) */}
+          {s && (
+            <Layer ch={7} a={0.03} b={0.97} depth={0.6} className="inset-x-5 top-[14vh] md:inset-x-[8vw] md:top-[24vh]">
+              <div className="flex items-center justify-between"><Eyebrow>08 · Right now</Eyebrow><Live at={at} /></div>
+              <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12">
+                {[
+                  [num(s.places), 'places monitored', 'OSM + Census 2011 populations'],
+                  [millions(s.people), 'people in those places', 'demand at CPHEEO/JJM norms'],
+                  [num(s.inCrisis), 'places under water stress', `${num(s.critical)} critical`],
+                  [millions(s.peopleInCrisis), 'people in stressed places', 'from the crisis score'],
+                  [num(s.newsReports), 'news reports read', 'Marathi + English, unverified until confirmed'],
+                  [`${s.tankers} / ${s.depots}`, 'tankers / depots on real GPS', 'depots on real water sites'],
+                ].map(([v, l, n]) => (
+                  <div key={l} className="border-t border-[#2a3d48] pt-3">
+                    <dt className="text-[12px] text-[#9fb2b9] md:text-[13px]">{l}</dt>
+                    <dd className={cx(H, 'mt-1 text-[11vw] leading-none md:text-[4.6vw]')}>{v}</dd>
+                    <dd className="mt-2 font-mono text-[10.5px] text-[#6f8790]">{n}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Layer>
+          )}
+
+          {/* Chapter 9 (title only; the call to action is real page content below) */}
+          <Layer ch={8} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
+            <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#6cc3d5]">to intelligent response.</span></p>
+          </Layer>
+
+          {/* hover card for real places */}
+          <div ref={tip} className="pointer-events-none absolute left-0 top-0 z-10 opacity-0 transition-opacity duration-150">
+            <div className="min-w-[180px] border border-[#2a3d48] bg-[#04080c]/90 px-3 py-2 font-mono text-[11px] backdrop-blur">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[#7fa9b8]">Place · live</p>
+              <p className="flex justify-between gap-4"><span className="text-[#7f97a1]">Crisis</span><span data-k="crisis" /></p>
+              <p className="flex justify-between gap-4"><span className="text-[#7f97a1]">Population</span><span data-k="pop" /></p>
+              <p className="mt-1 text-[#6f8790]" data-k="ll" />
+            </div>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------ chrome */}
+        <header className="fixed inset-x-0 top-0 z-30">
+          <div className="flex h-16 items-center justify-between px-5 md:px-8">
+            <a href="/welcome" className="flex items-center gap-2.5 text-[#e6eef1]" aria-label="JalSetu home">
+              <Mark className="h-7 w-7 text-[#6cc3d5]" /><span className={cx(H, 'text-[22px] leading-none')}>JalSetu</span>
+            </a>
+            <p className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-[#7fa9b8] md:block" aria-live="polite">
+              {String(chapter + 1).padStart(2, '0')} / {String(CHAPTERS.length).padStart(2, '0')} · {CHAPTERS[chapter].label}
+            </p>
+            <nav aria-label="Primary" className="flex items-center gap-1 md:gap-5">
+              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#b7c7cd] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5] sm:inline">Report a problem</a>
+              <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#b7c7cd] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5] md:inline">Water schedule</a>
+              <EnterLink className="group flex items-center gap-1.5 rounded-full border border-[#6cc3d5]/50 px-3.5 py-1.5 text-[13px] font-medium text-[#e6eef1] transition-colors hover:bg-[#6cc3d5] hover:text-[#04080c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6cc3d5]">
+                Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </EnterLink>
+            </nav>
+          </div>
+          <div className="h-px bg-[#1a2a33]"><div ref={bar} className="h-px origin-left scale-x-0 bg-[#6cc3d5]" /></div>
+        </header>
+
+        <nav aria-label="Chapters" className="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 lg:block">
+          <ol className="space-y-2.5">
+            {CHAPTERS.map((c, i) => (
+              <li key={c.id}>
+                <button type="button" onClick={() => goTo(i)} aria-current={i === chapter ? 'step' : undefined}
+                  className="group flex w-full items-center justify-end gap-3 rounded py-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6cc3d5]">
+                  <span className={cx('font-mono text-[10px] uppercase tracking-[0.16em] transition-opacity duration-300', i === chapter ? 'text-[#cfe3ea] opacity-100' : 'text-[#7f97a1] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100')}>{c.label}</span>
+                  <span className={cx('h-px transition-all duration-500', i === chapter ? 'w-8 bg-[#6cc3d5]' : 'w-4 bg-[#3a4f5a] group-hover:bg-[#7f97a1]')} />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+
+        {/* ------------------------------------------------ the scroll track, with the story as plain text for assistive tech */}
+        <main className="pointer-events-none relative z-20">
+          <div style={{ height: `${quality === 'high' ? 1250 : 1050}vh` }} className="relative">
+            {CHAPTERS.slice(0, -1).map((c, i) => (
+              <section key={c.id} id={c.id} aria-labelledby={`sr-${c.id}`} className="sr-only" style={{ position: 'absolute', top: `${c.start * 100}%` }}>
+                <h2 id={`sr-${c.id}`}>{c.label}</h2>
+                <p>{SR_TEXT[i](s)}</p>
+              </section>
+            ))}
+            {/* final chapter: real, focusable content that arrives with the end of the journey */}
+            <section id="return" aria-labelledby="return-title" className="absolute inset-x-0 bottom-0 flex h-[100svh] flex-col items-center justify-end px-5 pb-[10vh] text-center [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
+              <h2 id="return-title" className="sr-only">From water movement to intelligent response</h2>
+              <p className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')}>JalSetu</p>
+              <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#9fc9d6] md:text-[13px]">Connect · Coordinate · Respond</p>
+              <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
+                <EnterLink className="group inline-flex items-center gap-2 rounded-full bg-[#6cc3d5] px-6 py-3 text-[15px] font-semibold text-[#04080c] transition-[background-color,transform] hover:bg-[#8fd6e4] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                  Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </EnterLink>
+                <a href="/report" className="inline-flex items-center gap-1.5 rounded-full border border-[#3a4f5a] px-5 py-3 text-[14px] text-[#d5e2e6] transition-colors hover:border-[#6cc3d5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                  Report a water problem <ArrowUpRight className="h-4 w-4" />
+                </a>
+                <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#9fb2b9] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#6cc3d5]">
+                  When is water coming? <ArrowUpRight className="h-4 w-4" />
+                </a>
+              </div>
+              <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#5f7680]">
+                Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
+                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Supply arcs, the tanker run and national arcs are illustrations.
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
+      <style>{`@keyframes landingIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
     </EnterContext.Provider>
   );
 };
+
+const SR_TEXT: ((s: PublicSummary | null) => string)[] = [
+  s => `Water moves. So should intelligence. JalSetu: intelligent water logistics and emergency response, live across ${s ? num(s.places) : 'over a thousand'} towns and villages in Maharashtra.`,
+  s => `Demand doesn't wait. Emergencies don't follow schedules. The challenge isn't only water; it's coordination.${s ? ` Right now ${num(s.inCrisis)} places are under water stress, ${num(s.critical)} of them critical.` : ''}`,
+  () => 'JalSetu turns scattered requests into one picture of need and one plan for every tanker, prioritising by live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.',
+  () => 'Every place is scored and explained: rainfall deficit, news from the ground, vulnerability and distance to water combine into a crisis score.',
+  () => "Every tanker is tracked on real GPS from the driver's phone. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.",
+  s => `When the monsoon fails, the plan moves.${s?.rainfall[0] ? ` ${districtName(s.rainfall[0].district)} district has ${s.rainfall[0].deviation}% monsoon rainfall against its 10-year mean.` : ''} Official alerts and news re-rank every place and dispatch follows.`,
+  s => `${s ? num(s.places) : 'Over a thousand'} towns and villages are monitored today, and the model is built for every state.`,
+  s => (s ? `Right now: ${num(s.places)} places monitored with ${millions(s.people)} people; ${num(s.inCrisis)} places under water stress with ${millions(s.peopleInCrisis)} people; ${num(s.newsReports)} news reports read; ${s.tankers} tankers at ${s.depots} depots on real GPS.` : 'Live figures are loading.'),
+];
+
+// ---------------------------------------------------------------------------- fallback without WebGL
+const StaticMap: React.FC<{ s: PublicSummary | null; geo: GeoFile | null }> = ({ s, geo }) => {
+  const paths = useMemo(() => geo?.states.flatMap(st => st.rings.map(r => r.map(([lng, lat]) => project(lng, lat).map(v => v.toFixed(2)).join(',')).join(' '))) ?? [], [geo]);
+  return (
+    <svg viewBox="-12 -16 30 31" className="absolute inset-0 h-full w-full opacity-70" preserveAspectRatio="xMidYMid meet">
+      {paths.map((d, i) => <polygon key={i} points={d} fill="none" stroke="#284050" strokeWidth={0.04} />)}
+      {s?.points.map(([lng, lat, crisis], i) => {
+        const [x, z] = project(lng, lat);
+        return <circle key={i} cx={x} cy={z} r={crisis >= 70 ? 0.07 : 0.045} fill={crisis >= 70 ? '#df5a3b' : crisis >= 40 ? '#d8953f' : '#2f7f95'} />;
+      })}
+    </svg>
+  );
+};
+
+export default Landing;
