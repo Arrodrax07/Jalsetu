@@ -94,10 +94,12 @@ Last updated: 2026-10-03.
 User brief: one continuous scroll-driven shot INDIA -> region -> city -> street -> people at a water tanker -> back up to
 India above the clouds; photoreal (Google Earth 3D feel, not stylised), and SCROLL SMOOTHNESS IS PRIORITY #1.
 Plan, in order (tick as done, commit after each):
-1. [ ] Scroll: remove the custom wheel hijack (double smoothing with trackpads), drive the story clock with one
+1. [x] Scroll (728fbf6 + prewarm): remove the custom wheel hijack (double smoothing with trackpads), drive the story clock with one
        critically damped spring + velocity cap so big jumps fly instead of snap; read scroll in rAF. (story.ts stepClock,
        Landing.tsx wheel effect)
-2. [ ] Frame rate: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
+2. [~] Frame rate: DONE gating + shader/shadow prewarm (spikes 661->~70 ms at the columns). OPEN: a ~500 ms one-off
+       spike near p=0.44 and ~180 ms at 0.566; measurements were contaminated by the user's Brave tab using 53% GPU,
+       re-measure with it closed (scratchpad smooth3.js on the prod build). Originally: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
        every frame at every altitude); measure per chapter with `?debug=` flags on the prod build (scratchpad jank.js).
 3. [ ] Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
        Google attribution) vs. real licensed footage/photo of a tanker queue blended at the end of the descent. Ask.

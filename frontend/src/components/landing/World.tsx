@@ -616,6 +616,30 @@ const Film: React.FC = () => {
   return null;
 };
 
+/** Compile every shader and upload every texture once, while the page fades in, so nothing stalls the first time it
+ *  comes into view mid-flight (the columns, the village, the clouds each cost 150-650 ms to compile on first sight). */
+const Prewarm: React.FC = () => {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    const hidden: THREE.Object3D[] = [], culled: THREE.Object3D[] = [];
+    scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    const rt = new THREE.WebGLRenderTarget(8, 8);
+    try {
+      gl.compile(scene, camera);
+      // one tiny off-screen frame with nothing culled also builds the shadow-pass (depth) programs and buffers
+      const prev = gl.getRenderTarget(), auto = gl.shadowMap.autoUpdate;
+      gl.shadowMap.needsUpdate = true;
+      gl.setRenderTarget(rt); gl.render(scene, camera); gl.setRenderTarget(prev);
+      gl.shadowMap.autoUpdate = auto;
+      scene.traverse(o => {
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        for (const mm of m ? (Array.isArray(m) ? m : [m]) : []) for (const v of Object.values(mm as unknown as Record<string, unknown>)) if (v instanceof THREE.Texture) gl.initTexture(v);
+      });
+    } finally { for (const o of hidden) o.visible = false; for (const o of culled) o.frustumCulled = true; rt.dispose(); }
+  }, [gl, scene, camera]);
+  return null;
+};
+
 /** Dynamic resolution: holds the frame rate on any machine by trading pixels, never by dropping the story. */
 const Adaptive: React.FC<{ max: number }> = ({ max }) => {
   const { setDpr } = useThree();
@@ -812,7 +836,7 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
   }, [geo, summary, quality, px]);
   const overlay = useRef<THREE.Group>(null);
   const three = useThree();
-  useEffect(() => { if (DEBUG.has('expose')) (window as unknown as { __three: unknown }).__three = three; }, [three]);
+  useEffect(() => { if (DEBUG.has('expose')) Object.assign(window as unknown as Record<string, unknown>, { __three: three, __clock: clock }); }, [three]);
   useFrame(() => { if (overlay.current) overlay.current.visible = live.fade > 0.01; });
   useEffect(() => { setGroundReduce(clock.reduce); }, []);
   useEffect(() => { onReady?.({ focusName: ctx.focus.name, focusDistrict: ctx.focus.district, focusCrisis: ctx.focus.place.crisis, focusPop: ctx.focus.place.pop }); }, [ctx, onReady]);
@@ -838,6 +862,7 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
       <Suspense fallback={null}>
         {!DEBUG.has('noground') && <Ground q={quality} haze={C.haze} />}
         {!DEBUG.has('noclouds') && <Clouds q={quality} haze={C.haze} />}
+        <Prewarm />
       </Suspense>
       <Rig c={ctx} anchors={anchors} onChapterFrame={onFrame} />
       {quality === 'high' && !DEBUG.has('nofilm') && <Film />}
@@ -846,7 +871,7 @@ const SceneRoot: React.FC<WorldProps & { px: number }> = ({ geo, summary, qualit
   );
 };
 
-export default function World(props: WorldProps) {
+function World(props: WorldProps) {
   const dpr: [number, number] = props.quality === 'high' ? [1, 1.5] : [1, 1.25];
   const px = Math.min(window.devicePixelRatio || 1, dpr[1]);
   return (
@@ -860,3 +885,6 @@ export default function World(props: WorldProps) {
     </Canvas>
   );
 }
+
+// The page re-renders on chapter changes; the world never needs to.
+export default React.memo(World);
