@@ -54,19 +54,20 @@ const Row: React.FC<{ m: Metric; a: StrategyResult; b: StrategyResult; i: number
   const v = verdict(m, va, vb);
   const max = Math.max(Math.abs(va ?? 0), Math.abs(vb ?? 0)) || 1;
   return (
-    <motion.tr initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i, duration: 0.35, ease: EASE }}>
-      <td className="py-2.5 pr-3 align-top">
+    <motion.tr initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i, duration: 0.35, ease: EASE }}
+      className="max-sm:grid max-sm:grid-cols-[1fr_1fr_auto] max-sm:gap-x-3 max-sm:border-t max-sm:border-cc-border/60 max-sm:py-2.5">
+      <td className="py-2.5 pr-3 align-top max-sm:col-span-3 max-sm:p-0 max-sm:pb-1.5">
         <p className="text-[13px] font-medium text-cc-text">{m.label}</p>
         {m.hint && <p className="text-[11.5px] leading-snug text-cc-faint">{m.hint}</p>}
       </td>
       {[va, vb].map((val, k) => (
-        <td key={k} className="w-[24%] py-2.5 pr-3 align-top">
+        <td key={k} className="w-[24%] py-2.5 pr-3 align-top max-sm:w-auto max-sm:p-0">
           <p className="num text-[13px] font-semibold" style={{ color: k ? JALSETU : FCFS }}>{val == null ? '—' : m.fmt(val)}</p>
           <div className="mt-1 h-1 rounded-full bg-cc-hover"><motion.div className="h-full rounded-full" style={{ background: k ? JALSETU : FCFS }}
             initial={{ width: 0 }} animate={{ width: `${(100 * Math.abs(val ?? 0)) / max}%` }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 * i }} /></div>
         </td>
       ))}
-      <td className="w-[19%] whitespace-nowrap py-2.5 align-top">
+      <td className="w-[19%] whitespace-nowrap py-2.5 align-top max-sm:w-auto max-sm:p-0">
         <span className={cx('inline-flex items-center gap-1 text-[12px] font-medium',
           v.dir === 'better' ? 'text-green-800' : v.dir === 'worse' ? 'text-red-700' : 'text-cc-muted')}>
           {v.dir === 'better' ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : v.dir === 'worse' ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : <Minus className="h-3.5 w-3.5" aria-hidden />}
@@ -116,12 +117,12 @@ export const Impact: React.FC = () => {
             <>
               <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
                 <Panel title="Outcome, metric by metric" eyebrow={`${num(data.places)} places · ${litres(data.needLitres)} asked for`}
-                  actions={<div className="flex items-center gap-3 text-[12px]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: FCFS }} />First come first served</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: JALSETU }} />JalSetu</span></div>}>
-                  <table className="w-full">
+                  actions={<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: FCFS }} />First come first served</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: JALSETU }} />JalSetu</span></div>}>
+                  <table className="w-full max-sm:block [&>tbody]:max-sm:block">
                     <thead className="sr-only"><tr><th>Metric</th><th>First come first served</th><th>JalSetu</th><th>JalSetu vs FCFS</th></tr></thead>
                     {METRICS.map((g, gi) => (
                       <tbody key={g.group}>
-                        <tr><td colSpan={4} className={cx('pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-cc-faint', gi ? 'pt-5' : '')}>{g.group}</td></tr>
+                        <tr className="max-sm:block"><td colSpan={4} className={cx('max-sm:block pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-cc-faint', gi ? 'pt-5' : '')}>{g.group}</td></tr>
                         {g.rows.map((m, i) => <Row key={m.key} m={m} a={a} b={b} i={gi * 4 + i} />)}
                       </tbody>
                     ))}

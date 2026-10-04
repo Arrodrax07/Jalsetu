@@ -96,9 +96,9 @@ export const CommandCenter: React.FC = () => {
   const [fit, setFit] = useState<{ bbox?: number[]; center?: [number, number]; zoom?: number; key: string } | null>(null);
   const [sel, setSel] = useState<Sel>(null);
   const [tab, setTab] = useState('crisis');
-  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1280px)').matches);
   useEffect(() => {
-    const m = window.matchMedia('(min-width: 1024px)');
+    const m = window.matchMedia('(min-width: 1280px)');
     const h = () => setWide(m.matches);
     m.addEventListener('change', h);
     return () => m.removeEventListener('change', h);
@@ -319,13 +319,13 @@ export const CommandCenter: React.FC = () => {
   );
 
   const kpis = (
-    <Stagger className="grid grid-cols-3 divide-cc-border sm:grid-cols-6 sm:divide-x" step={0.04}>
+    <Stagger className={wide ? 'grid grid-cols-6 divide-x divide-cc-border max-[1535px]:[&_.kpi-icon]:hidden max-[1535px]:[&>*]:px-3.5' : 'grid grid-cols-2 sm:grid-cols-3'} step={0.04}>
       <Kpi label="Places in crisis" value={loaded.has('communities') ? situation.high : '—'} sub={`${situation.critical} critical`} tone={situation.critical ? 'danger' : 'warn'} icon={<Building2 className="h-4 w-4" />} onClick={() => { setSel(null); setTab('crisis'); }} />
       <Kpi label="Official alerts" value={o?.activeEmergencies ?? '—'} sub={`${o?.activeAlerts ?? 0} active`} tone={o?.activeEmergencies ? 'warn' : 'ok'} icon={<AlertOctagon className="h-4 w-4" />} onClick={() => { setSel(null); setTab('alerts'); }} />
       <Kpi label="Open requests" value={o?.activeRequests ?? '—'} sub={`${o?.criticalRequests ?? 0} critical`} tone={o?.criticalRequests ? 'danger' : 'accent'} icon={<Droplets className="h-4 w-4" />} onClick={() => navigate('requests')} />
       <Kpi label="Tankers free" value={o ? o.tankersAvailable : '—'} sub={o ? `of ${o.tankersTotal} · ${o.tankersOnRoad} on road` : ''} tone="accent" icon={<Truck className="h-4 w-4" />} onClick={() => { setSel(null); setTab('fleet'); }} />
       <Kpi label="Delivered" value={o?.deliveriesToday ?? '—'} sub={o ? `today · ${o.litresDeliveredToday.toLocaleString('en-IN')} L` : ''} tone="teal" icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => navigate('verification')} />
-      <Kpi label="Complaints" value={o?.openComplaints ?? '—'} sub={`${o?.openAnomalies ?? 0} anomalies`} tone={o?.openComplaints ? 'violet' : 'ok'} icon={<MessageSquareWarning className="h-4 w-4" />} onClick={() => navigate('complaints')} />
+      <Kpi label="Complaints" value={o?.openComplaints ?? '—'} sub={`${o?.openAnomalies ?? 0} ${o?.openAnomalies === 1 ? 'anomaly' : 'anomalies'}`} tone={o?.openComplaints ? 'violet' : 'ok'} icon={<MessageSquareWarning className="h-4 w-4" />} onClick={() => navigate('complaints')} />
     </Stagger>
   );
 
@@ -352,7 +352,7 @@ export const CommandCenter: React.FC = () => {
       <div className="h-full overflow-y-auto">
         <div className="space-y-3 p-4">
           {crumbs}{headline}
-          <div className="-mx-4 overflow-x-auto px-4"><div className="min-w-[520px] rounded-card border border-cc-border bg-cc-surface">{kpis}</div></div>
+          <div className="rounded-card border border-cc-border bg-cc-surface">{kpis}</div>
           {planButton}
         </div>
         <div className="relative h-[56vh] min-h-[360px] border-y border-cc-border">{map}</div>

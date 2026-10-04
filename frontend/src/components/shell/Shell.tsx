@@ -349,8 +349,21 @@ const UserCard: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
 const RAIL_KEY = 'jalsetu_nav_collapsed';
 export const NavRail: React.FC = () => {
   const { navigate } = useApp();
-  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch { return false; } });
-  const toggle = () => setCollapsed(c => { try { localStorage.setItem(RAIL_KEY, c ? '0' : '1'); } catch { /* ignore */ } return !c; });
+  const [stored, setStored] = useState(() => { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch { return false; } });
+  // Laptops and tablets start on the icon rail so content keeps its width; expanding there lasts for the session only.
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 1439px)').matches);
+  const [narrowOpen, setNarrowOpen] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1439px)');
+    const on = () => { setNarrow(mq.matches); setNarrowOpen(false); };
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const collapsed = narrow ? !narrowOpen : stored;
+  const toggle = () => {
+    if (narrow) { setNarrowOpen(o => !o); return; }
+    setStored(c => { try { localStorage.setItem(RAIL_KEY, c ? '0' : '1'); } catch { /* ignore */ } return !c; });
+  };
   return (
     <motion.nav aria-label="Primary" initial={false} animate={{ width: collapsed ? 64 : 232 }} transition={SPRING_SHEET}
       className="relative hidden flex-shrink-0 flex-col border-r border-cc-border bg-cc-raised/60 md:flex">

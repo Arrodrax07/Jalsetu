@@ -54,7 +54,7 @@ export const Panel: React.FC<{ title?: React.ReactNode; actions?: React.ReactNod
     <motion.section initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE_OUT }}
       className={cx(flush ? 'flex min-w-0 flex-col' : 'panel flex min-w-0 flex-col', className)}>
       {(title || actions) && (
-        <header className={cx('flex items-center justify-between gap-3', flush ? 'pb-3' : 'border-b border-cc-border px-5 py-3')}>
+        <header className={cx('flex flex-wrap items-center justify-between gap-x-3 gap-y-2', flush ? 'pb-3' : 'border-b border-cc-border px-5 py-3')}>
           <div className="min-w-0">
             {eyebrow && <p className="mb-0.5 text-[11px] font-medium text-cc-faint">{eyebrow}</p>}
             {title && <h2 className="truncate text-[14px] font-semibold text-cc-text">{title}</h2>}
@@ -273,7 +273,7 @@ export const Kpi: React.FC<{ label: string; value: React.ReactNode; sub?: React.
         className={cx('group relative min-w-0 rounded-card px-4 py-3.5 text-left transition-colors duration-150 disabled:cursor-default',
           onClick && 'hover:bg-cc-hover/70 focus-visible:bg-cc-hover/70', className)}>
         <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-cc-muted">
-          {icon && <span className="flex-shrink-0 text-cc-faint transition-colors group-hover:text-cc-text">{icon}</span>}
+          {icon && <span className="kpi-icon flex-shrink-0 text-cc-faint transition-colors group-hover:text-cc-text">{icon}</span>}
           <span className="truncate">{label}</span>
         </p>
         <p className={cx('display mt-1.5 truncate text-[30px] leading-none', KPI_VALUE[tone])}>

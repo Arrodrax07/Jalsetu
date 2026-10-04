@@ -19,8 +19,8 @@ export const PriorityBadge: React.FC<{ a: AIAssessment | null; score: number }> 
   const top = a ? (Object.entries(a.contributions) as [keyof PriorityFactors, number][]).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k]) => FACTOR_LABELS[k].split(' ')[0].toLowerCase()) : [];
   return (
     <span className="inline-flex flex-col">
-      <StatusChip status={level} label={`${level} priority`} />
-      {top.length > 0 && <span className="mt-0.5 text-2xs text-cc-muted">driven by {top.join(' + ')}</span>}
+      <StatusChip status={level} label={level} />
+      {top.length > 0 && <span className="mt-0.5 hidden text-2xs text-cc-muted sm:block">driven by {top.join(' + ')}</span>}
     </span>
   );
 };
@@ -70,10 +70,10 @@ export const Requests: React.FC = () => {
           </div>
         )}
         columns={[
-          { id: 'id', header: 'Request', sort: r => r.dbId, cell: r => <span className="mono font-medium">{r.id}</span> },
-          { id: 'community', header: 'Place', sort: r => r.communityName, cell: r => <span className="font-medium">{r.communityName}</span> },
+          { id: 'id', header: 'Request', hideBelow: 'sm', sort: r => r.dbId, cell: r => <span className="mono font-medium">{r.id}</span> },
+          { id: 'community', header: 'Place', sort: r => r.communityName, cell: r => <span className="font-medium">{r.communityName}<span className="mono block text-2xs font-normal text-cc-faint sm:hidden">{r.id}</span></span> },
           { id: 'priority', header: 'Priority', sort: r => r.priorityScore, cell: r => <PriorityBadge a={r.aiAssessment} score={r.priorityScore} /> },
-          { id: 'litres', header: 'Litres', align: 'right', sort: r => r.requestedAmount, cell: r => <span className="mono">{litres(r.requestedAmount)}</span> },
+          { id: 'litres', header: 'Litres', align: 'right', hideBelow: 'sm', sort: r => r.requestedAmount, cell: r => <span className="mono">{litres(r.requestedAmount)}</span> },
           { id: 'dry', header: 'Days dry', align: 'right', sort: r => r.daysWithoutWater, hideBelow: 'md', cell: r => <span className="mono">{r.daysWithoutWater}</span> },
           { id: 'status', header: 'Status', sort: r => r.status, cell: r => <StatusChip status={r.status} label={r.status === 'Merged' ? `Merged into ${r.duplicateOf}` : undefined} /> },
           { id: 'when', header: 'Received', sort: r => Date.parse(r.submittedAt), hideBelow: 'lg', cell: r => <span className="text-cc-muted">{timeAgo(r.submittedAt)}</span> },
