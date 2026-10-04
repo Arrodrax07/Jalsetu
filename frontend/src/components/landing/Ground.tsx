@@ -212,6 +212,7 @@ const shared = { uTime: { value: 0 }, uBottom: { value: CLOUD.bottom }, uTop: { 
 export const Clouds: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, haze }) => {
   const d = useGroundData();
   const { camera, gl } = useThree();
+  const quad = useRef<THREE.Mesh>(null);
   const mat = useMemo(() => {
     shared.uVkm.value.set(d.vx * KM, d.vz * KM);
     shared.uBottom.value = CLOUD.bottom + d.lift * KM; shared.uTop.value = CLOUD.top + d.lift * KM;
@@ -227,11 +228,13 @@ export const Clouds: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
     mat.uniforms.uProjInv.value.copy(camera.projectionMatrixInverse);
     mat.uniforms.uCamWorld.value.copy(camera.matrixWorld);
     mat.uniforms.uViewProj.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    // a full-screen raymarch is the most expensive thing on the page: only while the shot is near the cloud layer
+    if (quad.current) quad.current.visible = live.ph.inGround > 0 || live.dist < 0.6;
     mat.uniforms.uMax.value = live.lowPower ? 18 : q === 'high' ? 40 : 20;
     const cam = camera as THREE.PerspectiveCamera;
     mat.uniforms.uPixAng.value = (2 * Math.tan((cam.fov * Math.PI) / 360)) / Math.max(1, gl.domElement.height / gl.getPixelRatio());
   }, -1);
-  return <mesh material={mat} frustumCulled={false} renderOrder={-2}><planeGeometry args={[2, 2]} /></mesh>;
+  return <mesh ref={quad} material={mat} frustumCulled={false} renderOrder={-2}><planeGeometry args={[2, 2]} /></mesh>;
 };
 let reduceFlag = false;
 const clockReduce = () => reduceFlag;
@@ -574,6 +577,7 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
     t.uniforms.uCamM.value.copy(tmp.cam);
     t.uniforms.uShadowOn.value = live.dist < 1.5 ? 1 : 0;
     const near = live.dist < 0.25;
+    grp.visible = live.ph.inGround > 0 || live.dist < 0.9;
     if (village.current) village.current.visible = near;
 
     // the tanker's drive: eases to a stop at the water point

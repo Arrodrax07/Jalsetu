@@ -36,18 +36,22 @@ export const groundState = { arrived: false, stopped: false, delivering: false }
 /** Shared, mutable story clock. `target` follows the scrollbar; `p` eases toward it in the render loop. */
 export const clock = { target: 0, p: 0, v: 0, pointerX: 0, pointerY: 0, reduce: false };
 
-/** Advance the story clock with a critically damped spring: every move eases in and settles, never snaps. */
+/** Advance the story clock: one critically damped spring toward the scroll position (settles in ~0.35 s, no overshoot),
+ *  with a speed cap so a long jump (scrollbar drag, chapter rail, End key) flies through the journey instead of snapping.
+ *  This is the ONLY smoothing between input and camera: native scroll is never hijacked, so wheels, trackpads (which
+ *  bring their own inertia), touch and the scrollbar all feel like themselves. */
 export function stepClock(dt: number) {
-  const K = clock.reduce ? 600 : 22, D = 2 * Math.sqrt(K);
+  const K = clock.reduce ? 900 : 90, D = 2 * Math.sqrt(K), VMAX = clock.reduce ? 50 : 0.32;
   let rem = Math.min(dt, 0.1);
   while (rem > 0) {
-    const h = Math.min(rem, 1 / 120);
+    const h = Math.min(rem, 1 / 240);
     clock.v += ((clock.target - clock.p) * K - clock.v * D) * h;
+    if (clock.v > VMAX) clock.v = VMAX; else if (clock.v < -VMAX) clock.v = -VMAX;
     clock.p += clock.v * h;
     rem -= h;
   }
   if (clock.p < 0) { clock.p = 0; clock.v = 0; } else if (clock.p > 1) { clock.p = 1; clock.v = 0; }
-  if (Math.abs(clock.target - clock.p) < 1e-5 && Math.abs(clock.v) < 1e-4) { clock.p = clock.target; clock.v = 0; }
+  if (Math.abs(clock.target - clock.p) < 2e-5 && Math.abs(clock.v) < 2e-4) { clock.p = clock.target; clock.v = 0; }
 }
 
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);

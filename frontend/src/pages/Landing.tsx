@@ -164,30 +164,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
     return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
   }, []);
 
-  // inertial wheel scrolling: mouse wheels move in steps, the journey should glide. Touch, keys and the scrollbar stay native.
-  useEffect(() => {
-    if (reduce || !window.matchMedia('(pointer: fine)').matches) return;
-    let target = window.scrollY, current = window.scrollY, raf = 0, ours = false;
-    const max = () => document.documentElement.scrollHeight - window.innerHeight;
-    const step = () => {
-      current += (target - current) * 0.085;
-      if (Math.abs(target - current) < 0.4) current = target;
-      ours = true; window.scrollTo(0, current);
-      raf = current === target ? 0 : requestAnimationFrame(step);
-    };
-    const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.defaultPrevented) return;
-      e.preventDefault();
-      const d = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaMode === 2 ? e.deltaY * window.innerHeight : e.deltaY;
-      target = Math.min(max(), Math.max(0, target + d));
-      if (!raf) { current = window.scrollY; raf = requestAnimationFrame(step); }
-    };
-    const onScroll = () => { if (ours) { ours = false; return; } if (!raf) target = current = window.scrollY; };
-    window.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('wheel', onWheel); window.removeEventListener('scroll', onScroll); };
-  }, [reduce]);
-
   // one frame loop for all DOM layers (the WebGL world advances the clock; without it, this loop does)
   const worldDriving = gl && !failed;
   useEffect(() => {
