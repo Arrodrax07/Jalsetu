@@ -584,7 +584,6 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
     if (village.current) village.current.visible = near;
     // Google mode: photogrammetry replaces our terrain and buildings; the tanker and its trail stay
     if (terrainRef.current) terrainRef.current.visible = !googleState.active;
-    if (villageMesh.current) villageMesh.current.visible = !googleState.active;
 
     // the tanker's drive: eases to a stop at the water point
     const u = 1 - Math.pow(1 - ph.drive, 2.3);
@@ -640,7 +639,8 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
         <primitive object={model.forest} />
         <primitive object={model.tuft} />
         {/* People are not modelled: the close-up is a real photograph from this district (Landing.tsx). */}
-        <mesh ref={villageMesh} geometry={model.village} material={vmat} castShadow receiveShadow />
+        {/* modelled houses read as toys from a drone: the real terrain and imagery carry the place */}
+        <mesh ref={villageMesh} geometry={model.village} material={vmat} castShadow receiveShadow visible={false} />
         <group ref={tanker}>
           <mesh geometry={model.tk.body} material={vmat} castShadow receiveShadow />
           <mesh geometry={model.tk.wheels} material={vmat} castShadow />
@@ -664,9 +664,9 @@ export const Ground: React.FC<{ q: 'high' | 'low'; haze: THREE.Color }> = ({ q, 
 const SHOTS: { pos: [number, number, number]; target: [number, number, number] }[] = [
   { pos: [-230, 120, 200], target: [-80, 0, 30] },
   { pos: [-130, 48, 120], target: [-45, 0, 15] },
-  { pos: [-55, 16, 62], target: [-8, 1, 3] },
-  { pos: [-18, 3.2, 26], target: [6, 1.4, -2] },
-  { pos: [24, 1.75, 16], target: [2, 1.8, -5] },
+  { pos: [-62, 26, 58], target: [-6, 1, 2] },
+  // the last metres are a real photograph (Landing.tsx): the camera dives toward the water point, never to street level
+  { pos: [-44, 34, 40], target: [2, 0, -2] },
 ];
 const shotPos = new THREE.CatmullRomCurve3(SHOTS.map(s => new THREE.Vector3(...s.pos)), false, 'centripetal');
 const shotTgt = new THREE.CatmullRomCurve3(SHOTS.map(s => new THREE.Vector3(...s.target)), false, 'centripetal');

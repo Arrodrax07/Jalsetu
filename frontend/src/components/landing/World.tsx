@@ -24,7 +24,7 @@ import { HorizontalTiltShiftShader } from 'three/examples/jsm/shaders/Horizontal
 import { VerticalTiltShiftShader } from 'three/examples/jsm/shaders/VerticalTiltShiftShader.js';
 import type { PublicSummary } from '../../types';
 import { deficitRings, dotField, focusPlace, inAny, project, px as lngX, pz as latZ, ringSegments, supplyArcs, toPlaces, type GeoFile, type Place, plain } from './geo';
-import { base, cameraKeys, clock, phases, sampleKeys, smooth, stepClock } from './story';
+import { PHOTO, band, base, cameraKeys, clock, phases, sampleKeys, smooth, stepClock } from './story';
 import { live } from './live';
 import { Clouds, Ground, M, SUN_OFFSET, SkyDome, groundCamera, setGroundReduce } from './Ground';
 
@@ -792,7 +792,8 @@ const Rig: React.FC<{ c: Ctx; anchors: React.MutableRefObject<Anchors>; onChapte
       el.style.visibility = alpha < 0.01 || behind || clash ? 'hidden' : 'visible';
       if (alpha > 0.01 && !behind && !clash) placed.push([x, y]);
     };
-    const groundLabel = ph.inGround * clamp01((700 - dist * M) / 350) * (1 - ph.ascend);
+    const photoOn = band(clock.p, PHOTO.in0 - 0.004, PHOTO.in0, PHOTO.out1, PHOTO.out1 + 0.006);
+    const groundLabel = ph.inGround * clamp01((700 - dist * M) / 350) * (1 - ph.ascend) * (1 - photoOn);
     place('gtruck', live.tankerWorld, groundLabel);
     place('focus', anchorPts.focus, Math.max(ph.focus * (1 - ph.ops), 0) * live.fade);
     place('truck', truckPos, ph.ops * live.fade);

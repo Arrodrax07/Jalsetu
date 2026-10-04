@@ -35,7 +35,7 @@ export type GoogleMode = 'off' | 'probing' | 'ready' | 'fallback';
 export const googleState: { mode: GoogleMode; active: boolean; attribution: string; reason: string } = { mode: 'off', active: false, attribution: '', reason: '' };
 
 /** The real photograph that closes the descent (page progress): fade in, hold, fade out as the camera lifts. */
-export const PHOTO = { in0: 0.584, in1: 0.596, out0: 0.613, out1: 0.625 };
+export const PHOTO = { in0: 0.583, in1: 0.591, out0: 0.614, out1: 0.621 };
 
 /** Written by the world every frame, read by the page's type layer. */
 export const groundState = { arrived: false, stopped: false, delivering: false };

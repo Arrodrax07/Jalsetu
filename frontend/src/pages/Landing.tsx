@@ -223,9 +223,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         photo.current.style.visibility = ph5 < 0.003 ? 'hidden' : 'visible';
         if (photoImg.current) {
           const k = Math.min(1, Math.max(0, (p - PHOTO.in0) / (PHOTO.out1 - PHOTO.in0)));
-          const sc = reduce ? 1.04 : 1.22 - 0.16 * (1 - Math.pow(1 - k, 2));
+          // arrives as a zoom-through from the air (big scale, falling fast), then a slow push-in during the hold
+          const sc = reduce ? 1.04 : 1.06 + 0.9 * Math.pow(1 - Math.min(1, k / 0.22), 3) - 0.05 * k;
           photoImg.current.style.transform = `scale(${sc.toFixed(4)}) translate3d(0, ${reduce ? 0 : ((0.5 - k) * 1.2).toFixed(2)}%, 0)`;
-          photoImg.current.style.filter = reduce || ph5 > 0.97 ? 'none' : `blur(${((1 - ph5) * 8).toFixed(2)}px)`;
+          photoImg.current.style.filter = reduce || ph5 > 0.97 ? 'none' : `blur(${((1 - ph5) * 14).toFixed(2)}px)`;
         }
       }
       // Google's logo and data attributions whenever their tiles are on screen
@@ -236,7 +237,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       }
       if (groundText.current) {
         const g = groundState.delivering ? 'Delivering · proof of delivery next' : groundState.arrived ? 'Arrived · inside the 150 m geofence' : 'En route · live GPS';
-        const lbl = anchors.current.gtruck; if (lbl && ph5 > 0.05) lbl.style.opacity = String(Math.min(+lbl.style.opacity || 0, 1 - ph5));
         if (groundText.current.textContent !== g) groundText.current.textContent = g;
       }
       if (truckText.current) {
