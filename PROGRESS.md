@@ -101,7 +101,12 @@ Plan, in order (tick as done, commit after each):
        spike near p=0.44 and ~180 ms at 0.566; measurements were contaminated by the user's Brave tab using 53% GPU,
        re-measure with it closed (scratchpad smooth3.js on the prod build). Originally: only render the volumetric clouds / ground terrain when the camera is near them (they currently run
        every frame at every altitude); measure per chapter with `?debug=` flags on the prod build (scratchpad jank.js).
-3. [ ] Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
+3. [ ] DECIDED by user 2026-10-04: Google Photorealistic 3D Tiles primary (3d-tiles-renderer + GoogleCloudAuthPlugin,
+       key in frontend `VITE_GOOGLE_MAPS_API_KEY`, Google attribution on screen); automatic fallback to our own
+       NASA/Sentinel/SRTM world on missing key, quota/billing/network error, slow tiles or weak device. The fallback must
+       NOT be recorded from Google tiles (Map Tiles ToS forbids caching/prefetch). Human tanker moment = real licensed
+       footage/photo (credited) in BOTH modes. No key exists yet: the user must create one (Map Tiles API enabled).
+       Original note: Photoreal city/street: needs a decision from the user — Google Photorealistic 3D Tiles (Maps API key + billing,
        Google attribution) vs. real licensed footage/photo of a tanker queue blended at the end of the descent. Ask.
 4. [ ] Ground scene upgrade with whichever asset route the user picks; hold, then reverse journey up through clouds.
 5. [ ] Aggressive scroll tests (wheel, fast jumps, scrollbar drag, touch) in Playwright; fix jank; commit; update docs.
