@@ -121,7 +121,7 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
       const c = cameraAt(EARTH.in0);
       map = new maplibregl.Map({
         container: mapBox, style: STYLE, center: c.center, zoom: c.zoom, pitch: c.pitch, bearing: c.bearing,
-        maxPitch: 80, interactive: true, attributionControl: { compact: true }, fadeDuration: 200,
+        maxPitch: 80, interactive: true, maxTileCacheSize: 1500, attributionControl: { compact: true }, fadeDuration: 200,
         // a page-length scroll story: the wheel always scrolls the page; drags look around during the hold
         scrollZoom: false, boxZoom: false, doubleClickZoom: false, keyboard: false, cooperativeGestures: false,
         canvasContextAttributes: { antialias: true, powerPreference: 'high-performance' },
@@ -133,22 +133,34 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
     }
     const m = map;
     if (new URLSearchParams(window.location.search).get('debug')?.includes('expose')) (window as unknown as { __earth: MLMap }).__earth = m;
-    m.dragPan.disable(); m.dragRotate.disable(); m.touchZoomRotate.disable(); m.touchPitch.disable();
+    m.dragPan.disable(); m.dragRotate.disable(); m.touchZoomRotate.disable(); m.touchPitch.disable(); // our own look-around below
     m.on('error', ev => { if (!earthState.ready) console.warn('Open Earth tile error', ev.error?.message); });
     m.once('load', () => {
       // late-morning sun from the south-east, warm, so walls and roofs separate
       m.setLight({ anchor: 'map', position: [1.4, 150, 42], color: '#fff3df', intensity: 0.42 });
+      // credits stay one tap away (the ⓘ button) instead of covering a phone screen
+      mapBox.querySelectorAll('.maplibregl-ctrl-attrib.maplibregl-compact-show').forEach(n => n.classList.remove('maplibregl-compact-show'));
       earthState.ready = true; earthState.mode = 'ready';
     });
 
-    // the visitor's own look-around (during the hold) rides on top of the scripted shot, and eases away on scroll
+    // the visitor's own look-around (during the hold): drag sideways to turn, up/down to tilt; it rides on top of the
+    // scripted shot and eases away once they scroll on
     const user = { bearing: 0, pitch: 0, active: false };
-    let lastScripted = { bearing: 0, pitch: 0 };
-    m.on('rotatestart', e => { if ((e as { originalEvent?: Event }).originalEvent) user.active = true; });
-    m.on('pitchstart', e => { if ((e as { originalEvent?: Event }).originalEvent) user.active = true; });
-    m.on('rotateend', () => { user.active = false; user.bearing = m.getBearing() - lastScripted.bearing; });
-    m.on('pitchend', () => { user.active = false; user.pitch = m.getPitch() - lastScripted.pitch; });
+    let drag: { x: number; y: number; b: number; p: number; id: number } | null = null;
+    const onDown = (e: PointerEvent) => { drag = { x: e.clientX, y: e.clientY, b: user.bearing, p: user.pitch, id: e.pointerId }; user.active = true; el.setPointerCapture(e.pointerId); el.style.cursor = 'grabbing'; };
+    const onMove = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      user.bearing = drag.b - (e.clientX - drag.x) * 0.25;
+      user.pitch = Math.max(-40, Math.min(10, drag.p + (e.clientY - drag.y) * 0.12));
+    };
+    const onUp = (e: PointerEvent) => { if (drag && e.pointerId === drag.id) { drag = null; user.active = false; el.style.cursor = 'grab'; } };
+    el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', onUp);
 
+    // pre-warm: while the visitor is still in the earlier chapters, the hidden map flies the descent once, so every
+    // tile on the path is fetched and decoded before it is needed (no decoding hitches mid-descent)
+    const warm = { i: 0, done: false, next: 0 };
+    const WARM_STEPS = 26;
     let raf = 0, lastP = -1, lastT = performance.now(), wasInteractive = false;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
@@ -161,25 +173,33 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
       const holding = p > EARTH.street && p < EARTH.hold + 0.01 && earthState.opacity > 0.98;
       if (holding !== wasInteractive) {
         wasInteractive = holding;
-        el.style.pointerEvents = holding ? 'auto' : 'none';
+        el.style.pointerEvents = holding ? 'auto' : 'none'; el.style.touchAction = holding ? 'pan-y' : '';
         el.style.cursor = holding ? 'grab' : '';
-        if (holding) { m.dragRotate.enable(); m.touchZoomRotate.enable(); m.touchPitch.enable(); }
-        else { m.dragRotate.disable(); m.touchZoomRotate.disable(); m.touchPitch.disable(); }
+        if (!holding) { drag = null; user.active = false; }
       }
       // look-around decays as soon as the visitor scrolls again
       if (!holding && !user.active) { const k = 1 - Math.exp(-dt * 3); user.bearing -= user.bearing * k; user.pitch -= user.pitch * k; }
-      if (user.active) return;
       // drive the camera only when something changed: MapLibre then renders only when it must
       if (Math.abs(p - lastP) < 1e-6 && Math.abs(user.bearing) < 0.01 && Math.abs(user.pitch) < 0.01 && earthState.opacity === 0) return;
+      if (!warm.done && earthState.ready && p < EARTH.in0 - 0.02 && p > 0.2) {
+        if (now >= warm.next && m.areTilesLoaded()) {
+          const u = warm.i / (WARM_STEPS - 1);
+          const c = cameraAt(EARTH.in0 + u * (EARTH.out1 - EARTH.in0));
+          m.jumpTo({ center: c.center, zoom: c.zoom, pitch: c.pitch, bearing: c.bearing });
+          warm.i++; warm.next = now + 120;
+          if (warm.i >= WARM_STEPS) warm.done = true;
+          lastP = -1;
+        }
+        return;
+      }
       const near = p > EARTH.in0 - 0.12 && p < EARTH.out1 + 0.05;  // prefetch path tiles before the chapter
       if (!near && lastP >= 0) { lastP = p; return; }
       lastP = p;
       const c = cameraAt(p);
-      lastScripted = { bearing: c.bearing, pitch: c.pitch };
       m.jumpTo({ center: c.center, zoom: c.zoom, pitch: Math.min(80, c.pitch + user.pitch), bearing: c.bearing + user.bearing + (reduce ? 0 : 0) });
     };
     raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); m.remove(); earthState.ready = false; earthState.opacity = 0; };
+    return () => { cancelAnimationFrame(raf); el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp); m.remove(); earthState.ready = false; earthState.opacity = 0; };
   }, [reduce]);
 
   // MapLibre makes its container position:relative, so the full-screen frame is a separate wrapper

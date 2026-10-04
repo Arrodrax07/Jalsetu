@@ -100,10 +100,13 @@ Terrarium DEM (Mapzen/SRTM, open) + OpenFreeMap vector tiles (OSM: buildings wit
 Limitation to state honestly: no free sub-metre imagery exists for India, so street-level ground is 10 m imagery; OSM
 roads/buildings give the crisp street layer. OSM building coverage in Beed is sparse -> consider Overture/Google Open
 Buildings footprints (CC BY 4.0 / ODbL) exported for Beed town.
-Steps: 1 [ ] EarthDescent.tsx (MapLibre canvas, scroll-driven jumpTo from the story clock, prefetch before the chapter,
-hand-over hidden in the three.js cloud whiteout, interactive "look around" during the hold); 2 [ ] remove photo layer,
+Steps: 1 [x] EarthDescent.tsx (MapLibre canvas, scroll-driven jumpTo from the story clock, prefetch before the chapter,
+hand-over hidden in the three.js cloud whiteout, interactive "look around" during the hold); 2 [x] remove photo layer,
 GoogleTiles.tsx, 3d-tiles-renderer, Google attribution, shirur assets; 3 [ ] building footprints for Beed if OSM sparse;
-4 [ ] Playwright smoothness + visual pass; commit after each.
+4 [x] Playwright smoothness + visual pass (prod build, full journey with bursts/steady pass/jumps after a reading
+pause: 138 fps, 1 frame >34 ms (49 ms)); path tiles pre-warmed while the visitor reads earlier chapters; drag
+look-around during the hold (mouse + touch); compact credits on phones. Step 3 (extra Beed footprints) optional:
+OSM already has a dense building layer for Beed town.
 
 ## Landing page: one continuous 3D world (2026-10-04)
 - `/` and `/welcome`: scroll drives one WebGL scene (`components/landing/World.tsx`, React Three Fiber, no new deps)
