@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { AXIS_TICK, GRID, REFERENCE, SERIES, kLitres, shortDate, tooltipStyle } from '../components/charts/theme';
 import { Chip, Empty, KindLabel, Kpi, Loading, PageHeader, Panel, Segmented } from '../components/ui';
 import { FlaskConical } from '../components/icons';
+import { ShortagePanel } from '../components/ShortagePanel';
 import type { CityForecast, ImpactStats, OperationsMetrics } from '../types';
 import { km, litres, num, pct } from '../utils/format';
 
@@ -96,6 +97,8 @@ export const Analytics: React.FC = () => {
           </div>
         </>
       )}
+
+      <ShortagePanel days={days} origin={origin} onError={fail} />
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Panel title={<span className="flex items-center gap-2">Demand forecast, next 7 days <KindLabel kind="predicted" /></span>}

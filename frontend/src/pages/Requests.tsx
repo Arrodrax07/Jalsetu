@@ -38,9 +38,16 @@ export const AssessmentView: React.FC<{ a: AIAssessment }> = ({ a }) => (
   </div>
 );
 
+const LANG_NAME = { en: 'English', mr: 'Marathi', hi: 'Hindi' } as const;
+/** "Citizen portal · Marathi · voice", or "Staff" for requests entered by an operator or field worker. */
+const sourceLabel = (r: WaterRequest) => r.source === 'citizen'
+  ? ['Citizen portal', r.language && r.language !== 'en' ? LANG_NAME[r.language] : null, r.inputMode === 'voice' ? 'voice' : null, r.queuedAt ? 'sent later (offline)' : null].filter(Boolean).join(' · ')
+  : 'Staff';
+
 const STATUS_FILTERS: FilterDef<WaterRequest>[] = [
   { id: 'open', label: 'Open', test: r => ['Pending', 'Allocated', 'Dispatched'].includes(r.status) },
   ...(['Pending', 'Allocated', 'Dispatched', 'Delivered', 'Merged', 'Rejected'] as const).map(s => ({ id: s, label: s, test: (r: WaterRequest) => r.status === s })),
+  { id: 'citizen', label: 'From citizens', test: r => r.source === 'citizen' },
   { id: 'all', label: 'All', test: () => true },
 ];
 
@@ -65,6 +72,7 @@ export const Requests: React.FC = () => {
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             <div className="space-y-1 text-[13px]"><p className="text-cc-muted">Reason</p><p>{r.reason}</p>
               <p className="pt-2 text-cc-muted">Contact</p><p>{r.contactPerson} · <span className="mono">{r.phone}</span></p>
+              <p className="pt-2 text-cc-muted">Source</p><p>{sourceLabel(r)}{r.peopleAffected ? ` · ${r.peopleAffected} people` : ''}</p>
               {r.duplicateReason && <p className="pt-2 text-[12px] text-cc-muted">{r.duplicateReason}</p>}</div>
             {r.aiAssessment ? <AssessmentView a={r.aiAssessment} /> : <p className="text-[12.5px] text-cc-muted">No assessment stored.</p>}
           </div>
@@ -76,6 +84,9 @@ export const Requests: React.FC = () => {
           { id: 'litres', header: 'Litres', align: 'right', hideBelow: 'sm', sort: r => r.requestedAmount, cell: r => <span className="mono">{litres(r.requestedAmount)}</span> },
           { id: 'dry', header: 'Days dry', align: 'right', sort: r => r.daysWithoutWater, hideBelow: 'md', cell: r => <span className="mono">{r.daysWithoutWater}</span> },
           { id: 'status', header: 'Status', sort: r => r.status, cell: r => <StatusChip status={r.status} label={r.status === 'Merged' ? `Merged into ${r.duplicateOf}` : undefined} /> },
+          { id: 'source', header: 'From', sort: r => r.source ?? 'staff', hideBelow: 'lg', cell: r => r.source === 'citizen'
+            ? <span className="rounded-full bg-cc-accent/10 px-2 py-0.5 text-[11.5px] font-medium text-cc-accent-strong" title={sourceLabel(r)}>Citizen</span>
+            : <span className="text-[12px] text-cc-muted">Staff</span> },
           { id: 'when', header: 'Received', sort: r => Date.parse(r.submittedAt), hideBelow: 'lg', cell: r => <span className="text-cc-muted">{timeAgo(r.submittedAt)}</span> },
           { id: 'origin', header: 'Record', hideBelow: 'xl', cell: r => <OriginLabel origin={r.dataOrigin} /> },
         ]} />
@@ -87,6 +98,8 @@ export const Requests: React.FC = () => {
               <KV k="Requested" v={<span className="num">{litres(sel.requestedAmount)}</span>} />
               <KV k="Days without water" v={sel.daysWithoutWater} />
               <KV k="Contact" v={`${sel.contactPerson} · ${sel.phone}`} />
+              <KV k="Source" v={sourceLabel(sel)} />
+              {sel.peopleAffected ? <KV k="People needing water" v={sel.peopleAffected} /> : null}
               <KV k="Record" v={<OriginLabel origin={sel.dataOrigin} />} />
               {sel.fulfilledAt && <KV k="Fulfilled" v={dt(sel.fulfilledAt)} />}
               {sel.duplicateOf && <KV k="Merged into" v={sel.duplicateOf} />}

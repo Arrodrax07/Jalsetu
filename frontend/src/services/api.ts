@@ -9,6 +9,7 @@ import type {
   CrisisSignal, DashboardStats, PublicSummary, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
   OperationsSettings, Overview, PriorityWeights, RequestStatus, RouteOptimizationResult, SystemHealth, Trip, UrgencyLevel, UserProfile, UserRole,
   Vehicle, WaterRequest, OperationsMetrics, ImpactReplay, TapSchedule, SupplyNotice, PublicSupply, ScheduleKind, NoticeKind,
+  ShortageAnalysis,
 } from '../types';
 
 export const API_BASE_URL: string = import.meta.env.VITE_API_URL || '/api';
@@ -120,6 +121,14 @@ async function blobUrl(path: string): Promise<string> {
 type Session = { accessToken: string; user: UserProfile; expiresInSeconds: number };
 export type ScheduleInput = { communityId: string; pointName: string; kind: ScheduleKind; days: number[]; startTime: string; endTime: string; notes?: string; isActive?: boolean };
 export type PublicComplaintInput = { communityId: string; description: string; reporterName?: string; reporterPhone?: string; language?: 'en' | 'mr' | 'hi'; inputMode?: 'typed' | 'voice'; clientRef?: string; queuedAt?: string };
+
+export type PublicRequestInput = { communityId: string; peopleAffected: number; daysWithoutWater: number; reason: string; contactPerson: string; phone: string; language?: 'en' | 'mr' | 'hi'; inputMode?: 'typed' | 'voice'; clientRef?: string; queuedAt?: string };
+export type PriorityFactorKey = 'demand' | 'vulnerability' | 'unmetNeed' | 'previousCoverage' | 'population' | 'liveCrisis' | 'waterAccess';
+export interface PublicRequestStatus {
+  id: string; status: string; community: string; submittedAt: string; mergedInto: string | null; progress: string; fulfilledAt: string | null;
+  priorityScore: number; urgency: string; factors: { key: PriorityFactorKey; score: number; points: number }[]; daysWithoutWater: number;
+  litresRequested: number; placeCoveragePct: number | null; queue: { position: number; waiting: number } | null; message: string; replayed?: boolean;
+}
 
 export const api = {
   // session
@@ -245,6 +254,7 @@ export const api = {
   activity: (range: 'today' | '7d' | '30d', origin: 'all' | 'real' = 'all') => get<ActivityProfile>(`/analytics/activity?range=${range}&origin=${origin}`),
   forecast: (days = 7) => get<CityForecast>(`/analytics/forecast?days=${days}`),
   impact: () => get<ImpactStats>('/analytics/impact'),
+  shortage: (days: number, origin: 'all' | 'real' = 'all') => get<ShortageAnalysis>(`/analytics/shortage?days=${Math.max(7, Math.min(90, days))}&origin=${origin}`),
   operations: (days: number, origin: 'all' | 'real' = 'all') => get<OperationsMetrics>(`/analytics/operations?days=${days}&origin=${origin}`),
   impactReplay: (days: number, origin: 'all' | 'real') => get<ImpactReplay>(`/analytics/impact-replay?days=${days}&origin=${origin}`),
 
@@ -257,6 +267,8 @@ export const api = {
   endNotice: (id: number) => post<SupplyNotice>(`/supply-notices/${id}/end`),
   publicScheduleIndex: () => request<{ id: string; name: string; ward: string; schedules: number; hasNotice: boolean }[]>('/public/schedules', {}, false),
   publicSupply: (communityId: string) => request<PublicSupply>(`/public/supply/${encodeURIComponent(communityId)}`, {}, false),
+  publicRequest: (r: PublicRequestInput) => request<PublicRequestStatus>('/public/requests', { method: 'POST', body: JSON.stringify(r) }, false),
+  publicRequestStatus: (code: string) => request<PublicRequestStatus>(`/public/requests/${encodeURIComponent(code)}`, {}, false),
   publicTicket: (code: string) => request<{ id: string; status: string; category: string; severity: string; community: string; submittedAt: string; resolvedAt: string | null }>(`/public/complaints/${encodeURIComponent(code)}`, {}, false),
 
   // settings, ML, audit, reports

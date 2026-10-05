@@ -1,18 +1,21 @@
 /**
- * Offline outbox for citizen complaints.
+ * Offline outbox for citizen complaints and water requests.
  *
- * A complaint written without a connection is stored on the device with a client-generated id (clientRef)
+ * A complaint or request written without a connection is stored on the device with a client-generated id (clientRef)
  * and the time it was written. It is sent when the connection returns (on the `online` event, when the
  * portal opens, and every 30 s while anything is waiting). The server stores a clientRef once, so a resend
  * after a lost response is harmless. Permanent rejections (e.g. a place that no longer exists) stop retrying
  * and are shown to the resident; "too many" (429) waits ten minutes.
  */
 import { useEffect, useSyncExternalStore } from 'react';
-import { api, ApiError, type PublicComplaintInput } from '../services/api';
+import { api, ApiError, type PublicComplaintInput, type PublicRequestInput } from '../services/api';
 
 export type OutboxStatus = 'queued' | 'sending' | 'failed';
+export type OutboxKind = 'complaint' | 'request';
 export interface OutboxItem {
-  clientRef: string; payload: PublicComplaintInput; placeName: string; queuedAt: string;
+  /** missing on items saved before water requests existed: those are complaints */
+  kind?: OutboxKind;
+  clientRef: string; payload: PublicComplaintInput | PublicRequestInput; placeName: string; queuedAt: string;
   status: OutboxStatus; attempts: number; nextAttemptAt: number; lastError: string | null; permanent: boolean;
 }
 export interface SentTicket { id: string; placeName: string; sentAt: string; queuedAt: string | null; viaOutbox: boolean }
@@ -44,9 +47,9 @@ export function newClientRef(): string {
   return `c-${rnd}`.slice(0, 64);
 }
 
-export function enqueue(payload: PublicComplaintInput, placeName: string): OutboxItem {
+export function enqueue(payload: PublicComplaintInput | PublicRequestInput, placeName: string, kind: OutboxKind = 'complaint'): OutboxItem {
   const item: OutboxItem = {
-    clientRef: payload.clientRef || newClientRef(), payload, placeName, queuedAt: new Date().toISOString(),
+    kind, clientRef: payload.clientRef || newClientRef(), payload, placeName, queuedAt: new Date().toISOString(),
     status: 'queued', attempts: 0, nextAttemptAt: 0, lastError: null, permanent: false,
   };
   item.payload = { ...payload, clientRef: item.clientRef, queuedAt: item.queuedAt };
@@ -72,7 +75,7 @@ export function flush(force = false): Promise<number> {
       items = items.map(x => (x.clientRef === it.clientRef ? { ...x, status: 'sending' } : x));
       emit();
       try {
-        const r = await api.publicComplaint(it.payload);
+        const r = it.kind === 'request' ? await api.publicRequest(it.payload as PublicRequestInput) : await api.publicComplaint(it.payload as PublicComplaintInput);
         items = items.filter(x => x.clientRef !== it.clientRef);
         tickets = [{ id: r.id, placeName: it.placeName, sentAt: new Date().toISOString(), queuedAt: it.queuedAt, viaOutbox: true }, ...tickets];
         sent++;

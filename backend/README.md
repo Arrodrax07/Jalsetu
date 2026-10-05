@@ -74,6 +74,17 @@ first served (arrival order, whole loads, one place per trip, repeat calls serve
 merged, the live auto-dispatch planner). Reports unmet need, waits, Jain fairness, vulnerable places, km, fuel,
 load utilisation and water spent on repeat calls, with every assumption in the response.
 
+**Citizen water requests** (`routers/requests.py`, `POST /api/public/requests`, migration 0005): a resident asks
+for water from the portal (no login; people affected, days without water, reason, contact; voice and offline outbox
+like complaints, `clientRef` makes a resend harmless). Same scoring and duplicate merge as staff requests; a repeat
+that reports a longer dry spell re-scores the open request. `GET /api/public/requests/{code}` returns status, the
+priority factors with their points, and the place in line, without personal details.
+
+**Shortage analysis** (`GET /api/analytics/shortage?days=&origin=`): for the allocation plan's default scope, requests
+per day (repeats merged counted apart), a 7-day outlook of forecast tanker need vs the survival floor vs fleet
+capacity (shortage day = fleet below the survival floor), and the most underserved places ranked by the planner's
+priority score with coverage, shortfall and last real delivery.
+
 **Synthetic demo history** (`scripts/demo_history.py`): requests from real places within a tanker's service area,
 served by the impact replay's JalSetu policy with the real fleet. Rows are `data_origin=synthetic`, closed
 (never in live queues), have no GPS, and are excluded from priority, dispatch, overview counts and lists.
@@ -91,8 +102,8 @@ Analytics endpoints take `origin=all|real`.
 | Tracking | `POST /tracking/telemetry`, `GET /tracking/vehicles`, history, ETA, anomalies |
 | Intelligence | `GET /disasters`, impact, recommendations, `GET /crisis/signals`, `POST /crisis/refresh` |
 | Schedules | `GET/POST /schedules`, `PUT/DELETE /schedules/{id}`, `POST /supply-notices`, `/supply-notices/{id}/end` |
-| Analytics | `GET /analytics/dashboard`, `/activity`, `/operations`, `/forecast` (state total; `perPlace=true` adds per-place rows; memoised 5 min), `/impact`, `/impact-replay` |
-| Public (no login) | `GET /public/summary`, `/public/communities`, `/public/schedules`, `/public/supply/{id}`, `POST /public/complaints`, `GET /public/complaints/{code}` |
+| Analytics | `GET /analytics/dashboard`, `/activity`, `/operations`, `/forecast` (state total; `perPlace=true` adds per-place rows; memoised 5 min), `/shortage`, `/impact`, `/impact-replay` |
+| Public (no login) | `GET /public/summary`, `/public/communities`, `/public/schedules`, `/public/supply/{id}`, `POST /public/complaints`, `GET /public/complaints/{code}`, `POST /public/requests`, `GET /public/requests/{code}` |
 | System | `GET /overview`, `/system/health`, `/notifications`, `/settings`, `/audit`, `/reports/{kind}.csv`, WebSocket `/ws?token=` |
 
 Permissions are by capability (`app/domain.py`), not role name: e.g. `dispatch` (admin, dispatcher),

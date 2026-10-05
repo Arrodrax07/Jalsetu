@@ -144,6 +144,11 @@ def request_view(r: WaterRequest) -> dict:
         "fulfilledAt": iso(r.fulfilled_at),
         "duplicateOf": f"WR-{1000 + r.duplicate_of_id}" if r.duplicate_of_id else None,
         "duplicateReason": r.duplicate_reason or None,
+        "source": r.source or "staff",
+        "peopleAffected": r.people_affected or None,
+        "language": r.language,
+        "inputMode": r.input_mode,
+        "queuedAt": iso(r.queued_at),
     }
 
 

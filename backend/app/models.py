@@ -208,6 +208,14 @@ class WaterRequest(Base):
     # Set when this request repeats an open request for the same community (status "Merged").
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("water_requests.id"), nullable=True)
     duplicate_reason: Mapped[str] = mapped_column(String(300), default="")
+    # Who raised it: staff (operator taking a call / field worker) or citizen (public portal, no login).
+    source: Mapped[str] = mapped_column(String(16), default="staff")
+    people_affected: Mapped[int] = mapped_column(Integer, default=0)  # citizen: people in the household / group
+    language: Mapped[str] = mapped_column(String(8), default="en")  # en | mr | hi (portal language)
+    input_mode: Mapped[str] = mapped_column(String(8), default="typed")  # typed | voice
+    # Citizen portal offline queue: a device-generated id makes a resend harmless.
+    client_ref: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # when written on the device, if sent later
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

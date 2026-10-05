@@ -3,7 +3,8 @@
  *   - imagery:   Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data), CC BY 4.0
  *   - terrain:   Mapzen Terrarium elevation tiles on AWS Open Data (SRTM and other public sources)
  *   - buildings, roads, names: OpenStreetMap via OpenFreeMap vector tiles (ODbL)
- * No API keys, no proprietary imagery, nothing generated. The camera is driven by the same story clock as the rest of
+ * No API keys, no proprietary imagery, nothing generated. Tiles on the descent path ship with the site (see PACK).
+ * The camera is driven by the same story clock as the rest of
  * the page (one critically damped spring from the scrollbar), so the descent glides however the visitor scrolls. While
  * the shot holds over the streets the map is explorable: drag to look around; scrolling takes the camera back.
  *
@@ -48,23 +49,61 @@ function cameraAt(p: number) {
   };
 }
 
+/**
+ * Tile pack: the tiles along the descent ship with the site (`public/landing/earth`, made by
+ * `backend/scripts/fetch_landing_earth.py`), so the chapter does not hang on the public servers during a demo.
+ * `earth://<source>/<key>` serves the packed copy when there is one, otherwise the public tile server.
+ */
+const PACK = '/landing/earth/';
+const REMOTE: Record<string, (key: string[]) => string> = {
+  s2: ([z, y, x]) => `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/${z}/${y}/${x}.jpg`,
+  dem: ([z, x, y]) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
+  fonts: ([stack, range]) => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(stack)}/${range}.pbf`,
+};
+const EXT: Record<string, string> = { s2: '.jpg', dem: '.png', osm: '.pbf', fonts: '.pbf' };
+let packIndex: Promise<Record<string, Set<string>>> | null = null;
+let osmTemplate: Promise<string> | null = null;
+const loadPack = () => packIndex ??= fetch(`${PACK}index.json`)
+  .then(r => (r.ok ? r.json() : {}) as Promise<Record<string, string[]>>).catch(() => ({} as Record<string, string[]>))
+  .then(j => Object.fromEntries(Object.entries(j).map(([k, v]) => [k, new Set(v)])));
+// OpenFreeMap tile URLs are versioned; ask its TileJSON for the current one only when a tile is not packed
+const loadOsmTemplate = () => osmTemplate ??= fetch('https://tiles.openfreemap.org/planet').then(r => r.json()).then(j => j.tiles[0] as string);
+
+let protocolAdded = false;
+function addPackProtocol() {
+  if (protocolAdded) return;
+  protocolAdded = true;
+  maplibregl.addProtocol('earth', async (params, abort) => {
+    const [source, ...parts] = params.url.slice('earth://'.length).split('/').map(decodeURIComponent);
+    const key = parts.join('/');
+    const packed = (await loadPack())[source]?.has(key);
+    const url = packed ? PACK + source + '/' + parts.map(encodeURIComponent).join('/') + EXT[source]
+      : source === 'osm' ? (await loadOsmTemplate()).replace('{z}', parts[0]).replace('{x}', parts[1]).replace('{y}', parts[2])
+      : REMOTE[source](parts);
+    const r = await fetch(url, { signal: abort.signal });
+    if (!r.ok) throw new Error(`${r.status} ${url}`);
+    return { data: await r.arrayBuffer() };
+  });
+}
+
 const STYLE: StyleSpecification = {
   version: 8,
   projection: { type: 'globe' },
-  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  glyphs: 'earth://fonts/{fontstack}/{range}',
   sources: {
     s2: {
       type: 'raster', tileSize: 256, maxzoom: 15,
-      tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'],
+      tiles: ['earth://s2/{z}/{y}/{x}'],
       attribution: 'Sentinel-2 cloudless 2016 by <a href="https://s2maps.eu">EOX IT Services</a> (contains modified Copernicus Sentinel data 2016), CC BY 4.0',
     },
     dem: {
       type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 13,
-      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      tiles: ['earth://dem/{z}/{x}/{y}'],
       attribution: 'Elevation: Mapzen Terrarium (SRTM and others), AWS Open Data',
     },
     osm: {
-      type: 'vector', url: 'https://tiles.openfreemap.org/planet',
+      type: 'vector', minzoom: 0, maxzoom: 14,
+      tiles: ['earth://osm/{z}/{x}/{y}'],
       attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     },
   },
@@ -118,6 +157,7 @@ export const EarthDescent: React.FC<{ reduce: boolean }> = ({ reduce }) => {
     if (!el || !mapBox) return;
     let map: MLMap | null = null;
     try {
+      addPackProtocol();
       const c = cameraAt(EARTH.in0);
       map = new maplibregl.Map({
         container: mapBox, style: STYLE, center: c.center, zoom: c.zoom, pitch: c.pitch, bearing: c.bearing,

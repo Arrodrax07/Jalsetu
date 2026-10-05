@@ -283,3 +283,132 @@ def impact_replay(days: int = Query(30, ge=1, le=120), origin: str = Query("all"
     from ..services.impact import replay
 
     return replay(db, days=days, include_synthetic=origin == "all")
+
+
+_shortage_memo: dict[tuple, tuple[float, dict]] = {}
+
+
+@router.get("/analytics/shortage")
+def shortage(days: int = Query(28, ge=7, le=90), origin: str = Query("all", pattern="^(all|real)$"),
+             db: Session = Depends(get_db), _: User = Depends(require("view_operations"))):
+    """Demand and shortage analysis for the places the fleet plans for (the allocation plan's default scope).
+
+    trend      requests per day (repeats merged into an open request counted apart), litres asked for and delivered.
+               origin=real leaves out the labelled synthetic history.
+    outlook    next 7 days: forecast tanker need (ML demand forecast minus the estimated piped supply), the survival
+               floor (drinking + cooking for every resident) and what the fleet can carry. A day whose survival
+               floor is above fleet capacity is a shortage day.
+    underserved places in scope ranked by the same priority score the planner uses, with coverage, shortfall and
+               the last delivery, so the list explains itself.
+    """
+    from .allocation import CRISIS_SCOPE_MIN, fleet_supply, plan_candidates
+    from ..services import supply as supply_
+    from ..services.priority import FACTOR_LABELS, score_community
+    from ..services.views import priority_context
+
+    now = utcnow()
+    ops = get_setting(db, "operations")
+
+    # ---- trend
+    since = now - timedelta(days=days)
+    rq = select(WaterRequest).where(WaterRequest.created_at >= since)
+    if origin == "real":
+        rq = rq.where(WaterRequest.data_origin != SYNTHETIC)
+    reqs = db.scalars(rq).all()
+    dq = select(Delivery.delivered_at, Delivery.delivered_amount).where(Delivery.delivered_at >= since)
+    if origin == "real":
+        dq = dq.where(Delivery.data_origin != SYNTHETIC)
+    start = (since + IST).date()
+    trend = {(start + timedelta(days=i)).isoformat(): {"requests": 0, "repeats": 0, "citizen": 0, "litresRequested": 0, "litresDelivered": 0}
+             for i in range(days + 1)}
+    for r in reqs:
+        d = trend.get((r.created_at + IST).date().isoformat())
+        if d is None:
+            continue
+        if r.status == "Merged":
+            d["repeats"] += 1
+        else:
+            d["requests"] += 1
+            d["litresRequested"] += r.requested_amount
+        d["citizen"] += r.source == "citizen"
+    for at, litres in db.execute(dq).all():
+        d = trend.get((at + IST).date().isoformat())
+        if d is not None:
+            d["litresDelivered"] += litres
+    rows = [{"date": k, **v} for k, v in trend.items()]
+    last7, prev7 = rows[-7:], rows[-14:-7]
+    asked = lambda rs: sum(r["requests"] for r in rs)  # noqa: E731
+
+    # ---- scope, underserved
+    scope = plan_candidates(db, "crisis_reach")
+    capacity = fleet_supply(db, ops["tripsPerDay"])
+    weights = get_setting(db, "weights")
+    ctx = priority_context(db, scope) if scope else None
+    ids = [c.id for c in scope]
+    last_delivery = dict(db.execute(select(Delivery.community_id, func.max(Delivery.delivered_at))
+                                    .where(Delivery.community_id.in_(ids), Delivery.data_origin != SYNTHETIC)
+                                    .group_by(Delivery.community_id)).all()) if ids else {}
+    open_reqs = Counter(db.scalars(select(WaterRequest.community_id).where(
+        WaterRequest.community_id.in_(ids), WaterRequest.status.in_(("Pending", "Allocated", "Dispatched")),
+        WaterRequest.duplicate_of_id.is_(None), WaterRequest.data_origin != SYNTHETIC)).all()) if ids else Counter()
+    places = []
+    for c in scope:
+        pr = score_community(c, weights, ctx)
+        cov = supply_.coverage_pct(c)
+        top = max(pr.contributions.items(), key=lambda kv: kv[1])[0]
+        last = last_delivery.get(c.id)
+        places.append({
+            "id": c.id, "name": c.name, "district": c.district.name if c.district else None, "settlementType": c.settlement_type,
+            "population": c.population, "coveragePct": cov, "shortfall": supply_.shortfall(c), "tankerNeed": supply_.tanker_need(c),
+            "delivered7d": ctx.delivered_7d.get(c.id, 0), "lastDeliveryAt": iso(last),
+            "daysSinceDelivery": (now - last).days if last else None, "openRequests": open_reqs.get(c.id, 0),
+            "vulnerability": round(c.vulnerability_score), "crisis": round(c.crisis_score or 0), "priority": pr.score,
+            "topReason": FACTOR_LABELS[top], "underserved": cov < 75,
+        })
+    places.sort(key=lambda p: (-p["priority"], p["coveragePct"]))
+
+    # ---- outlook (memoised: the forecast pulls weather for every place in scope)
+    survival_lpcd = ops["survivalLitresPerPerson"]
+    key = (tuple((c.id, c.daily_demand, c.baseline_supply, c.population) for c in scope), capacity, survival_lpcd)
+    hit = _shortage_memo.get(key)
+    if hit and time.time() - hit[0] < FORECAST_MEMO_S:
+        outlook = hit[1]
+    else:
+        outlook = {"days": [], "source": "baseline", "note": None}
+        if scope:
+            survival = sum(min(supply_.tanker_need(c), c.population * survival_lpcd) for c in scope)
+            try:
+                fc, sources = ml.forecast_demand_many([(c.lat, c.lng, c.daily_demand, c.vulnerability_score) for c in scope], days=7)
+                outlook["source"] = "forecast: " + ",".join(sorted(sources))
+            except Exception as exc:  # noqa: BLE001 - the panel still shows today's baseline need
+                fc = None
+                outlook["note"] = f"Forecast unavailable ({exc}); baseline demand shown."
+            for i in range(7):
+                date = ((now + IST).date() + timedelta(days=i)).isoformat()
+                if fc and all(len(r) > i for r in fc):
+                    p50 = sum(supply_.tanker_need(c, r[i]["litres_p50"]) for c, r in zip(scope, fc))
+                    p90 = sum(supply_.tanker_need(c, r[i]["litres_p90"]) for c, r in zip(scope, fc))
+                    date = fc[0][i].get("date", date)
+                else:
+                    p50 = p90 = sum(supply_.tanker_need(c) for c in scope)
+                outlook["days"].append({"date": date, "needP50": p50, "needP90": p90, "survival": survival, "capacity": capacity,
+                                        "gapP50": max(0, p50 - capacity), "survivalMet": capacity >= survival})
+        _shortage_memo.clear()
+        _shortage_memo[key] = (time.time(), outlook)
+
+    need_today = outlook["days"][0]["needP50"] if outlook["days"] else 0
+    return {
+        "windowDays": days, "origin": origin,
+        "trend": rows,
+        "trendSummary": {"last7": asked(last7), "prev7": asked(prev7), "changePct": _pct_change(asked(last7), asked(prev7)),
+                         "repeatsMerged": sum(r["repeats"] for r in rows), "citizenRequests": sum(r["citizen"] for r in rows),
+                         "syntheticIncluded": origin == "all" and any(r.data_origin == SYNTHETIC for r in reqs)},
+        "scope": {"label": f"Towns and villages in crisis (score {CRISIS_SCOPE_MIN}+) within tanker reach, plus places with an open request",
+                  "places": len(scope), "people": sum(c.population for c in scope),
+                  "underserved": sum(p["underserved"] for p in places)},
+        "fleetCapacity": capacity,
+        "outlook": outlook,
+        "coverOfNeedPct": round(100 * capacity / need_today, 1) if need_today else None,
+        "shortageDays": sum(not d["survivalMet"] for d in outlook["days"]),
+        "underserved": places[:15],
+    }

@@ -165,3 +165,49 @@ def test_allocation_scope_keeps_plans_actionable(client, operator):
         assert requested <= ids and requested <= {c.id for c in plan_candidates(db, "all")}
         city.settlement_type, city.crisis_score = "", 0.0
         db.commit()
+
+
+def test_citizen_water_request_explains_priority_and_merges_repeats(client, operator):
+    open_places = {r["communityId"] for r in client.get("/api/requests", headers=operator).json()
+                   if r["status"] in ("Pending", "Allocated", "Dispatched")}
+    place = next(c for c in client.get("/api/public/communities").json() if c["id"] not in open_places)
+    body = {"communityId": place["id"], "peopleAffected": 6, "daysWithoutWater": 4, "reason": "विहीर आटली, टँकर हवा",
+            "contactPerson": "Sunita Pawar", "phone": "9800000001", "language": "mr", "inputMode": "voice",
+            "clientRef": "dev-12345678-request-1"}
+    a = client.post("/api/public/requests", json=body)
+    assert a.status_code == 201, a.text
+    ra = a.json()
+    assert ra["replayed"] is False and ra["id"].startswith("WR-") and ra["status"] == "Pending"
+    pts = [f["points"] for f in ra["factors"]]
+    assert pts == sorted(pts, reverse=True) and {f["key"] for f in ra["factors"]} >= {"unmetNeed", "vulnerability"}
+    assert ra["queue"]["position"] >= 1 and ra["queue"]["waiting"] >= ra["queue"]["position"]
+    # an offline resend returns the stored request
+    b = client.post("/api/public/requests", json=body).json()
+    assert b["replayed"] is True and b["id"] == ra["id"]
+    # a neighbour asking for the same place joins the open request (counted once)
+    c = client.post("/api/public/requests", json={**body, "clientRef": None, "phone": "9800000002", "daysWithoutWater": 6}).json()
+    assert c["status"] == "Merged" and c["mergedInto"] == ra["id"] and c["daysWithoutWater"] == 6
+    # public status: no personal details; staff see where it came from
+    s = client.get(f"/api/public/requests/{ra['id'].lower()}").json()
+    assert s["id"] == ra["id"] and "phone" not in s and "contactPerson" not in s
+    staff = next(r for r in client.get("/api/requests", headers=operator).json() if r["id"] == ra["id"])
+    assert staff["source"] == "citizen" and staff["peopleAffected"] == 6 and staff["inputMode"] == "voice"
+    # staff-entered requests are not public; unknown places are refused
+    staff_made = next(r for r in client.get("/api/requests", headers=operator).json() if r["source"] == "staff")
+    assert client.get(f"/api/public/requests/{staff_made['id']}").status_code == 404
+    assert client.post("/api/public/requests", json={**body, "clientRef": None, "communityId": "nowhere"}).status_code == 404
+    assert client.post("/api/public/requests", json={**body, "clientRef": None, "peopleAffected": 0}).status_code == 422
+
+
+def test_shortage_analysis(client, operator, driver):
+    s = client.get("/api/analytics/shortage?days=14", headers=operator).json()
+    assert len(s["trend"]) == 15 and set(s["trend"][0]) >= {"date", "requests", "repeats", "litresRequested", "litresDelivered"}
+    assert s["trendSummary"]["repeatsMerged"] == sum(d["repeats"] for d in s["trend"])
+    assert s["fleetCapacity"] > 0 and len(s["underserved"]) == min(15, s["scope"]["places"])
+    for d in s["outlook"]["days"]:
+        assert d["needP90"] >= d["needP50"] >= 0 and d["survivalMet"] == (d["capacity"] >= d["survival"])
+    pr = [p["priority"] for p in s["underserved"]]
+    assert pr == sorted(pr, reverse=True)
+    assert s["shortageDays"] == sum(not d["survivalMet"] for d in s["outlook"]["days"])
+    assert client.get("/api/analytics/shortage", headers=driver).status_code == 403
+    assert client.get("/api/analytics/shortage?days=3", headers=operator).status_code == 422

@@ -88,6 +88,20 @@ class RequestIn(In):
     allow_duplicate: bool = False
 
 
+class PublicRequestIn(In):
+    """A resident asks for water from the public portal (no login)."""
+    community_id: str
+    people_affected: int = Field(ge=1, le=5000)  # household or group needing water
+    days_without_water: int = Field(default=0, ge=0, le=60)
+    reason: str = Field(min_length=3, max_length=2000)
+    contact_person: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=6, max_length=32)
+    language: Literal["en", "mr", "hi"] = "en"
+    input_mode: Literal["typed", "voice"] = "typed"
+    client_ref: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{8,64}$")
+    queued_at: datetime | None = None
+
+
 class RequestStatusIn(In):
     status: RequestStatus
 

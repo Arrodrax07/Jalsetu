@@ -87,6 +87,7 @@ const WithIntro: React.FC = () => {
 
 export function App() {
   const path = window.location.pathname.replace(/\/$/, '');
+  if (path === '/request') return <CitizenPortal initial="request" />;
   if (path === '/report') return <CitizenPortal initial="report" />;
   if (path === '/water') return <CitizenPortal initial="water" />;
   if (path === '/track') return <CitizenPortal initial="track" />;

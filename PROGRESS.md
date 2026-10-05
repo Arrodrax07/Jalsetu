@@ -90,6 +90,81 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
+## IN PROGRESS (paused 2026-10-05 night): cinematic real-globe film for the landing page. RESUME HERE
+User brief (2026-10-05): "cinematic spatial choreography", one continuous 4K interactive film; the whole site must
+feel like a real-time flight through India. Hard constraints: real geography (imagery, terrain, OSM buildings/roads),
+one continuous world-space camera derived from the journey timeline, scroll -> normalized progress -> renderer
+follows with damping (no React state per frame, no wheel hijack, large jumps catch up smoothly), LOD/progressive
+detail, 60 fps desktop + lower-detail mobile path, prefers-reduced-motion, first-class fallbacks, no keys, licence-
+clean (no proprietary caching), modular provider, no fake buildings/terrain, no gimmicks (random floaters, generic
+fades, excess particles). Wanted moments: place rising out of the map; dive through clouds to terrain/city; map route
+becoming the physical road the camera travels; buildings emerging as camera approaches; tanker journey through the
+city; data points connecting into UI panels; typography lying in the environment then becoming the next scene;
+seamless morphs instead of cuts; pull back street -> city -> region -> India -> atmosphere, then dive elsewhere.
+
+Decision: replace the stylised three.js world (World.tsx) with the real MapLibre globe for ALL chapters; keep World.tsx
+as the offline fallback (local NASA imagery) and StaticMap for no-WebGL. GSAP not needed: the existing spring clock
+(story.ts stepClock) is the timeline driver (equivalent; keeps native scroll).
+
+Done (files written, type-check passes, NOT wired into Landing.tsx yet):
+- `backend/scripts/export_landing_journey.py` -> `frontend/public/landing/journey.json`: focus Beed (crisis 95),
+  nearest active depot "Treatment plant, Bid depot", real OSRM route 91.5 km (590 pts), next = Parbhani (highest
+  planner priority among towns), 7 active depots. Run with backend/.venv python.
+- `frontend/src/components/landing/earth/math.ts`: great-circle slerp, offset, bearing, rangeToZoom (range m ->
+  MapLibre zoom), enu, Path (measured road: at/heading/slice).
+- `earth/journey.ts`: buildKeys (camera shots per chapter: target, range m, pitch, bearing, left pad; road-follow
+  segment 0.525-0.6), shotAt (flight path: log-range interpolation + climb hump for long hops, descend = arrive over
+  target then drop, climb = rise then travel), tankerAt (parked -> time-lapse -> cruise speed profile into Beed),
+  turnRate (for banking roll), sceneAt (places, crisis, deficit, depots, links, word, rise, column, route,
+  routeDraw, tanker, national, impact, next).
+- `earth/tiles.ts`: provider module (s2 / dem / osm sources + `earth://` pack protocol, moved from EarthDescent).
+- `earth/clouds.ts`: CloudDeck, a ray-marched cumulus slab at 1.8-3.2 km anchored around Beed + Parbhani (WebGL2
+  overlay canvas, same camera basis as the map; cameraBasis(bearing, pitch, roll)). Needs a principal-point shift
+  uniform for map padding (uShift) - not added yet.
+- `earth/tanker.ts`: three.js custom layer (8 m tanker model, getMatrixForModel + queryTerrainElevation, x east /
+  y north / z up assumed - verify orientation visually).
+
+Remaining steps:
+1. `earth/OpenEarth.tsx` (was being written): MapLibre map (globe, maxPitch 85, interactive false, pixelRatio cap,
+   space-dark sky at low zoom -> day sky low down), layers: imagery, subtle hillshade, water, roads z12+, buildings
+   with height interpolated by zoom (rise as camera approaches), state outlines (national), MH district deficit fill
+   (summary.rainfall joined by geo district key, e.g. 'bid'), Beed district fill-extrusion that rises (rise), Beed
+   crisis column (column), places circles + crisis emphasis (summary.points), depots + nearest-depot links with
+   line-gradient draw (lineMetrics), route line with line-gradient draw that narrows to road width at street level,
+   Parbhani beacon (next), tanker custom layer. One rAF loop: stepClock -> shotAt -> jumpTo({center, zoom via
+   rangeToZoom, pitch, bearing, roll (banking from turnRate*clock.v, smoothed, off for reduced motion), padding}) only
+   when changed; scene paint props only when changed (quantized); cloud deck; DOM anchors (focus column top via own
+   ENU projector, truck/gtruck via map.project, d0-d2 district centroids, groundState flags); ground typography
+   ("JalSetu" lying on the Deccan plateau via CSS matrix3d homography from 4 map.project corners, ~[76.25,19.55]);
+   impact chapter SVG lines from top crisis places to the impact panel slots; street-hold drag look-around
+   (0.598-0.632). Fail (no WebGL2, style timeout 15 s, journey.json missing) -> onFail -> Landing shows World.
+2. Landing.tsx: render OpenEarth instead of World + EarthDescent; fallback chain OpenEarth -> World -> StaticMap;
+   earth-mode dark film chrome (CSS overrides for text colours/scrims scoped to `.earth-mode`, light text on imagery);
+   chapter 3 Scatter word -> ground word element (anchors.word); impact panel ref (anchors.impact); update copy
+   labels (route is real OSRM road from the real serving depot; tanker run is an illustration; clouds are
+   atmosphere); credits line; SR text.
+3. Delete EarthDescent.tsx once OpenEarth replaces it (World fallback keeps its own ground chapter).
+4. Re-record the tile pack for the WHOLE journey (fetch_landing_earth.py record currently scans only 0.493-0.66;
+   change to 0..1) and re-fetch.
+5. Playwright QA on prod build: full journey screenshots per chapter (1440, 390 portrait, reduced motion, no WebGL,
+   tiles offline), fps (target 60 desktop), large scroll jumps, console clean; tune cloud density, tanker axes,
+   camera keys, text legibility.
+6. Update PROGRESS + landing credits; then commit (user still to answer: commit the 30.6 MB tile pack or gitignore).
+
+## 2026-10-05: PS-11 gap check and the two gaps closed
+Compared PROGRESS against PS 11; gaps found and fixed:
+- Citizen water requests: portal tab `/request` (EN/मराठी/हिंदी, voice, offline outbox, steppers for people and days,
+  reason chips). Shows the ticket, "why this priority" (each factor's points, translated), progress steps and place in
+  line; repeats from neighbours merge into the open request (re-scored if the dry spell is longer). `/track` accepts
+  WR- numbers. Staff Requests page: "From" column, "From citizens" filter, source details. Linked from landing + sign-in.
+  Migration 0005 adds `source, people_affected, language, input_mode, client_ref, queued_at` to water_requests
+  (applied to the live DB automatically by the dev API's reload; additive only).
+- Analytics "Demand and shortage": 7-day outlook (fleet 435,000 L/day vs survival floor ~5.8M vs forecast need
+  ~55M for 89 places / 1.94M people: 7/7 shortage days), requests per day with repeats merged, most underserved
+  places table linking to the Overview sheet.
+- Verified on a DB copy (API :8010, preview :4180) with Playwright: Marathi request, neighbour merge, status page,
+  offline request sent on reconnect, Analytics light/dark/phone. Backend tests: 84 passed.
+
 ## IN PROGRESS (2026-10-04 evening): free Google-Earth-like descent — resume here
 User (latest): REMOVE the photo/footage ground scene and the Google 3D Tiles route; use a genuinely free/legal open
 3D Earth stack; explorable; smooth descent India -> terrain -> city -> streets; no AI imagery.
@@ -107,6 +182,12 @@ GoogleTiles.tsx, 3d-tiles-renderer, Google attribution, shirur assets; 3 [ ] bui
 pause: 138 fps, 1 frame >34 ms (49 ms)); path tiles pre-warmed while the visitor reads earlier chapters; drag
 look-around during the hold (mouse + touch); compact credits on phones. Step 3 (extra Beed footprints) optional:
 OSM already has a dense building layer for Beed town.
+2026-10-05: tile pack. The 1,518 tiles the descent uses (S2 z8-15, DEM z5-13, OSM z7-14, one glyph range; 30.6 MB)
+ship in `frontend/public/landing/earth/`; MapLibre loads them through an `earth://` protocol that falls back to the
+public servers for anything not packed. Verified on the production build: 0 requests to public tile servers during
+the descent. Re-make with `python -m scripts.fetch_landing_earth record <frontend url> ../frontend/public/landing/earth`
+then `... fetch ../frontend/public/landing/earth` (in backend/). No free sub-metre imagery for India exists, so
+"sharper imagery" stays open until a licensed source is available.
 
 ## Landing page: one continuous 3D world (2026-10-04)
 - `/` and `/welcome`: scroll drives one WebGL scene (`components/landing/World.tsx`, React Three Fiber, no new deps)
@@ -177,13 +258,13 @@ Production build: forecast request ~0.2 s.
 Restart with `start.ps1` (or `-Dev`).
 
 ## Next steps (resume here)
-1. Demo housekeeping below (changes the live database; do it together with the user).
+1. Demo housekeeping: checked 2026-10-05, done (T-2045 Available at Chembur with no open trip; Allocation page shows
+   plan #24, Proposed, crisis scope). Approving #24 is the user's call (it rewrites allocations, Pending -> Allocated).
 2. Optional: real-phone arrival + delivery run before the presentation (START and live tracking were accepted
    on a real phone; arrival/delivery were exercised with emulated GPS on a DB copy).
 
 ## Housekeeping before any demo
-- Allocation page shows an old approved plan for the archived Mumbai sample communities: press "Compute a plan".
-- All 8 tankers are on approved auto-dispatch trips (TR-3003..3010), including demo tanker T-2045 (Mumbai): cancel that trip before the phone demo.
+- Before the phone demo, confirm T-2045 has no open trip (2026-10-05: none; 5 other tankers on Assigned trips).
 - User's OS has "reduce motion" on (Windows Animation effects off): app tones motion down; turn it on to show full motion.
 
 ## Known issues

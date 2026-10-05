@@ -60,6 +60,7 @@ export interface WaterRequest {
   peopleCurrentlyServed: number; vulnerability: VulnerabilityLevel; reason: string; daysWithoutWater: number; contactPerson: string; phone: string;
   submittedAt: string; status: RequestStatus; priorityScore: number; aiAssessment: AIAssessment | null; dataOrigin: DataOrigin; fulfilledAt: string | null;
   duplicateOf: string | null; duplicateReason: string | null;
+  source?: 'staff' | 'citizen'; peopleAffected?: number | null; language?: 'en' | 'mr' | 'hi'; inputMode?: 'typed' | 'voice'; queuedAt?: string | null;
 }
 export interface NewWaterRequest { communityId: string; requestedAmount: number; peopleCurrentlyServed: number; reason: string; daysWithoutWater: number; contactPerson: string; phone: string; allowDuplicate?: boolean }
 
@@ -267,4 +268,17 @@ export interface PublicSupply {
   schedules: TapSchedule[]; nextSupply: TapSchedule | null; notices: SupplyNotice[];
   tanker: { stage: 'scheduled' | 'on_the_way' | 'arrived'; trip: string; litres: number; since: string | null } | null;
   lastDelivery: { at: string; litres: number } | null; estimatedCoveragePct: number; coverageBasis: string; serverTime: string;
+}
+
+export interface ShortageAnalysis {
+  windowDays: number; origin: 'all' | 'real';
+  trend: { date: string; requests: number; repeats: number; citizen: number; litresRequested: number; litresDelivered: number }[];
+  trendSummary: { last7: number; prev7: number; changePct: number | null; repeatsMerged: number; citizenRequests: number; syntheticIncluded: boolean };
+  scope: { label: string; places: number; people: number; underserved: number };
+  fleetCapacity: number;
+  outlook: { days: { date: string; needP50: number; needP90: number; survival: number; capacity: number; gapP50: number; survivalMet: boolean }[]; source: string; note: string | null };
+  coverOfNeedPct: number | null; shortageDays: number;
+  underserved: { id: string; name: string; district: string | null; settlementType: string | null; population: number; coveragePct: number; shortfall: number;
+    tankerNeed: number; delivered7d: number; lastDeliveryAt: string | null; daysSinceDelivery: number | null; openRequests: number; vulnerability: number;
+    crisis: number; priority: number; topReason: string; underserved: boolean }[];
 }

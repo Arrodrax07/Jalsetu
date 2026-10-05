@@ -453,7 +453,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               {String(chapter + 1).padStart(2, '0')} / {String(CHAPTERS.length).padStart(2, '0')} · {CHAPTERS[chapter].label}
             </p>
             <nav aria-label="Primary" className="flex items-center gap-1 md:gap-5">
-              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] sm:inline">Report a problem</a>
+              <a href="/request" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] sm:inline">Request water</a>
+              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] lg:inline">Report a problem</a>
               <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] md:inline">Water schedule</a>
               <EnterLink className="group flex items-center gap-1.5 rounded-full border border-[#0a7f99]/50 px-3.5 py-1.5 text-[13px] font-medium text-[#13222b] transition-colors hover:bg-[#0a7f99] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0a7f99]">
                 Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -506,8 +507,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
                 <EnterLink className="group inline-flex items-center gap-2 rounded-full bg-[#0a7f99] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_18px_40px_-18px_rgba(10,127,153,0.8)] transition-[background-color,transform] hover:bg-[#0b6e85] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   Open the control room <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </EnterLink>
-                <a href="/report" className="inline-flex items-center gap-1.5 rounded-full border border-[#9fb3bb] px-5 py-3 text-[14px] text-[#23343d] transition-colors hover:border-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
-                  Report a water problem <ArrowUpRight className="h-4 w-4" />
+                <a href="/request" className="inline-flex items-center gap-1.5 rounded-full border border-[#9fb3bb] px-5 py-3 text-[14px] text-[#23343d] transition-colors hover:border-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
+                  Ask for a water tanker <ArrowUpRight className="h-4 w-4" />
                 </a>
                 <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#4d626b] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   When is water coming? <ArrowUpRight className="h-4 w-4" />

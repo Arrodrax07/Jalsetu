@@ -128,7 +128,7 @@ export const OutboxPanel: React.FC<{ items: OutboxItem[]; online: boolean }> = (
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{it.placeName}</p>
-                <p className="line-clamp-2 text-[13px] text-cc-muted">{it.payload.description}</p>
+                <p className="line-clamp-2 text-[13px] text-cc-muted">{it.kind === 'request' && <span className="font-medium text-cc-text">{t('tab.request')} · </span>}{'description' in it.payload ? it.payload.description : it.payload.reason}</p>
                 <p className="mt-0.5 text-[11.5px] text-cc-faint">
                   {t('outbox.savedAt')} {ago(it.queuedAt)} · {it.status === 'sending' ? t('outbox.sending') : it.status === 'failed'
                     ? `${t('outbox.failed')}${it.permanent ? `: ${it.lastError}` : ` · ${t('outbox.autoRetry')}`}` : t('outbox.autoRetry')}

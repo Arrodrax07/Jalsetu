@@ -84,9 +84,9 @@ export const Login: React.FC = () => {
         </Button>
       </form>
       <div className="my-7 flex items-center gap-3 text-[11px] uppercase tracking-[0.14em] text-cc-faint"><span className="h-px flex-1 bg-cc-border" />or<span className="h-px flex-1 bg-cc-border" /></div>
-      <a href="/report" className="group flex items-center gap-3 rounded-2xl border border-cc-border bg-cc-surface p-4 transition hover:border-cc-strong hover:shadow-lift">
+      <a href="/request" className="group flex items-center gap-3 rounded-2xl border border-cc-border bg-cc-surface p-4 transition hover:border-cc-strong hover:shadow-lift">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cc-accent/10 text-cc-accent"><MessageSquareWarning className="h-4 w-4" /></span>
-        <span className="flex-1"><span className="block text-sm font-medium">Report a water problem</span><span className="block text-xs text-cc-muted">For residents. No account needed.</span></span>
+        <span className="flex-1"><span className="block text-sm font-medium">Ask for water or report a problem</span><span className="block text-xs text-cc-muted">For residents. No account needed.</span></span>
         <ArrowRight className="h-4 w-4 text-cc-faint transition-transform group-hover:translate-x-0.5" />
       </a>
       <p className="mt-6 text-[11px] leading-relaxed text-cc-faint">Sessions use short-lived tokens and are audit-logged. Shared devices: sign out when done.</p>
