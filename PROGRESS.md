@@ -90,6 +90,10 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
+## Next session (planned by the user, 2026-10-06)
+1. A few UI changes (user will specify).
+2. Final full check of the whole product ("final boss check") before the presentation.
+
 ## 2026-10-06: the landing page is one film over the real Earth
 User brief (2026-10-05): cinematic spatial choreography, one continuous film through real geography, one
 world-space camera derived from the journey timeline, real data only, fallbacks, 60 fps, mobile path, reduced motion.
