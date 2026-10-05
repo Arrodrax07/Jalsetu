@@ -238,3 +238,28 @@ def test_audit_records_before_after_and_device(client, admin):
         raise AssertionError("trip.start audit entry missing")
     assert start["before"]["status"] == "Accepted" and start["after"]["status"] == "En Route"
     assert start["deviceId"].startswith("test-")
+
+
+def test_operations_metrics_from_real_trips(client, operator, driver):
+    m = client.get("/api/analytics/operations?days=7", headers=operator).json()
+    assert m["windowDays"] == 7
+    assert m["tripsStarted"] >= 2 and m["tripsCompleted"] >= 1 and m["tripsCancelled"] >= 1
+    assert 0 < m["completionRatePct"] <= 100
+    assert m["avgStartToArrivalMin"] is not None and m["avgStartToCompletionMin"] is not None
+    assert m["gpsKmTravelled"] > 0
+    assert m["deliveries"] >= 1 and m["deliveriesVerified"] >= 1 and m["litresDelivered"] > 0
+    assert m["fleetUtilisationPct"] > 0
+    assert m["routeDeviations"] >= 1 and m["anomaliesByKind"]["gps_jump"] >= 1
+    assert sum(d["trips"] for d in m["daily"]) == m["tripsCompleted"]
+    assert client.get("/api/analytics/operations", headers=driver).status_code == 403
+    assert client.get("/api/analytics/operations?days=0", headers=operator).status_code == 422
+
+
+def test_trips_csv_report(client, operator, driver):
+    r = client.get("/api/reports/trips.csv", headers=operator)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    lines = r.text.lstrip("﻿").splitlines()
+    assert lines[0].startswith("Trip,Vehicle,Driver,Status")
+    assert any(",Completed," in ln and "Sion" in ln for ln in lines[1:])
+    assert any(",Cancelled," in ln and "Test cancellation" in ln for ln in lines[1:])
+    assert client.get("/api/reports/trips.csv", headers=driver).status_code == 403
