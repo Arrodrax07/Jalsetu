@@ -1,0 +1,4 @@
+
+# landing film tile pack (~125 MB, rebuild with backend/scripts/fetch_landing_earth.py); the index is kept
+public/landing/earth/*
+!public/landing/earth/index.json

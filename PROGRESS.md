@@ -90,66 +90,38 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
-## IN PROGRESS (paused 2026-10-05 night): cinematic real-globe film for the landing page. RESUME HERE
-User brief (2026-10-05): "cinematic spatial choreography", one continuous 4K interactive film; the whole site must
-feel like a real-time flight through India. Hard constraints: real geography (imagery, terrain, OSM buildings/roads),
-one continuous world-space camera derived from the journey timeline, scroll -> normalized progress -> renderer
-follows with damping (no React state per frame, no wheel hijack, large jumps catch up smoothly), LOD/progressive
-detail, 60 fps desktop + lower-detail mobile path, prefers-reduced-motion, first-class fallbacks, no keys, licence-
-clean (no proprietary caching), modular provider, no fake buildings/terrain, no gimmicks (random floaters, generic
-fades, excess particles). Wanted moments: place rising out of the map; dive through clouds to terrain/city; map route
-becoming the physical road the camera travels; buildings emerging as camera approaches; tanker journey through the
-city; data points connecting into UI panels; typography lying in the environment then becoming the next scene;
-seamless morphs instead of cuts; pull back street -> city -> region -> India -> atmosphere, then dive elsewhere.
+## 2026-10-06: the landing page is one film over the real Earth
+User brief (2026-10-05): cinematic spatial choreography, one continuous film through real geography, one
+world-space camera derived from the journey timeline, real data only, fallbacks, 60 fps, mobile path, reduced motion.
 
-Decision: replace the stylised three.js world (World.tsx) with the real MapLibre globe for ALL chapters; keep World.tsx
-as the offline fallback (local NASA imagery) and StaticMap for no-WebGL. GSAP not needed: the existing spring clock
-(story.ts stepClock) is the timeline driver (equivalent; keeps native scroll).
-
-Done (files written, type-check passes, NOT wired into Landing.tsx yet):
-- `backend/scripts/export_landing_journey.py` -> `frontend/public/landing/journey.json`: focus Beed (crisis 95),
-  nearest active depot "Treatment plant, Bid depot", real OSRM route 91.5 km (590 pts), next = Parbhani (highest
-  planner priority among towns), 7 active depots. Run with backend/.venv python.
-- `frontend/src/components/landing/earth/math.ts`: great-circle slerp, offset, bearing, rangeToZoom (range m ->
-  MapLibre zoom), enu, Path (measured road: at/heading/slice).
-- `earth/journey.ts`: buildKeys (camera shots per chapter: target, range m, pitch, bearing, left pad; road-follow
-  segment 0.525-0.6), shotAt (flight path: log-range interpolation + climb hump for long hops, descend = arrive over
-  target then drop, climb = rise then travel), tankerAt (parked -> time-lapse -> cruise speed profile into Beed),
-  turnRate (for banking roll), sceneAt (places, crisis, deficit, depots, links, word, rise, column, route,
-  routeDraw, tanker, national, impact, next).
-- `earth/tiles.ts`: provider module (s2 / dem / osm sources + `earth://` pack protocol, moved from EarthDescent).
-- `earth/clouds.ts`: CloudDeck, a ray-marched cumulus slab at 1.8-3.2 km anchored around Beed + Parbhani (WebGL2
-  overlay canvas, same camera basis as the map; cameraBasis(bearing, pitch, roll)). Needs a principal-point shift
-  uniform for map padding (uShift) - not added yet.
-- `earth/tanker.ts`: three.js custom layer (8 m tanker model, getMatrixForModel + queryTerrainElevation, x east /
-  y north / z up assumed - verify orientation visually).
-
-Remaining steps:
-1. `earth/OpenEarth.tsx` (was being written): MapLibre map (globe, maxPitch 85, interactive false, pixelRatio cap,
-   space-dark sky at low zoom -> day sky low down), layers: imagery, subtle hillshade, water, roads z12+, buildings
-   with height interpolated by zoom (rise as camera approaches), state outlines (national), MH district deficit fill
-   (summary.rainfall joined by geo district key, e.g. 'bid'), Beed district fill-extrusion that rises (rise), Beed
-   crisis column (column), places circles + crisis emphasis (summary.points), depots + nearest-depot links with
-   line-gradient draw (lineMetrics), route line with line-gradient draw that narrows to road width at street level,
-   Parbhani beacon (next), tanker custom layer. One rAF loop: stepClock -> shotAt -> jumpTo({center, zoom via
-   rangeToZoom, pitch, bearing, roll (banking from turnRate*clock.v, smoothed, off for reduced motion), padding}) only
-   when changed; scene paint props only when changed (quantized); cloud deck; DOM anchors (focus column top via own
-   ENU projector, truck/gtruck via map.project, d0-d2 district centroids, groundState flags); ground typography
-   ("JalSetu" lying on the Deccan plateau via CSS matrix3d homography from 4 map.project corners, ~[76.25,19.55]);
-   impact chapter SVG lines from top crisis places to the impact panel slots; street-hold drag look-around
-   (0.598-0.632). Fail (no WebGL2, style timeout 15 s, journey.json missing) -> onFail -> Landing shows World.
-2. Landing.tsx: render OpenEarth instead of World + EarthDescent; fallback chain OpenEarth -> World -> StaticMap;
-   earth-mode dark film chrome (CSS overrides for text colours/scrims scoped to `.earth-mode`, light text on imagery);
-   chapter 3 Scatter word -> ground word element (anchors.word); impact panel ref (anchors.impact); update copy
-   labels (route is real OSRM road from the real serving depot; tanker run is an illustration; clouds are
-   atmosphere); credits line; SR text.
-3. Delete EarthDescent.tsx once OpenEarth replaces it (World fallback keeps its own ground chapter).
-4. Re-record the tile pack for the WHOLE journey (fetch_landing_earth.py record currently scans only 0.493-0.66;
-   change to 0..1) and re-fetch.
-5. Playwright QA on prod build: full journey screenshots per chapter (1440, 390 portrait, reduced motion, no WebGL,
-   tiles offline), fps (target 60 desktop), large scroll jumps, console clean; tune cloud density, tanker axes,
-   camera keys, text legibility.
-6. Update PROGRESS + landing credits; then commit (user still to answer: commit the 30.6 MB tile pack or gitignore).
+Architecture (frontend/src/components/landing/earth/):
+- `OpenEarth.tsx`: the world. MapLibre globe (Sentinel-2, Terrarium DEM + hillshade, OSM roads/buildings/water) for
+  ALL ten chapters; one rAF loop: stepClock -> shotAt -> jumpTo (center, zoom from camera range, pitch, bearing,
+  roll banking from turn rate x clock velocity, padding so the subject makes room for the type: left on wide screens,
+  top on tall ones) -> paint props only when changed -> cloud deck -> DOM anchors -> ground headline -> impact lines.
+  Fails over (journey.json missing, no WebGL2, first view > 20 s, no imagery tile within 12 s) -> onFail.
+- `journey.ts`: deterministic timeline. Shots per chapter; flight-path interpolation (log-range + climb hump; descend
+  = arrive over target then drop; climb = rise then travel); road-follow segment behind the tanker; scene states.
+- `math.ts` (great circle, range<->zoom, measured road), `tiles.ts` (provider + earth:// tile pack protocol),
+  `clouds.ts` (ray-marched cumulus slab 1.8-3.2 km around Beed + Parbhani, same camera + padding shift),
+  `tanker.ts` (three.js custom layer; MapLibre model frame is y-up: x east, z south; drawn 3x), `earth-mode.css`.
+- Data: `public/landing/journey.json` from `backend/scripts/export_landing_journey.py` (Beed <- Treatment plant,
+  Bid depot, OSRM 91.5 km; next = Parbhani; 7 depots). Live numbers still from /api/public/summary.
+- Moments: Earth from orbit (globe right of the title); Maharashtra with crisis places + dry districts; depots link
+  to their critical places while "JalSetu" lies on the Deccan plateau (CSS matrix3d homography from 4 ground points);
+  Beed's real district lifts off the map, crisis column rises, card pinned to the column top; the real road draws
+  itself; camera dives through the cloud deck onto the road behind the tanker into Beed (buildings grow with zoom);
+  pull back to the dry districts, out to India from orbit; impact numbers fed by lines from the top crisis places;
+  final dive into Parbhani's streets with "next on the planner's list".
+- Landing.tsx: mode earth | world | static (fallback chain); earth mode = dark film chrome (earth-mode.css), no
+  letterbox; EarthDescent.tsx deleted (World.tsx keeps its own ground chapter as fallback).
+- Verified (Playwright, prod build): every chapter at 1440x900 and 390x844, reduced motion (earth, no errors), no
+  WebGL (static map), all tiles blocked (hands over to the stylised world after 12 s). Warm pass on a quiet machine:
+  p95 ~19 ms/frame, 3 frames > 50 ms; first visit has 50-300 ms hitches at altitude changes (tile decode), helped by
+  the tile pack. Measurements on this machine vary 2x with background load. Dev aid: ?debug=expose,noclouds,nohill,
+  nobuild,notank,nopaint.
+- Tile pack: re-recorded for the whole film (see fetch_landing_earth.py, STEPS=150, 3 viewports).
+Open: commit the tile pack or gitignore it (user to decide); sharper-than-10 m imagery only if a licensed source.
 
 ## 2026-10-05: PS-11 gap check and the two gaps closed
 Compared PROGRESS against PS 11; gaps found and fixed:

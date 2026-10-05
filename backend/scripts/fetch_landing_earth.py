@@ -1,11 +1,11 @@
-"""Self-host the open 3D Earth tiles the landing page's descent to Beed uses, so the demo does not depend on the
+"""Self-host the open 3D Earth tiles the landing film uses (orbit -> Maharashtra -> Beed's streets -> Parbhani), so the demo does not depend on the
 public tile servers being fast (or reachable) on the day. Tiles not in the pack still load from the public servers.
 
     python -m scripts.fetch_landing_earth record http://localhost:5173 ../frontend/public/landing/earth
     python -m scripts.fetch_landing_earth fetch ../frontend/public/landing/earth
 
 `record` (needs `pip install playwright` + `playwright install chromium` and the frontend running) scrolls the real
-landing page through the descent at desktop and phone sizes, including a full look-around at the hold, and writes the
+landing page through the whole film at desktop and phone sizes, including a full look-around at the street hold, and writes the
 list of tiles it asked for to <out>/index.json. `fetch` downloads every tile in index.json into <out>:
   s2/{z}/{y}/{x}.jpg    Sentinel-2 cloudless 2016 by EOX IT Services GmbH
                         (contains modified Copernicus Sentinel data 2016), CC BY 4.0
@@ -30,8 +30,9 @@ DEM = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 OSM_TILEJSON = "https://tiles.openfreemap.org/planet"
 FONT = "https://tiles.openfreemap.org/fonts/{stack}/{range}.pbf"
 HOSTS = ("tiles.maps.eox.at", "elevation-tiles-prod", "tiles.openfreemap.org", "/landing/earth/")
-# page progress of the chapter, as in frontend/src/components/landing/EarthDescent.tsx (EARTH)
-IN0, OUT1, STREET, HOLD = 0.503, 0.66, 0.585, 0.612
+# street hold, as in frontend/src/components/landing/earth/OpenEarth.tsx (HOLD)
+STREET, HOLD = 0.598, 0.632
+STEPS = 150  # progress samples across the film
 
 
 def classify(url: str) -> tuple[str, str] | None:
@@ -70,14 +71,14 @@ def record(base: str, out: Path) -> None:
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=["--use-angle=d3d11", "--enable-gpu"])
-        for vw, vh, mobile in [(1440, 900, False), (1920, 1080, False), (2560, 1440, False), (390, 844, True), (820, 1180, True)]:
+        for vw, vh, mobile in [(1440, 900, False), (2560, 1440, False), (390, 844, True)]:
             ctx = browser.new_context(viewport={"width": vw, "height": vh}, is_mobile=mobile, has_touch=mobile)
             page = ctx.new_page()
             page.on("request", lambda r: urls.add(r.url) if any(h in r.url for h in HOSTS) else None)
             page.goto(base.rstrip("/") + "/welcome?debug=expose", wait_until="networkidle")
             page.wait_for_function("() => !!window.__earth", timeout=90000)
-            for i in range(61):
-                go(page, IN0 - 0.01 + (OUT1 - IN0 + 0.01) * i / 60)
+            for i in range(STEPS + 1):
+                go(page, i / STEPS)
             go(page, (STREET + HOLD) / 2)
             cx, cy = vw / 2, vh / 2
             for _ in range(12):  # a full turn in 30 degree strokes, each sweeping the tilt range

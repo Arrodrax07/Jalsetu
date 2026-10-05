@@ -52,7 +52,8 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
   const F: LngLat = [j.focus.lng, j.focus.lat], N: LngLat = [j.next.lng, j.next.lat];
   const L = road.length, near = Math.max(0, L - 4200);
   const mid = road.at(L * 0.5), routeBearing = road.heading(L * 0.5, L * 0.6);
-  const back = portrait ? 1.45 : 1, pad = portrait ? 0 : 1;
+  // portrait: the camera stands further back and the subject sits low, under the type (see OpenEarth padding)
+  const back = portrait ? 1.45 : 1, pad = portrait ? 0.75 : 1;
   const k = (p: number, target: LngLat, range: number, pitch: number, bearing: number, padL = 0): Key =>
     ({ p, target, range: range * back, pitch: portrait ? Math.min(pitch, 70) : pitch, bearing, pad: padL * pad });
   const onRoad = (p: number, d: number, range: number, pitch: number, side: number): Key =>
@@ -60,8 +61,8 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
   const follow = (key: Key, from: number, to: number, side: number): Key => ({ ...key, follow: { from, to, side } });
   return [
     // 01 scale: the whole Earth, India in daylight, Maharashtra's places lighting up
-    k(0, INDIA, 15_500e3, 0, 0, 0.18),
-    k(0.07, [78.6, 20.9], 11_000e3, 6, -3, 0.22),
+    k(0, INDIA, 30_000e3, 0, 0, 0.95),
+    k(0.07, [78.6, 20.9], 19_000e3, 4, -3, 0.8),
     // 02 the problem: down through the atmosphere onto Maharashtra, crisis places and dry districts
     k(0.125, MH, 1_350e3, 30, -14, 0.3),
     k(0.18, [76.1, 19.15], 1_150e3, 36, -6, 0.3),
@@ -69,8 +70,8 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
     k(0.225, [76.5, 19.05], 640e3, 50, 10, 0.12),
     k(0.275, [76.1, 19.0], 470e3, 57, 26, 0.12),
     // 04 intelligence: Beed's district rises out of the map, the camera dives to it
-    k(0.33, F, 78e3, 56, 18, 0.32),
-    k(0.385, F, 60e3, 61, 44, 0.32),
+    k(0.33, F, 215e3, 50, 18, 0.32),
+    k(0.385, F, 175e3, 55, 40, 0.32),
     // 05 live operations: the real road from the depot that serves Beed draws itself
     k(0.425, mid, 112e3, 46, routeBearing - 90, 0.3),
     k(0.475, mid, 98e3, 50, routeBearing - 70, 0.3),
@@ -83,8 +84,9 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
     k(0.68, [75.95, 18.95], 300e3, 34, 8, 0.32),
     k(0.745, [76.0, 19.0], 255e3, 38, 20, 0.32),
     // 08 the network: up through the atmosphere, India whole
-    k(0.805, INDIA, 7_800e3, 0, 0),
-    k(0.845, [79.2, 21.6], 7_200e3, 4, 6),
+    // (looking a little north of India so the country sits below the headline)
+    k(0.805, [79.6, 30.5], 17_000e3, 0, 0),
+    k(0.845, [79.2, 30.0], 15_500e3, 3, 5),
     // 09 impact: back down onto Maharashtra, every place feeding the numbers
     k(0.885, MH, 950e3, 26, -10),
     k(0.925, MH, 880e3, 30, -4),

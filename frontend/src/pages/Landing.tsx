@@ -1,5 +1,7 @@
 /**
- * Public landing page: one continuous world (components/landing/World.tsx) that scroll travels through.
+ * Public landing page: one continuous film over a real 3D Earth (components/landing/earth/OpenEarth.tsx) that scroll
+ * travels through. Fallbacks: the self-contained stylised world (World.tsx, local imagery) if the real Earth cannot
+ * start, and a static map without WebGL.
  *
  * The page is a tall scroll track behind a fixed stage. Scroll sets the story clock (landing/story.ts); the camera,
  * the scene's shaders, the type and the labels anchored in the world all read that one value. Nothing re-renders
@@ -20,9 +22,11 @@ import { districtName } from '../utils/format';
 import { loadGeo, plain, project, type GeoFile, type Place } from '../components/landing/geo';
 import { CHAPTERS, band, base, chapterAt, clock, groundState, phases, ramp, stepClock } from '../components/landing/story';
 import type { Anchors, Quality } from '../components/landing/World';
+import type { EarthInfo } from '../components/landing/earth/OpenEarth';
+import '../components/landing/earth/earth-mode.css';
 
 const World = React.lazy(() => import('../components/landing/World'));
-const EarthDescent = React.lazy(() => import('../components/landing/EarthDescent'));
+const OpenEarth = React.lazy(() => import('../components/landing/earth/OpenEarth'));
 
 /** If the 3D world fails to load or crashes (old GPU, network), the page falls back to the static map instead of a blank screen. */
 class WorldBoundary extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
@@ -44,6 +48,9 @@ const num = (n: number) => n.toLocaleString('en-IN');
 const millions = (n: number) => `${(n / 1e6).toFixed(1)}M`;
 const istTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 
+function webgl2Ok() {
+  try { return !!document.createElement('canvas').getContext('webgl2'); } catch { return false; }
+}
 function webglOk() {
   try {
     const c = document.createElement('canvas');
@@ -125,7 +132,11 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   const [failed, setFailed] = useState(false);
   const [gl] = useState(webglOk);
   const [quality] = useState(pickQuality);
-  const [focus, setFocus] = useState<{ focusName: string | null; focusDistrict: string | null; focusCrisis: number; focusPop: number } | null>(null);
+  const [focus, setFocus] = useState<Partial<EarthInfo> & { focusName: string | null; focusDistrict: string | null; focusCrisis: number; focusPop: number } | null>(null);
+  // which world carries the film: the real Earth, the stylised fallback, or the static map
+  const [mode, setMode] = useState<'earth' | 'world' | 'static'>(() => (webgl2Ok() ? 'earth' : webglOk() ? 'world' : 'static'));
+  const earth = mode === 'earth';
+  const onEarthFail = useCallback(() => setMode(m => (m === 'earth' ? 'world' : m)), []);
   const [chapter, setChapter] = useState(0);
   const anchors = useRef<Anchors>({});
   const stage = useRef<HTMLDivElement>(null);
@@ -148,10 +159,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   useEffect(() => {
     const prev = [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background];
     document.documentElement.style.overflowY = 'auto'; document.body.style.overflowY = 'visible';
-    document.documentElement.style.background = '#eaf1f3';
+    document.documentElement.style.background = earth ? '#03070c' : '#eaf1f3';
     clock.reduce = reduce;
     return () => { [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background] = prev; };
-  }, [reduce]);
+  }, [reduce, earth]);
 
   // scroll -> story target
   useEffect(() => {
@@ -166,7 +177,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   }, []);
 
   // one frame loop for all DOM layers (the WebGL world advances the clock; without it, this loop does)
-  const worldDriving = gl && !failed;
+  const worldDriving = gl && !failed && mode !== 'static';
   useEffect(() => {
     let raf = 0, last = performance.now(), lastCh = -1;
     const layers = () => Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-ch]') ?? []);
@@ -203,7 +214,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       if (bar.current) bar.current.style.transform = `scaleX(${p.toFixed(4)})`;
       // cinema bars slide in while the camera flies (the dive, the reorganisation, the climb); the chrome steps aside
       const ph = phases(p);
-      const bars = reduce ? 0 : Math.max(ph.clouds, band(base(p), 0.225, 0.25, 0.3, 0.33) * 0.8, ph.flight);
+      // (the stylised world's letterbox; the real-Earth film needs no frame around it)
+      const bars = reduce || earth ? 0 : Math.max(ph.clouds, band(base(p), 0.225, 0.25, 0.3, 0.33) * 0.8, ph.flight);
       if (barTop.current) barTop.current.style.transform = `scaleY(${bars.toFixed(3)})`;
       if (barBottom.current) barBottom.current.style.transform = `scaleY(${bars.toFixed(3)})`;
       if (header.current) { header.current.style.opacity = (1 - Math.min(1, bars * 1.6)).toFixed(3); header.current.style.visibility = bars > 0.6 ? 'hidden' : 'visible'; }
@@ -214,14 +226,15 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         numeral.current.style.opacity = (band(lp, 0, 0.18, 0.82, 1) * (p > 0.84 ? 0 : 1)).toFixed(3);
       }
       // the page's paper haze steps aside while the camera is low over real ground
-      if (haze.current) haze.current.style.opacity = (1 - band(p, 0.53, 0.55, 0.625, 0.645)).toFixed(3);
+      if (haze.current) haze.current.style.opacity = haze.current.dataset.earth ? '1' : (1 - band(p, 0.53, 0.55, 0.625, 0.645)).toFixed(3);
       if (groundText.current) {
         const g = groundState.delivering ? 'Delivering · proof of delivery next' : groundState.arrived ? 'Arrived · inside the 150 m geofence' : 'En route · live GPS';
         if (groundText.current.textContent !== g) groundText.current.textContent = g;
       }
       if (truckText.current) {
         const t = phases(p).tanker;
-        const label = t < 0.08 ? 'Accepted · waiting for a fresh GPS fix' : t < 0.82 ? 'En route · live GPS' : t < 0.95 ? 'Arrived · inside the geofence' : 'Delivered · proof of delivery recorded';
+        const label = earth ? (p < 0.456 ? 'Accepted · waiting for a fresh GPS fix' : 'En route · live GPS')
+          : t < 0.08 ? 'Accepted · waiting for a fresh GPS fix' : t < 0.82 ? 'En route · live GPS' : t < 0.95 ? 'Arrived · inside the geofence' : 'Delivered · proof of delivery recorded';
         if (truckText.current.textContent !== label) truckText.current.textContent = label;
       }
       const ch = chapterAt(p);
@@ -230,7 +243,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(raf); mo.disconnect(); };
-  }, [worldDriving, reduce]);
+  }, [worldDriving, reduce, earth]);
 
   const onHover = useCallback((pl: Place | null, x: number, y: number) => {
     const el = tip.current;
@@ -256,14 +269,21 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
   return (
     <EnterContext.Provider value={onEnter}>
-      <div className="landing relative bg-[#eaf1f3] text-[#13222b] antialiased selection:bg-[#0a7f99]/20">
+      <div className={cx('landing relative antialiased selection:bg-[#0a7f99]/20', earth ? 'earth-mode bg-[#03070c] text-[#f2f6f7]' : 'bg-[#eaf1f3] text-[#13222b]')}>
         {/* ------------------------------------------------ stage (fixed) */}
         <div ref={stage} className="fixed inset-0 overflow-hidden [perspective:1400px]" aria-hidden>
-          <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]" />
+          <div className={cx('absolute inset-0', earth ? 'bg-[#03070c]' : 'bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]')} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-end overflow-hidden pr-[3vw]">
             <span ref={numeral} className="select-none font-display text-[46vw] font-semibold leading-none tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgba(19,34,43,0.07)] will-change-transform md:text-[34vw]">01</span>
           </div>
-          {worldDriving && ready && (
+          {earth && ready && (
+            <WorldBoundary fallback={null}>
+              <Suspense fallback={null}>
+                <OpenEarth geo={geo!} summary={s!} quality={quality} reduce={reduce} anchors={anchors} onReady={setFocus} onFail={onEarthFail} />
+              </Suspense>
+            </WorldBoundary>
+          )}
+          {mode === 'world' && worldDriving && ready && (
             <WorldBoundary fallback={<StaticMap s={s} geo={geo} />}>
               <Suspense fallback={null}>
                 <div className="absolute inset-0 animate-[landingIn_1.6s_ease-out_both]">
@@ -274,11 +294,19 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           )}
           {(!worldDriving || failed) && <StaticMap s={s} geo={geo} />}
           {/* vignette and horizon haze keep type readable over the world */}
-          <div ref={haze} className="pointer-events-none absolute inset-0">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
-            <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/80 to-transparent" />
-          </div>
+          {earth ? (
+            <div ref={haze} data-earth="1" className="pointer-events-none absolute inset-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,transparent_55%,rgba(3,7,12,0.55)_100%)]" />
+              <div className="absolute inset-x-0 bottom-0 h-[28vh] bg-gradient-to-t from-[#03070c]/70 to-transparent" />
+              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#03070c]/60 to-transparent" />
+            </div>
+          ) : (
+            <div ref={haze} className="pointer-events-none absolute inset-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,transparent_45%,rgba(226,236,240,0.85)_100%)]" />
+              <div className="absolute inset-x-0 bottom-0 h-[34vh] bg-gradient-to-t from-[#eaf1f3] via-[#eaf1f3]/70 to-transparent md:h-[26vh]" />
+              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/80 to-transparent" />
+            </div>
+          )}
           {quality === 'low' && <div className="landing-grain pointer-events-none absolute inset-[-50%] opacity-[0.07] mix-blend-multiply" />}
 
           {/* readability scrims for the chapters that sit over a busy scene */}
@@ -315,20 +343,26 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           )}
 
           {/* Chapter 3: JalSetu enters */}
-          <Layer ch={2} a={0.05} b={1} depth={0.5} className="inset-x-0 top-[20vh] text-center md:top-[18vh]">
-            <Scatter text="JalSetu" className={cx(H, 'text-[22vw] leading-none md:text-[13vw]')} />
-          </Layer>
+          {!earth && (
+            <Layer ch={2} a={0.05} b={1} depth={0.5} className="inset-x-0 top-[20vh] text-center md:top-[18vh]">
+              <Scatter text="JalSetu" className={cx(H, 'text-[22vw] leading-none md:text-[13vw]')} />
+            </Layer>
+          )}
           <Layer ch={2} a={0.45} b={1} className="inset-x-5 bottom-[12vh] text-center">
             <p className={cx(H, 'text-[7vw] leading-tight md:text-[2.8vw]')}>One picture of need. One plan for every tanker.</p>
             <p className="mx-auto mt-3 max-w-[56ch] text-[14px] text-[#4d626b] md:text-[16px]">Priority from live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.</p>
-            <div className="mt-4 flex justify-center"><Illustration>supply arcs</Illustration></div>
+            <div className="mt-4 flex justify-center">{earth
+              ? <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8fd3e3]">Lines: every critical place to its nearest depot · the planner’s first step</span>
+              : <Illustration>supply arcs</Illustration>}</div>
           </Layer>
 
           {/* Chapter 4: intelligence */}
           <Layer ch={3} a={0.05} b={0.95} className="left-5 top-[18vh] max-w-[90vw] md:left-[6vw] md:max-w-[28vw]">
             <Eyebrow className="mb-4">04 · Intelligence</Eyebrow>
             <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every place, scored.<br /><span className="text-[#0a7f99]">And explained.</span></p>
-            <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.</p>
+            <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">{earth
+              ? `${focus?.focusName ?? 'The highest-crisis place'}'s district lifts out of the map. The column's height is its crisis score: rainfall deficit, news from the ground, vulnerability, distance to water.`
+              : 'Columns rise where the crisis score is high: rainfall deficit, news from the ground, vulnerability, distance to water. Height is the score.'}</p>
           </Layer>
           <div ref={el => { anchors.current.focus = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
             <div className="w-max translate-y-10 -translate-x-1/2 sm:w-auto sm:-translate-y-1/2 sm:translate-x-6">
@@ -352,7 +386,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <Eyebrow className="mb-4">05 · Live operations</Eyebrow>
             <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every tanker,<br />on real GPS.</p>
             <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">The driver’s phone is the tracker. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.</p>
-            <div className="mt-4"><Illustration>the tracking workflow, not live telemetry</Illustration></div>
+            <div className="mt-4 space-y-2">{earth && focus?.depotName && (
+              <p className="font-mono text-[11px] leading-relaxed text-[#8fd3e3]">Real road · {focus.routeKm} km on OpenStreetMap (OSRM) from {focus.depotName}, the depot nearest {focus.focusName}</p>
+            )}<Illustration>{earth ? 'the tanker’s run, not live telemetry' : 'the tracking workflow, not live telemetry'}</Illustration></div>
           </Layer>
           <div ref={el => { anchors.current.truck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
             <div className="-translate-x-1/2 -translate-y-[calc(100%+18px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
@@ -377,7 +413,6 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             </div>
           </div>
 
-          {worldDriving && ready && <Suspense fallback={null}><EarthDescent reduce={reduce} /></Suspense>}
 
           {/* Chapter 7: disaster response */}
           <Layer ch={6} a={0.04} b={0.96} className="left-5 top-[16vh] max-w-[90vw] md:left-[6vw] md:max-w-[32vw]">
@@ -406,7 +441,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <Layer ch={8} a={0.03} b={0.97} depth={0.6} className="inset-x-5 top-[14vh] md:inset-x-[8vw] md:top-[24vh]">
               <div className="flex items-center justify-between"><Eyebrow>09 · Right now</Eyebrow><Live at={at} /></div>
               <TiltCard strength={0.5}>
-              <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12 [transform-style:preserve-3d]">
+              <dl ref={el => { anchors.current.impact = el; }} className="mt-6 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 md:gap-y-12 [transform-style:preserve-3d]">
                 {[
                   [num(s.places), 'places monitored', 'OSM + Census 2011 populations'],
                   [millions(s.people), 'people in those places', 'demand at CPHEEO/JJM norms'],
@@ -430,6 +465,12 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           {/* Chapter 9 (title only; the call to action is real page content below) */}
           <Layer ch={9} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
             <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#0a7f99]">to intelligent response.</span></p>
+            {earth && focus?.nextName && (
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[#8fd3e3]">
+                Next on the planner’s list · {focus.nextName}{focus.nextDistrict && plain(focus.nextDistrict) !== plain(focus.nextName) ? `, ${districtName(focus.nextDistrict)}` : ''} · crisis {focus.nextCrisis}/100
+                {focus.asOf ? <span className="text-[#9fb3bb]"> · as of {new Date(focus.asOf).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span> : null}
+              </p>
+            )}
           </Layer>
 
           {/* hover card for real places */}
@@ -500,7 +541,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             {/* final chapter: real, focusable content that arrives with the end of the journey */}
             <section id="return" aria-labelledby="return-title" className="absolute inset-x-0 bottom-0 flex h-[100svh] flex-col items-center justify-end px-5 pb-[10vh] text-center [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
               <h2 id="return-title" className="sr-only">From water movement to intelligent response</h2>
-              <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[75%] bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(238,244,246,0.94)_0%,rgba(238,244,246,0.7)_45%,transparent_75%)]" />
+              <div aria-hidden className={cx('pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[75%]', earth
+                ? 'bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(3,7,12,0.72)_0%,rgba(3,7,12,0.45)_45%,transparent_75%)]'
+                : 'bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(238,244,246,0.94)_0%,rgba(238,244,246,0.7)_45%,transparent_75%)]')} />
               <div className="pointer-events-none [perspective:1200px]"><Wordmark3D text="JalSetu" className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')} /></div>
               <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#2d6c7f] md:text-[13px]">Connect · Coordinate · Respond</p>
               <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
@@ -516,7 +559,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               </div>
               <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
-                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: NASA Blue Marble via GIBS; Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). The descent to Beed is an open 3D Earth (MapLibre) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap buildings. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.
+                Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: {earth ? '' : 'NASA Blue Marble via GIBS; '}Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). {earth
+                  ? 'The film is an open 3D Earth (MapLibre globe) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap roads and buildings (OpenFreeMap). The road from the depot to Beed is an OSRM route on OpenStreetMap. The tanker’s run is an illustration; clouds are atmosphere.'
+                  : 'The descent to Beed is an open 3D Earth (MapLibre) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap buildings. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.'}
               </p>
             </section>
           </div>
@@ -525,7 +570,8 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
       <style>{`@keyframes landingIn { from { opacity: 0 } to { opacity: 1 } }
 .landing-grain { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); animation: landingGrain 0.9s steps(6) infinite; }
 @keyframes landingGrain { 0% { transform: translate(0,0) } 20% { transform: translate(-3%,2%) } 40% { transform: translate(2%,-3%) } 60% { transform: translate(-2%,-1%) } 80% { transform: translate(3%,3%) } 100% { transform: translate(0,0) } }
-@media (prefers-reduced-motion: reduce) { .landing-grain { animation: none } }`}</style>
+@media (prefers-reduced-motion: reduce) { .landing-grain { animation: none } }
+`}</style>
     </EnterContext.Provider>
   );
 };

@@ -15,6 +15,7 @@ precision highp float;
 in vec2 vUv; out vec4 o;
 uniform vec3 uEye, uF, uR, uU, uSun;
 uniform float uTanHalf, uAspect, uOn;
+uniform vec2 uShift;
 uniform vec2 uC0, uC1;
 const float BASE = 1800.0, TOP = 3200.0;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -29,7 +30,7 @@ float region(vec2 xy) {
 float density(vec3 p) {
   float h = (p.z - BASE) / (TOP - BASE);
   if (h < 0.0 || h > 1.0) return 0.0;
-  float cov = smoothstep(0.5, 0.74, fbm(p.xy / 5200.0)) * region(p.xy);
+  float cov = smoothstep(0.42, 0.68, fbm(p.xy / 5200.0)) * region(p.xy);
   if (cov <= 0.0) return 0.0;
   // flat bases, towering rounded tops; detail erodes the edges
   float top = 0.35 + 0.65 * cov;
@@ -39,6 +40,7 @@ float density(vec3 p) {
 }
 void main() {
   vec2 ndc = vUv * 2.0 - 1.0;
+  ndc -= uShift; // off-centre lens when the map is padded
   vec3 dir = normalize(uF + ndc.x * uTanHalf * uAspect * uR + ndc.y * uTanHalf * uU);
   float t0, t1;
   if (abs(dir.z) < 1e-5) {
@@ -58,7 +60,7 @@ void main() {
     vec3 p = uEye + dir * (t0 + dt * (float(i) + j));
     float d = density(p);
     if (d > 0.002) {
-      float a = 1.0 - exp(-d * dt * 0.0022);
+      float a = 1.0 - exp(-d * dt * 0.0032);
       float h = (p.z - BASE) / (TOP - BASE);
       // sunlit tops, cool shaded bases; a little light through thin edges
       float lit = clamp(0.35 + 0.65 * h + 0.25 * dot(normalize(vec3(0.0, 0.0, 1.0) + uSun * 0.4), uSun) - d * 0.3, 0.0, 1.0);
@@ -72,7 +74,7 @@ void main() {
   o = vec4(col * fade, (1.0 - T) * fade);
 }`;
 
-export interface CloudCamera { eye: [number, number, number]; f: number[]; r: number[]; u: number[]; tanHalf: number }
+export interface CloudCamera { eye: [number, number, number]; f: number[]; r: number[]; u: number[]; tanHalf: number; shift: [number, number] }
 
 export class CloudDeck {
   private gl: WebGL2RenderingContext;
@@ -94,7 +96,7 @@ export class CloudDeck {
     gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'cloud program');
     this.prog = p;
-    for (const n of ['uEye', 'uF', 'uR', 'uU', 'uSun', 'uTanHalf', 'uAspect', 'uOn', 'uC0', 'uC1']) this.loc[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uEye', 'uF', 'uR', 'uU', 'uSun', 'uTanHalf', 'uAspect', 'uOn', 'uShift', 'uC0', 'uC1']) this.loc[n] = gl.getUniformLocation(p, n);
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -113,7 +115,7 @@ export class CloudDeck {
     const L = this.loc;
     gl.uniform3fv(L.uEye, cam.eye); gl.uniform3fv(L.uF, cam.f); gl.uniform3fv(L.uR, cam.r); gl.uniform3fv(L.uU, cam.u);
     gl.uniform3fv(L.uSun, sun);
-    gl.uniform1f(L.uTanHalf, cam.tanHalf); gl.uniform1f(L.uAspect, this.canvas.width / this.canvas.height); gl.uniform1f(L.uOn, on);
+    gl.uniform1f(L.uTanHalf, cam.tanHalf); gl.uniform1f(L.uAspect, this.canvas.width / this.canvas.height); gl.uniform1f(L.uOn, on); gl.uniform2fv(L.uShift, cam.shift);
     gl.uniform2fv(L.uC0, anchors[0]); gl.uniform2fv(L.uC1, anchors[1]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

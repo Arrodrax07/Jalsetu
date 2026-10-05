@@ -1,0 +1,23 @@
+/* Landing film over the real Earth: light type, dark glass and dark scrims instead of the paper look the
+   stylised fallback world uses. Scoped to .earth-mode so the fallback keeps its own design. */
+.earth-mode .text-\[\#13222b\], .earth-mode .text-\[\#23343d\] { color: #f2f6f7 !important }
+.earth-mode .text-\[\#4d626b\], .earth-mode .text-\[\#3f525b\] { color: rgba(226,236,240,0.84) !important }
+.earth-mode .text-\[\#6a7f88\] { color: rgba(200,214,220,0.72) !important }
+.earth-mode .text-\[\#3d7486\], .earth-mode .text-\[\#2d6c7f\] { color: #8fd3e3 !important }
+.earth-mode .text-\[\#0a7f99\] { color: #5fd2ea !important }
+.earth-mode .text-\[\#c0621c\], .earth-mode .text-\[\#b8531a\] { color: #ffab6b !important }
+.earth-mode .text-\[\#c23b1b\] { color: #ff8a6b !important }
+.earth-mode .text-\[\#7a4a2e\] { color: #f3cfae !important }
+.earth-mode .text-\[\#1f7a45\] { color: #7ee2a4 !important }
+.earth-mode .border-\[\#3d7486\]\/50 { border-color: rgba(143,211,227,0.5) !important }
+.earth-mode .border-\[\#c4d3d9\] { border-color: rgba(200,220,228,0.25) !important }
+.earth-mode .bg-white\/90, .earth-mode .bg-white\/85, .earth-mode .bg-white\/80, .earth-mode .bg-white\/75 { background-color: rgba(6,14,20,0.62) !important; box-shadow: 0 30px 60px -30px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(160,210,225,0.16) !important }
+.earth-mode .from-\[\#eef4f6\]\/95, .earth-mode .from-\[\#eef4f6\]\/92, .earth-mode .from-\[\#eef4f6\]\/90 { --tw-gradient-from: rgba(3,7,12,0.72) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgba(3,7,12,0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important }
+.earth-mode .via-\[\#eef4f6\]\/60, .earth-mode .via-\[\#eef4f6\]\/55, .earth-mode .via-\[\#eef4f6\]\/50 { --tw-gradient-stops: var(--tw-gradient-from), rgba(3,7,12,0.36) var(--tw-gradient-via-position), var(--tw-gradient-to) !important }
+.earth-mode .bg-\[\#eef4f6\]\/78 { background-color: rgba(3,7,12,0.4) !important }
+.earth-mode .bg-\[\#cfdce1\] { background-color: rgba(200,220,228,0.18) !important }
+.earth-mode .bg-\[\#9fb3bb\] { background-color: rgba(200,220,228,0.45) !important }
+.earth-mode .border-\[\#9fb3bb\] { border-color: rgba(200,220,228,0.45) !important }
+.earth-mode .\[-webkit-text-stroke\:1\.5px_rgba\(19\2c 34\2c 43\2c 0\.07\)\] { -webkit-text-stroke: 1.5px rgba(220,236,242,0.07) !important }
+.earth-mode .maplibregl-ctrl-attrib { background: rgba(3,7,12,0.55) !important; color: #c8d6dc }
+.earth-mode .maplibregl-ctrl-attrib a { color: #c8d6dc }

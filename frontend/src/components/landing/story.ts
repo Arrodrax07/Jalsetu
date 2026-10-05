@@ -30,7 +30,8 @@ export function base(p: number) {
  *  then climb back out to the exact map view the descent started from. */
 export const G = { start: 0.5, drone: 0.555, hold: 0.615, end: 0.66 };
 
-/** The open 3D Earth that carries the descent (EarthDescent.tsx): loaded state and on-screen opacity. */
+/** The real 3D Earth that carries the film (earth/OpenEarth.tsx): loaded state and on-screen opacity. When it fails the
+ *  stylised world (World.tsx) carries every chapter itself, including its own ground scene. */
 export const earthState: { mode: 'loading' | 'ready' | 'failed'; ready: boolean; opacity: number } = { mode: 'loading', ready: false, opacity: 0 };
 
 /** Written by the world every frame, read by the page's type layer. */

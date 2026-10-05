@@ -1,7 +1,7 @@
 /**
  * The tanker as a three.js model inside MapLibre's own 3D pass (custom layer): same camera, same depth buffer as the
  * terrain and the OSM buildings, so it is hidden behind a building exactly when a real truck would be. Built in
- * metres (an 8 m, 10,000 L water tanker), drawn at twice its size so it stays readable from drone height.
+ * metres (an 8 m, 10,000 L water tanker), drawn at three times its size so it stays readable from drone height.
  */
 import * as THREE from 'three';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MLMap } from 'maplibre-gl';
@@ -43,7 +43,8 @@ export function tankerLayer(map: MLMap, state: () => TankerState): CustomLayerIn
   const sun = new THREE.DirectionalLight('#fff3df', 2.4); sun.position.set(0.5, -0.6, 1); scene.add(sun);
   let renderer: THREE.WebGLRenderer | null = null;
   const proj = new THREE.Matrix4(), place = new THREE.Matrix4(), pose = new THREE.Matrix4();
-  const SCALE = 2;
+  const upright = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+  const SCALE = 3;
   return {
     id: 'tanker', type: 'custom', renderingMode: '3d',
     onAdd(_m, gl) {
@@ -56,8 +57,8 @@ export function tankerLayer(map: MLMap, state: () => TankerState): CustomLayerIn
       const elev = map.queryTerrainElevation(s.at) ?? 0;
       proj.fromArray(args.defaultProjectionData.mainMatrix as unknown as number[]);
       place.fromArray(map.transform.getMatrixForModel(s.at, elev) as unknown as number[]);
-      // model frame: x east, y north, z up (metres); heading is clockwise from north
-      pose.makeRotationZ((-s.heading * Math.PI) / 180).scale(new THREE.Vector3(SCALE, SCALE, SCALE));
+      // MapLibre's model frame is y-up (x east, z south); the truck is built z-up, forward = north
+      pose.makeRotationY((-s.heading * Math.PI) / 180).multiply(upright).scale(new THREE.Vector3(SCALE, SCALE, SCALE));
       camera.projectionMatrix = proj.multiply(place).multiply(pose);
       renderer.resetState();
       renderer.render(scene, camera);
