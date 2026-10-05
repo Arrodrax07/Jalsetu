@@ -93,6 +93,21 @@ Last updated: 2026-10-03.
 ## Next session (planned by the user, 2026-10-06)
 1. A few UI changes (user will specify).
 2. Final full check of the whole product ("final boss check") before the presentation.
+3. Idea discussed (inspired by edolus.com, a PlayCanvas showcase by Vertex3D; reviewed 2026-10-06), NOT started:
+   - Do NOT copy edolus assets (their Earth texture, Starlink/car models): not licensed, and a clone risks the UI prize.
+   - Opening: Earth limb from orbit with atmosphere glow (our real globe + free NASA imagery).
+   - The REAL satellite behind our imagery: Sentinel-2 (ESA), orbiting over India at 786 km, solar panel unfolding;
+     source an openly licensed 3D model (NASA 3D Resources / ESA), confirm the licence first.
+   - Scroll flies the camera into the satellite's lens -> sensor view (brackets, crosshair, scan swath) -> becomes the
+     existing film (clouds -> Maharashtra -> Beed -> road -> city). One continuous move, no cuts.
+   - Tanker hero/studio scene (spotlit, exploded view: 10,000 L tank, driver phone GPS, flow meter, POD camera);
+     needs a good licensed tanker model.
+   - Smaller picks from the review: loader gate with real tile-prewarm % counter, scramble/decode labels,
+     typewriter data readouts, lock-on viewfinder on Beed/Parbhani, Beed's OSM streets lighting up from the water
+     point, "+" crosshair nodes on depot links, optional opt-in sound (CC0). Skip: particle tunnel, glitch cuts,
+     video-backdrop fake driving.
+   - Technical risk: MapLibre may clip a model at 786 km; fallback = separate three.js layer synced to the film camera
+     (like the cloud deck). First step: find the Sentinel-2 model, prototype satellite -> lens transition, show user.
 
 ## 2026-10-06: the landing page is one film over the real Earth
 User brief (2026-10-05): cinematic spatial choreography, one continuous film through real geography, one
