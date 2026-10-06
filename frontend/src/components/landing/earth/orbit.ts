@@ -327,6 +327,30 @@ export class OrbitLayer {
     return o && o.rev0 ? Math.floor(o.rev0 + (o.u(this.simTime(now)) - o.u(o.epoch)) / (2 * Math.PI)) : null;
   }
 
+  /** The first satellite now (simulated time): sub-satellite point, altitude above the mean sphere, orbital speed. */
+  satNow(now = performance.now()) {
+    const o = this.orbits[0];
+    if (!o) return null;
+    const p = o.at(this.simTime(now), new THREE.Vector3()), r = p.length();
+    return { name: o.name, lat: Math.asin(p.z / r) / D2R, lng: Math.atan2(p.y, p.x) / D2R, altKm: (r - R) / 1000, speedKms: (2 * Math.PI * o.a) / o.period / 1000 };
+  }
+
+  /** The next DAYLIGHT pass of any satellite over a box [west, south, east, north], in real time (ms), searched up to 3 days
+   *  ahead in 20 s steps; null when none. Sentinel-2 images only in daylight, so night passes do not count. */
+  nextPass(box: [number, number, number, number], from = Date.now()) {
+    const v = new THREE.Vector3(), sun = new THREE.Vector3();
+    let best: { t: number; name: string } | null = null;
+    for (const o of this.orbits) {
+      for (let t = from; t < from + 3 * 864e5 && (!best || t < best.t); t += 20000) {
+        o.at(t, v);
+        const r = v.length(), lat = Math.asin(v.z / r) / D2R, lng = Math.atan2(v.y, v.x) / D2R;
+        if (lat < box[1] || lat > box[3] || lng < box[0] || lng > box[2]) continue;
+        if (v.normalize().dot(sunDir(t, sun)) > 0.15) { best = { t, name: o.name }; break; }
+      }
+    }
+    return best;
+  }
+
   /**
    * Draws one frame. `globe` is the map's camera and how much of the constellation to show (0 hides it);
    * `pose` the close-up's scroll state. Returns false when nothing is drawn (the caller can hide the canvas).

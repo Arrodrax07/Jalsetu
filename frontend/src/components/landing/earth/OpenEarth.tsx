@@ -218,6 +218,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
   const wrap = useRef<HTMLDivElement>(null), mapEl = useRef<HTMLDivElement>(null);
   const cloudEl = useRef<HTMLCanvasElement>(null), svgEl = useRef<SVGSVGElement>(null), wordEl = useRef<HTMLDivElement>(null);
   const orbitEl = useRef<HTMLCanvasElement>(null), satLabelsEl = useRef<HTMLDivElement>(null), heroLabelEl = useRef<HTMLDivElement>(null);
+  const orbitHudEl = useRef<HTMLDivElement>(null);
   const hudEl = useRef<HTMLDivElement>(null), scanEl = useRef<HTMLDivElement>(null), teleEl = useRef<HTMLPreElement>(null), noteEl = useRef<HTMLParagraphElement>(null);
   const cb = useRef({ onReady, onFail }); cb.current = { onReady, onFail };
 
@@ -342,7 +343,9 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
           finished = true; window.clearTimeout(safety);
           if (m.getLayer('warm-text')) m.removeLayer('warm-text');
           for (const k of Object.keys(last)) delete last[k];
-          warmed = true; lastP = -1; terrainOn = null; // the film's own camera, values and terrain go back on at the next frame
+          // the film's own camera, values and terrain go back on; the camera is re-applied for a few frames, because the first
+          // jump back from the street view lands off-centre on the globe (MapLibre's projection blend has not settled yet)
+          warmed = true; lastP = -1; terrainOn = null; settleFrames = 4;
           done();
         };
         // never keep the Earth hidden: if a warm-up frame does not come (a slow GPU, a lost tile), show it anyway
@@ -397,9 +400,16 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         c.setAttribute('r', '2.6'); c.setAttribute('fill', '#ff6b3d'); svg.appendChild(c); return c;
       });
       const deficitTop = summary.rainfall.slice(0, 3).map(r => geo.districts.find(d => d.key === plain(r.district))?.c ?? null);
-      let lightOrbit: boolean | null = null, terrainOn: boolean | null = null;
+      let lightOrbit: boolean | null = null, terrainOn: boolean | null = null, settleFrames = 0;
       const view: GlobeView = { target: [79.6, 21.4], range: 30_000e3, bearing: 0, pitch: 0, roll: 0, shift: [0, 0] };
       let teleShown = -1, teleTarget = '';
+      // live orbit readout: where Sentinel-2 is now, and its next real daylight pass over Maharashtra
+      const MH_BOX: [number, number, number, number] = [72.6, 15.6, 80.9, 22.1];
+      const pass = orbit?.nextPass(MH_BOX) ?? null;
+      const hudFields = Array.from(orbitHudEl.current?.querySelectorAll<HTMLElement>('[data-f]') ?? []);
+      const hudText: Record<string, string> = {};
+      const setHud = (k: string, v: string) => { if (hudText[k] === v) return; hudText[k] = v; const el = hudFields.find(f => f.dataset.f === k); if (el) el.textContent = v; };
+      const untilText = (ms: number) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `in ${m} min` : `in ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
       const orbitFrame = (now: number, dt: number, p: number, W: number, H: number) => {
         if (!orbit || !orbitCanvas) return;
         orbit.resize(W, H);
@@ -423,7 +433,20 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
           if (!hp || ha < 0.01) hl.style.visibility = 'hidden';
           else { hl.style.transform = `translate3d(${hp[0].toFixed(1)}px, ${hp[1].toFixed(1)}px, 0)`; hl.style.opacity = ha.toFixed(3); hl.style.visibility = 'visible'; }
         }
-        if (noteEl.current) noteEl.current.style.opacity = (globeOn * (p < 0.5 ? 1 - clamp((p - 0.01) / 0.016, 0, 1) : 1)).toFixed(3);
+        const noteOn = globeOn * (p < 0.5 ? 1 - clamp((p - 0.01) / 0.016, 0, 1) : 1);
+        if (noteEl.current) noteEl.current.style.opacity = noteOn.toFixed(3);
+        const oh = orbitHudEl.current;
+        if (oh) {
+          const on = p < 0.5 ? noteOn : 0;
+          oh.style.opacity = on.toFixed(3); oh.style.visibility = on < 0.01 ? 'hidden' : 'visible';
+          const sn = on > 0.01 ? orbit.satNow(now) : null;
+          if (sn) {
+            setHud('name', `${sn.name.toUpperCase()} · LIVE ORBIT`);
+            setHud('over', `over ${fmtLat(sn.lat)} ${fmtLng(sn.lng)}`);
+            setHud('alt', `${Math.round(sn.altKm)} km up · ${sn.speedKms.toFixed(1)} km/s`);
+            setHud('pass', pass ? `next pass over Maharashtra ${untilText(pass.t - Date.now())}` : 'no daylight pass over Maharashtra in 3 days');
+          }
+        }
         // the sensor's view: frame, crosshair, pushbroom line, readout typing itself
         const hud = hudEl.current;
         if (hud) {
@@ -518,7 +541,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         // banking: lean into turns in proportion to how fast the heading is changing right now
         const rollTarget = reduce ? 0 : clamp(-turnRate(keys, road, p) * clock.v * 0.035, -5, 5);
         roll += (rollTarget - roll) * (1 - Math.exp(-dt * 5));
-        const moving = Math.abs(p - lastP) > 1e-7 || Math.abs(roll) > 0.01 || Math.abs(user.bearing) > 0.01 || Math.abs(user.pitch) > 0.01 || drag;
+        const moving = settleFrames-- > 0 || Math.abs(p - lastP) > 1e-7 || Math.abs(roll) > 0.01 || Math.abs(user.bearing) > 0.01 || Math.abs(user.pitch) > 0.01 || drag;
         if (!moving) { orbitFrame(now, dt, p, W, H); return; }
         lastP = p;
         if (dt > 0.03) { slowFrames++; fastFrames = 0; } else if (dt < 0.012) { fastFrames++; if (fastFrames > 240) slowFrames = 0; }
@@ -650,6 +673,12 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
           <p className="font-display text-[20px] font-semibold leading-tight tracking-[-0.02em] text-[#13222b]">Sentinel-2</p>
           <p className="ml-auto mt-0.5 max-w-[24ch] text-[12px] leading-snug text-[#4d626b]">The satellite behind this imagery. 786 km up, it photographs every place in the film.</p>
         </div>
+      </div>
+      <div ref={orbitHudEl} aria-hidden className="pointer-events-none absolute bottom-[156px] right-6 hidden w-[218px] border-l border-[#0a7f99] pl-3 opacity-0 md:block" style={{ visibility: 'hidden' }}>
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#b36b00]"><span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#e39b2b] align-middle" /><span data-f="name">Sentinel-2 · live orbit</span></p>
+        <p data-f="over" className="mt-1.5 font-mono text-[12px] tabular-nums text-[#13222b]">—</p>
+        <p data-f="alt" className="font-mono text-[12px] tabular-nums text-[#13222b]">—</p>
+        <p data-f="pass" className="mt-1 text-[12px] leading-snug text-[#3f525b]">—</p>
       </div>
       <p ref={noteEl} aria-hidden className="pointer-events-none absolute inset-x-5 bottom-[104px] rounded-md bg-white/75 px-2 py-1 text-center font-mono text-[10px] leading-relaxed text-[#4d626b] opacity-0 backdrop-blur-sm md:inset-x-auto md:bottom-[54px] md:right-14 md:max-w-[46ch] md:bg-transparent md:p-0 md:text-right md:backdrop-blur-none" />
       {/* the sensor's view: frame, crosshair, pushbroom line along the ground track, readout */}

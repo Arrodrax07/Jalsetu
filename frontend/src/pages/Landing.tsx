@@ -324,6 +324,24 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <Eyebrow className="mb-6">Maharashtra · {s ? `${num(s.places)} towns and villages` : 'loading the country'}</Eyebrow>
             <h1 className={cx(H, 'text-[13vw] leading-[0.9] md:text-[5.6vw]')}>Water moves.<br /><span className="text-[#0a7f99]">So should intelligence.</span></h1>
           </Layer>
+          {s && (
+            <Layer ch={0} a={0} b={0.32} first className="left-[8vw] top-[60vh] hidden md:block">
+              <div className="flex items-stretch gap-0">
+                {[
+                  [num(s.inCrisis), 'places under water stress', `${num(s.critical)} critical`],
+                  [millions(s.peopleInCrisis), 'people in those places', 'Census 2011 populations'],
+                  [`${s.tankers} / ${s.depots}`, 'tankers / depots on live GPS', 'driver phones as trackers'],
+                ].map(([v, l, n], i) => (
+                  <div key={l} className={cx('pr-8', i > 0 && 'border-l border-[#c4d3d9] pl-8')}>
+                    <p className={cx(H, 'text-[2.6vw] leading-none text-[#13222b]', i === 0 && 'text-[#c0621c]')}>{v}</p>
+                    <p className="mt-2 text-[13px] text-[#3f525b]">{l}</p>
+                    <p className="mt-0.5 font-mono text-[10.5px] text-[#6a7f88]">{n}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5"><Live at={at} /></div>
+            </Layer>
+          )}
           <Layer ch={0} a={0.55} b={1} depth={1.4} className="inset-x-5 bottom-[16vh] md:left-[8vw] md:right-auto">
             <p className={cx(H, 'text-[18vw] leading-none md:text-[9vw]')}>JalSetu</p>
             <p className="mt-3 max-w-[34ch] text-[17px] leading-snug text-[#3f525b] md:text-[19px]">Intelligent water logistics and emergency response, live across water-stressed Maharashtra.</p>
