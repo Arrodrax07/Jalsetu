@@ -79,10 +79,11 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
     k(0.425, mid, 112e3, 46, routeBearing - 90, 0.3),
     k(0.475, mid, 98e3, 50, routeBearing - 70, 0.3),
     // 06 on the ground: down the road, through the cloud deck, onto Beed's streets behind the tanker
-    onRoad(0.525, near + 120, 2_400, 64, 14),
-    follow(onRoad(0.525, near + 120, 2_400, 64, 14), near + 120, L - 10, 14),
-    onRoad(0.6, L - 10, 620, 72, 26),
-    k(0.625, F, 700, 74, road.heading(L - 10, HEAD) + 70),
+    // (closer than before: ~1.6 km behind the tanker on the road, ~320 m at the water point)
+    onRoad(0.525, near + 120, 1_600, 62, 14),
+    follow(onRoad(0.525, near + 120, 1_600, 62, 14), near + 120, L - 10, 14),
+    onRoad(0.6, L - 10, 320, 70, 26),
+    k(0.625, F, 420, 72, road.heading(L - 10, HEAD) + 70),
     // 07 disaster response: back up, street -> city -> region, the districts the monsoon failed
     k(0.68, [75.95, 18.95], 300e3, 34, 8, 0.32),
     k(0.745, [76.0, 19.0], 255e3, 38, 20, 0.32),

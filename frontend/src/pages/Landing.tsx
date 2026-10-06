@@ -427,11 +427,11 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           <Layer ch={5} a={0.5} b={0.82} depth={0.4} className="bottom-[12vh] left-5 max-w-[88vw] md:left-[6vw] md:max-w-[30vw]">
             <div className="rounded-xl bg-white/80 p-4 shadow-[0_30px_60px_-30px_rgba(19,34,43,0.55)] backdrop-blur-md">
               <p className={cx(H, 'text-[6.5vw] leading-[1] md:text-[2.2vw]')}>Beed, from orbit<br /><span className="text-[#0a7f99]">to its streets.</span></p>
-              <p className="mt-2 text-[13px] leading-relaxed text-[#3f525b]">{earth ? 'Real aerial photos of Beed (Esri World Imagery) on real terrain.' : 'Real terrain, satellite imagery and OpenStreetMap buildings.'} Drag to look around.</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#3f525b]">{earth ? 'Real aerial photos of Beed (Esri World Imagery); the tanker is an illustration.' : 'Real terrain, satellite imagery and OpenStreetMap buildings.'} Drag to look around.</p>
             </div>
           </Layer>
           <div ref={el => { anchors.current.gtruck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
-            <div className="-translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
+            <div className="-translate-x-1/2 -translate-y-[calc(100%+40px)] whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 font-mono text-[11px] shadow-[0_12px_30px_-14px_rgba(19,34,43,0.5)] backdrop-blur-md">
               <span className="mr-2 text-[#0a7f99]">●</span><span ref={groundText}>En route · live GPS</span>
             </div>
           </div>

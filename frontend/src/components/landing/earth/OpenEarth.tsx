@@ -161,11 +161,11 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
           'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 15, 2.2, 18, 14], 'line-blur': 0.6 } },
       { id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#7fe3f5', 'line-opacity': 0, 'line-blur': ['interpolate', ['linear'], ['zoom'], 7, 6, 15, 3],
-          'line-width': ['interpolate', ['exponential', 1.7], ['zoom'], 6, 5, 12, 10, 16, 26, 19, 90] } },
+          'line-width': ['interpolate', ['exponential', 1.7], ['zoom'], 6, 5, 12, 10, 15, 12, 19, 18] } },
       { id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
         // a bright line from orbit; on the street it narrows to the carriageway, so the road itself shows through
         paint: { 'line-color': '#e9fbff', 'line-opacity': 0,
-          'line-width': ['interpolate', ['exponential', 1.7], ['zoom'], 6, 1.6, 12, 3, 15, 5, 17, 9, 19, 30] } },
+          'line-width': ['interpolate', ['exponential', 1.7], ['zoom'], 6, 1.6, 12, 3, 15, 3.5, 17, 4, 19, 6] } },
       { id: 'links', type: 'line', source: 'links', layout: { 'line-cap': 'round' },
         paint: { 'line-color': '#9be7f6', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.7, 8, 1.4], 'line-opacity': 0 } },
       { id: 'rise', type: 'fill-extrusion', source: 'focusDistrict', paint: {
@@ -307,7 +307,12 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         mapBox.querySelectorAll('.maplibregl-ctrl-attrib.maplibregl-compact-show').forEach(n => n.classList.remove('maplibregl-compact-show'));
         warmUp(() => {
           earthState.ready = true; earthState.mode = 'ready'; earthState.opacity = 1;
-          if (!dbg.includes('noprefetch')) prefetchHires(streetPoints(j, road), quality === 'high' ? [14, 15, 16, 17] : [14, 15, 16], prefetch.signal);
+          if (!dbg.includes('noprefetch')) {
+            prefetchHires(streetPoints(j, road), quality === 'high' ? [14, 15, 16, 17] : [14, 15, 16], prefetch.signal);
+            // the sharpest tiles only where the camera comes closest: the last 1.5 km into Beed and the water point
+            const close: LngLat[] = []; for (let dd = Math.max(0, road.length - 1500); dd <= road.length; dd += 200) close.push(road.at(dd));
+            if (quality === 'high') prefetchHires([...close, F], [18], prefetch.signal);
+          }
           box.style.opacity = '1';
           cb.current.onReady?.({ focusName: j.focus.name, focusDistrict: j.focus.district, focusCrisis: j.focus.crisis, focusPop: j.focus.population,
             depotName: j.depot.name, routeKm: j.route.km, nextName: j.next.name, nextCrisis: j.next.crisis, nextDistrict: j.next.district, asOf: j.generatedAt });
@@ -578,6 +583,8 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         // tanker on the road
         const d = tankerAt(p, road);
         tank.at = road.at(d); tank.heading = road.heading(d, 40); tank.visible = sc.tanker > 0.02;
+        // distance driven turns the wheels; the rate of travel per unit of scroll gives the speed (sway, dust)
+        tank.dist = d; tank.speed = clamp((tankerAt(Math.min(1, p + 0.002), road) - d) / 0.002 / 50000, 0, 1);
         groundState.arrived = d > road.length - 180; groundState.stopped = p > 0.6; groundState.delivering = p > 0.606;
 
         // ---- camera in local metres (for the cloud deck and for points above the ground)

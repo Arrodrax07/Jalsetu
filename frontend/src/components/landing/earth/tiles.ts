@@ -75,7 +75,7 @@ export const HIRES_URL = ESRI_KEY
   ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(ESRI_KEY)}`
   : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 export const hiresSource = (bounds: [number, number, number, number]): SourceSpecification => ({
-  type: 'raster', tileSize: 256, minzoom: 12, maxzoom: 17, bounds, tiles: [HIRES_URL],
+  type: 'raster', tileSize: 256, minzoom: 12, maxzoom: 18, bounds, tiles: [HIRES_URL],
   attribution: 'Street imagery: Esri World Imagery (Maxar, Earthstar Geographics)',
 });
 
