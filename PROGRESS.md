@@ -348,3 +348,12 @@ Restart with `start.ps1` (or `-Dev`).
 - Live DB is still at "Towns and villages" (1,263 places); no areas imported there yet. Tested on the QA copy:
   areas mode = 2,341 active places, allocation runs over all, switching back restores exactly 1,263.
 - Communities page shows "Area of <city>". Tests: backend 87/87 (tests/test_granularity.py).
+
+## 2026-10-07: Demo reset (committed + pushed)
+Admin -> Demo reset tab. "Save the current state" snapshots the SQLite DB (online backup) to
+`backend/jalsetu.demo-baseline.db` (git-ignored); "Reset everything" restores every table except users,
+refresh_tokens, audit_logs, alembic_version in one transaction (nobody is signed out; the reset is audited), clears the
+forecast/shortage memos and pushes refresh events to every open screen. Refuses a snapshot from another schema version.
+SQLite only. API: GET /api/demo/reset, POST /api/demo/snapshot, POST /api/demo/reset (admin). Tests 89/89.
+A starting point of the live DB was saved 2026-10-07 00:57 IST (T-2045 Available; 5 other tankers on open trips).
+Rehearsed on the QA copy: trip created -> Reset -> tanker Available again, trip gone, admin still signed in.

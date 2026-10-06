@@ -4,7 +4,7 @@ import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, Chip, Dialog, Empty, Field, Loading, PageHeader, Panel, StatusChip, Tabs } from '../components/ui';
 import { FACTOR_LABELS } from './Requests';
-import type { CommunityDetail, MlStatus, OperationsSettings, PriorityWeights, UserProfile, UserRole } from '../types';
+import type { CommunityDetail, DemoStatus, MlStatus, OperationsSettings, PriorityWeights, UserProfile, UserRole } from '../types';
 import { dt, timeAgo } from '../utils/format';
 
 export const Admin: React.FC = () => {
@@ -15,7 +15,7 @@ export const Admin: React.FC = () => {
     ...(can('manage_users') ? [{ id: 'users', label: 'Users & roles' }] : []),
     { id: 'settings', label: 'Settings' },
     { id: 'ml', label: 'ML models' },
-    ...(can('manage_settings') ? [{ id: 'audit', label: 'Audit log' }] : []),
+    ...(can('manage_settings') ? [{ id: 'audit', label: 'Audit log' }, { id: 'demo', label: 'Demo reset' }] : []),
   ];
   return (
     <div className="p-4 lg:p-6">
@@ -28,6 +28,7 @@ export const Admin: React.FC = () => {
           {tab === 'settings' && <Settings />}
           {tab === 'ml' && <Ml />}
           {tab === 'audit' && <Audit />}
+          {tab === 'demo' && <DemoReset />}
         </div>
       </div>
     </div>
@@ -116,6 +117,53 @@ const OPS: { k: keyof OperationsSettings; label: string; step?: string }[] = [
   { k: 'requestDuplicateHours', label: 'Merge repeat requests within (h)' }, { k: 'tankerShiftHours', label: 'Tanker driving hours per day', step: '0.5' },
   { k: 'stopServiceMinutes', label: 'Filling + unloading per stop (min)' },
 ];
+
+/** Demo reset: save the whole state as a starting point; one press puts tankers, trips, requests, plans and the
+ *  rest back to it (user accounts, sessions and the audit log are kept). */
+const DemoReset: React.FC = () => {
+  const { fail, toast, refresh } = useApp();
+  const [st, setSt] = useState<DemoStatus | null>(null);
+  const [ask, setAsk] = useState<'save' | 'reset' | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.demoStatus().then(setSt).catch(fail); }, [fail]);
+  const when = st?.savedAt ? new Date(st.savedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  const go = async () => {
+    const what = ask; setBusy(true);
+    try {
+      if (what === 'save') { setSt(await api.demoSnapshot()); toast('Starting point saved', 'Reset will bring everything back to this moment.', 'success'); }
+      else {
+        const r = await api.demoReset(); setSt(r);
+        toast('Reset to the starting point', `${r.rows.toLocaleString('en-IN')} records in ${r.tables} tables restored. Every screen is refreshing.`, 'success');
+        refresh('vehicles', 'trips', 'overview', 'plan', 'communities', 'settings');
+      }
+      setAsk(null);
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  };
+  if (!st) return <Loading />;
+  if (!st.supported) return <Empty title="Not available here" hint="Demo reset works with the local SQLite database used for demos." />;
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Panel title="1 · Save a starting point">
+        <p className="text-[13px] text-cc-muted">Set everything up the way you want to begin the presentation (tankers at their depots, the plan you want to show), then save it.</p>
+        <p className="mt-3 text-[13px]">{st.saved ? <>Saved starting point: <span className="font-medium">{when}</span> <span className="text-cc-faint">({st.sizeMb} MB)</span></> : <span className="text-cc-warn">No starting point saved yet.</span>}</p>
+        <Button className="mt-4" icon={<Save className="h-4 w-4" />} onClick={() => setAsk('save')}>{st.saved ? 'Replace with the current state' : 'Save the current state'}</Button>
+      </Panel>
+      <Panel title="2 · Reset to the starting point">
+        <p className="text-[13px] text-cc-muted">Puts tankers, trips, deliveries, GPS history, requests, complaints, allocation plans, schedules, alerts and settings back exactly as saved. User accounts, sign-ins and the audit log are kept.</p>
+        <Button className="mt-4" variant="primary" icon={<RefreshCw className="h-4 w-4" />} disabled={!st.saved} onClick={() => setAsk('reset')}>Reset everything</Button>
+        {!st.saved && <p className="mt-2 text-[12px] text-cc-faint">Save a starting point first.</p>}
+      </Panel>
+      <Dialog open={!!ask} onClose={() => !busy && setAsk(null)} title={ask === 'save' ? 'Save the current state as the starting point?' : 'Reset everything to the starting point?'}
+        subtitle={ask === 'save' ? (st.saved ? `This replaces the starting point saved ${when}.` : 'Reset will bring everything back to this moment.')
+          : `Everything done since ${when} is undone: trips in progress end, tankers return, new requests and complaints disappear. Drivers on a trip should refresh their app.`}>
+        <div className="flex justify-end gap-2">
+          <Button onClick={() => setAsk(null)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={go}>{ask === 'save' ? 'Save starting point' : 'Reset everything'}</Button>
+        </div>
+      </Dialog>
+    </div>
+  );
+};
 
 /** Which level the whole system works at: whole towns and villages, or areas inside the big cities. */
 const CommunityLevel: React.FC = () => {

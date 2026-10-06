@@ -20,6 +20,7 @@ export interface UserProfile {
 
 export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis?: number; waterAccess?: number }
 
+export interface DemoStatus { supported: boolean; saved: boolean; savedAt: string | null; sizeMb: number | null }
 export interface CommunityDetail {
   granularity: 'settlements' | 'areas'; activeCommunities: number; areas: number;
   cities: { id: string; name: string; population: number; areas: number }[];
