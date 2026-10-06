@@ -49,6 +49,8 @@ const SUN_AZ = 140, SUN_EL = 42; // late morning, south-east
  *  last dive. */
 const TERRAIN_X = 1.4;
 const terrainAt = (p: number) => (p >= 0.466 && p < 0.7) || p >= 0.928;
+// Measured: even near the ground the terrain mesh costs half of every frame (30 vs 12 ms), and Beed and Parbhani sit on
+// the flat Deccan plateau, where the hillshade already shows the relief. So it is off unless ?debug=terrain3d.
 /** Height of the focus place's column at crisis 100 (m), and of the district as it lifts off the map. */
 const COLUMN_M = 30000, RISE_M = 3500;
 /** Opening (page progress): scroll brings the satellite's lens to the camera, the lens opens onto the sensor's view. */
@@ -137,7 +139,7 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
       'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.8,
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 4.5, 1, 7, 0],
     },
-    terrain: { source: 'dem', exaggeration: TERRAIN_X },
+    // (3D terrain is switched on per moment by the film, and only with ?debug=terrain3d: see terrainAt)
     layers: [
       { id: 'space', type: 'background', paint: { 'background-color': '#c9dae2' } },
       { id: 'imagery', type: 'raster', source: 's2', paint: { 'raster-saturation': 0.06, 'raster-contrast': 0.1, 'raster-fade-duration': 300 } },
@@ -348,7 +350,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         m.once('render', () => requestAnimationFrame(() => {
           if (disposed) return;
           // step two: the streets of Beed, with terrain (whatever tiles are there; drawing anything compiles the program)
-          if (!dbg.includes('noterrain')) m.setTerrain({ source: 'dem', exaggeration: TERRAIN_X });
+          if (dbg.includes('terrain3d')) m.setTerrain({ source: 'dem', exaggeration: TERRAIN_X });
           m.jumpTo({ center: F, zoom: 14.6, pitch: 66, bearing: 30 });
           // wait for the street tiles (drawing them is what compiles their programs; it also preloads Beed), at most ~1.8 s
           const t0 = performance.now();
@@ -531,7 +533,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         const padL = portrait ? 0 : shot.pad * W * 0.5, padT = portrait ? shot.pad * H * 0.5 : 0;
         const zoom = rangeToZoom(shot.range, shot.target[1], H);
         if (!dbg.includes('noterrain')) {
-          const want = terrainAt(p);
+          const want = dbg.includes('terrain3d') && terrainAt(p);
           if (want !== terrainOn) { terrainOn = want; m.setTerrain(want ? { source: 'dem', exaggeration: TERRAIN_X } : null); elevAt = [0, 0]; }
         }
         m.jumpTo({ center: shot.target, zoom, pitch, bearing, roll, padding: { left: padL, top: padT, right: 0, bottom: 0 } });

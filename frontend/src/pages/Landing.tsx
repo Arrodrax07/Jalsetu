@@ -179,15 +179,17 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   // one frame loop for all DOM layers (the WebGL world advances the clock; without it, this loop does)
   const worldDriving = gl && !failed && mode !== 'static';
   useEffect(() => {
-    let raf = 0, last = performance.now(), lastCh = -1;
+    let raf = 0, last = performance.now(), lastCh = -1, lastFrameP = -1, dirty = true;
     const layers = () => Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-ch]') ?? []);
     let els = layers(), scat = Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-scatter]') ?? []);
-    const mo = new MutationObserver(() => { els = layers(); scat = Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-scatter]') ?? []); });
+    const mo = new MutationObserver(() => { dirty = true; els = layers(); scat = Array.from(stage.current?.querySelectorAll<HTMLElement>('[data-scatter]') ?? []); });
     if (stage.current) mo.observe(stage.current, { childList: true, subtree: true });
     const tick = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
       if (!worldDriving) stepClock(dt);
       const p = clock.p;
+      if (p === lastFrameP && !dirty) { raf = requestAnimationFrame(tick); return; }
+      lastFrameP = p; dirty = false;
       for (const el of els) {
         const c = CHAPTERS[+el.dataset.ch!];
         const lp = (p - c.start) / (c.end - c.start);
@@ -199,10 +201,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
         const mid = (a + b) / 2;
         let z = (lp - mid) / Math.max(0.2, b - a);
         if (el.dataset.first && lp < mid) z = 0; // the opening frame starts flat and still
+        if (o < 0.005) { if (el.style.visibility !== 'hidden') { el.style.visibility = 'hidden'; el.style.opacity = '0'; } continue; }
         el.style.opacity = o.toFixed(3);
         el.style.transform = reduce ? 'none' : `translate3d(0, ${(-z * 46 * depth).toFixed(1)}px, ${(-Math.abs(z) * 120 * depth).toFixed(1)}px) rotateX(${(-z * 26 * depth).toFixed(2)}deg)`;
-        el.style.filter = reduce || o > 0.98 ? 'none' : `blur(${((1 - o) * 5).toFixed(2)}px)`;
-        el.style.visibility = o < 0.005 ? 'hidden' : 'visible';
+        el.style.visibility = 'visible';
       }
       // JalSetu letters converge as the network reorganises
       const conv = ramp(p, 0.225, 0.29);
