@@ -113,3 +113,4 @@ cd frontend; npm run build; npm run lint
 * The Docker / PostgreSQL stack is defined and validated (`docker compose config`) but has not been run on this
   development machine (Docker daemon unavailable); local SQLite is tested end to end.
 * In-process WebSocket hub and rate limits: run one API process, or add Redis before scaling out.
+"# Jalsetu" 
