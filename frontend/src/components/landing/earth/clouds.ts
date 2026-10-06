@@ -85,14 +85,14 @@ export class CloudDeck {
     const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false });
     if (!gl) throw new Error('WebGL2 unavailable for the cloud deck');
     this.gl = gl;
-    this.scale = quality === 'high' ? 0.6 : 0.4; // clouds are soft: render below full resolution
+    this.scale = quality === 'high' ? 0.42 : 0.3; // clouds are soft: render well below full resolution (upscaled smoothly)
     const sh = (type: number, src: string) => {
       const s = gl.createShader(type)!; gl.shaderSource(s, src); gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'cloud shader');
       return s;
     };
     const p = gl.createProgram()!;
-    gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, frag(quality === 'high' ? 14 : 8)));
+    gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, frag(quality === 'high' ? 10 : 7)));
     gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'cloud program');
     this.prog = p;

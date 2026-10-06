@@ -98,13 +98,7 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
   const deficit = new Map(s.rainfall.map(r => [plain(r.district), r.deviation]));
   const focusKey = plain(j.focus.district ?? '');
   const district = geo.districts.find(d => d.key === focusKey);
-  // every crisis place to its nearest depot: the planner's starting rule, drawn
-  const depotLL: LngLat[] = j.depots.map(d => [d.lng, d.lat]);
-  const links = s.points.filter(p => p[2] >= 70).map(p => {
-    const at: LngLat = [p[0], p[1]];
-    const dep = depotLL.reduce((best, d) => (haversine(d, at) < haversine(best, at) ? d : best), depotLL[0]);
-    return { type: 'Feature', properties: { crisis: p[2] }, geometry: { type: 'LineString', coordinates: [dep, at] } } as GeoJSON.Feature;
-  });
+  const links = linkFeatures(crisisLinks(s, j), 0);
   const statesFC = fc(geo.states.flatMap(st => st.rings.map(r => ({ type: 'Feature', properties: { name: st.name }, geometry: { type: 'LineString', coordinates: r } }) as GeoJSON.Feature)));
   const districtsFC = fc(geo.districts.map(d => ({
     type: 'Feature', properties: { key: d.key, deviation: deficit.get(d.key) ?? 0 },
@@ -123,13 +117,13 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
       demShade: { ...SOURCES.dem } as typeof SOURCES.dem,
       places: { type: 'geojson', data: fc(s.points.map(([lng, lat, crisis, pop]) => ({ type: 'Feature', properties: { crisis, pop }, geometry: { type: 'Point', coordinates: [lng, lat] } }) as GeoJSON.Feature)) },
       depots: { type: 'geojson', data: fc(j.depots.map(d => ({ type: 'Feature', properties: { name: d.name }, geometry: { type: 'Point', coordinates: [d.lng, d.lat] } }) as GeoJSON.Feature)) },
-      links: { type: 'geojson', lineMetrics: true, data: fc(links) },
+      links: { type: 'geojson', data: fc(links) },
       states: { type: 'geojson', data: statesFC },
       districts: { type: 'geojson', data: districtsFC },
       focusDistrict: { type: 'geojson', data: fc(district ? [{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: district.rings.map(r => [r]) } }] : []) },
       column: { type: 'geojson', data: fc([{ type: 'Feature', properties: {}, geometry: circlePoly(F, 1400) }]) },
       beacon: { type: 'geojson', data: fc([{ type: 'Feature', properties: {}, geometry: circlePoly(N, 14, 32) }]) },
-      route: { type: 'geojson', lineMetrics: true, data: fc([{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: j.route.lngLat } }]) },
+      route: { type: 'geojson', data: fc([]) },
     },
     sky: {
       // daylight edition: a pale sky around the globe (the page's paper), a deeper day sky once the camera is low
@@ -160,7 +154,7 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
           'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12.8, 0.35, 14.2, 0],
           'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 15, 2.2, 18, 14], 'line-blur': 0.6 } },
       { id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#7fe3f5', 'line-opacity': 0, 'line-blur': ['interpolate', ['linear'], ['zoom'], 7, 6, 15, 3],
+        paint: { 'line-color': '#7fe3f5', 'line-opacity': 0, 'line-blur': ['interpolate', ['linear'], ['zoom'], 7, 3, 15, 2],
           'line-width': ['interpolate', ['exponential', 1.7], ['zoom'], 6, 5, 12, 10, 15, 12, 19, 18] } },
       { id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
         // a bright line from orbit; on the street it narrows to the carriageway, so the road itself shows through
@@ -210,9 +204,19 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
   };
 }
 
-/** Draw a line from its start up to `prog` (0..1) with line-gradient. */
-const drawTo = (prog: number, color: string): ExpressionSpecification =>
-  ['step', ['line-progress'], color, Math.max(0.0005, Math.min(0.9995, prog)), 'rgba(0,0,0,0)'];
+/** Every crisis place to its nearest depot: the planner's starting rule, drawn. */
+function crisisLinks(s: PublicSummary, j: JourneyData): [LngLat, LngLat][] {
+  const depotLL: LngLat[] = j.depots.map(d => [d.lng, d.lat]);
+  return s.points.filter(p => p[2] >= 70).map(p => {
+    const at: LngLat = [p[0], p[1]];
+    return [depotLL.reduce((best, d) => (haversine(d, at) < haversine(best, at) ? d : best), depotLL[0]), at];
+  });
+}
+/** The links drawn out to `t` (0..1) of their length: geometry, not a gradient (a gradient change re-renders every
+ *  tile's line texture on the main thread, a whole frame; new geometry is cut on a worker). */
+const linkFeatures = (pairs: [LngLat, LngLat][], t: number): GeoJSON.Feature[] => (t <= 0.0005 ? [] : pairs.map(([a, b]) =>
+  ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [a, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]] } }) as GeoJSON.Feature));
+
 
 export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, reduce, anchors, onReady, onFail }) => {
   const wrap = useRef<HTMLDivElement>(null), mapEl = useRef<HTMLDivElement>(null);
@@ -328,13 +332,12 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
       const warmUp = (done: () => void) => {
         if (warmed) { done(); return; }
         const W0 = 0.003;
-        const g = (c: string) => drawTo(0.5, c);
         const set: [string, string, unknown][] = [
           ['places', 'circle-opacity', W0], ['places-low', 'circle-opacity', W0], ['places-halo', 'circle-opacity', W0],
           ['places', 'circle-stroke-opacity', W0], ['depots', 'circle-opacity', W0], ['depots', 'circle-stroke-opacity', W0],
           ['deficit', 'fill-opacity', W0], ['district-lines', 'line-opacity', W0],
-          ['links', 'line-opacity', W0], ['links', 'line-gradient', g('#9be7f6')],
-          ['route', 'line-opacity', W0], ['route', 'line-gradient', g('#e9fbff')], ['route-glow', 'line-opacity', W0], ['route-glow', 'line-gradient', g('#7fe3f5')],
+          ['links', 'line-opacity', W0],
+          ['route', 'line-opacity', W0], ['route-glow', 'line-opacity', W0],
           ['rise', 'fill-extrusion-opacity', W0], ['rise', 'fill-extrusion-height', 50],
           ['column', 'fill-extrusion-opacity', W0], ['column', 'fill-extrusion-height', 50], ['beacon', 'fill-extrusion-height', 5],
         ];
@@ -386,10 +389,21 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
       const shot = blank();
       const last: Record<string, number> = {};
       const setPaint = (layer: string, prop: string, v: number, eps = 0.004, value?: unknown) => {
+        if (dbg.includes('nograd') && prop === 'line-gradient') return;
+        if (dbg.includes('noopac') && prop !== 'line-gradient') return;
         const k = `${layer}.${prop}`;
         if (last[k] !== undefined && Math.abs(last[k] - v) < eps) return;
         last[k] = v;
         m.setPaintProperty(layer, prop, value ?? v);
+      };
+      // growing lines: new geometry when the drawn share moved by eps (or reached an end), cut into tiles on a worker
+      const linkPairs = crisisLinks(summary, j);
+      const grown: Record<string, number> = {};
+      const grow = (source: string, t: number, eps: number, feats: () => GeoJSON.Feature[]) => {
+        const prev = grown[source];
+        if (prev !== undefined && Math.abs(prev - t) < eps && !((t === 0 || t >= 1) && prev !== t)) return;
+        grown[source] = t;
+        (m.getSource(source) as maplibregl.GeoJSONSource | undefined)?.setData(fc(feats()));
       };
       const D2R = Math.PI / 180;
       const sun: [number, number, number] = [Math.sin(SUN_AZ * D2R) * Math.cos(SUN_EL * D2R), Math.cos(SUN_AZ * D2R) * Math.cos(SUN_EL * D2R), Math.sin(SUN_EL * D2R)];
@@ -506,7 +520,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         setPaint('states', 'line-opacity', 0.16 + sc.national * 0.55);
         setPaint('depots', 'circle-opacity', sc.depots); setPaint('depots', 'circle-stroke-opacity', sc.depots);
         setPaint('links', 'line-opacity', sc.depots * 0.8);
-        setPaint('links', 'line-gradient', sc.links, 0.01, drawTo(sc.links, '#9be7f6'));
+        grow('links', sc.links, 0.006, () => linkFeatures(linkPairs, sc.links));
         // the district lifts off the map like a tile, then settles back so the real terrain takes over
         const lift = sc.rise * (1 + 0.06 * Math.sin(Math.PI * clamp((p - 0.3) / 0.05, 0, 1)));
         setPaint('rise', 'fill-extrusion-height', lift * RISE_M, 10);
@@ -515,8 +529,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         setPaint('column', 'fill-extrusion-opacity', Math.min(1, sc.column * 2) * 0.92, 0.01);
         setPaint('beacon', 'fill-extrusion-height', sc.next * 70, 1);
         setPaint('route', 'line-opacity', sc.route * 0.95); setPaint('route-glow', 'line-opacity', sc.route * 0.45);
-        setPaint('route', 'line-gradient', sc.routeDraw, 0.008, drawTo(sc.routeDraw, '#e9fbff'));
-        setPaint('route-glow', 'line-gradient', sc.routeDraw, 0.008, drawTo(sc.routeDraw, '#7fe3f5'));
+        grow('route', sc.routeDraw, 0.003, () => (sc.routeDraw <= 0.0005 ? [] : [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: road.slice(sc.routeDraw * road.length) } } as GeoJSON.Feature]));
       };
 
       const tick = (now: number) => {
@@ -524,6 +537,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
         stepClock(dt);
         if (!earthState.ready) return;
+
         const p = clock.p;
         const W = box.clientWidth, H = box.clientHeight;
         if (W !== lastW || H !== lastH) {
@@ -586,6 +600,9 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         // distance driven turns the wheels; the rate of travel per unit of scroll gives the speed (sway, dust)
         tank.dist = d; tank.speed = clamp((tankerAt(Math.min(1, p + 0.002), road) - d) / 0.002 / 50000, 0, 1);
         groundState.arrived = d > road.length - 180; groundState.stopped = p > 0.6; groundState.delivering = p > 0.606;
+        // draw the map in THIS frame (MapLibre would draw it on the next one): picture, labels and type stay in step with the
+        // scroll instead of the map trailing a frame behind; the frame MapLibre had scheduled is cancelled, so it draws once
+        if (!dbg.includes('noredraw')) m.redraw();
 
         // ---- camera in local metres (for the cloud deck and for points above the ground)
         if (!terrainOn) elevT = 0; // without terrain the map's ground is at sea level
@@ -595,8 +612,11 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         const eye: [number, number, number] = [tx - basis.f[0] * shot.range, ty - basis.f[1] * shot.range, elevT - basis.f[2] * shot.range];
         const tanHalf = Math.tan((FOV * D2R) / 2);
         const shift: [number, number] = [padL / W, -padT / H]; // map padding moves the principal point
-        const cloudsOn = clamp((26000 - eye[2]) / 10000, 0, 1); // a cumulus deck is weather seen from the air, not from orbit
-        deck?.render({ eye, f: basis.f, r: basis.r, u: basis.u, tanHalf, shift }, cloudAnchors, sun, cloudsOn);
+        // a cumulus deck is weather seen from the air: not from orbit, and gone once the camera is well below its base
+        const cloudsOn = clamp((26000 - eye[2]) / 10000, 0, 1) * clamp((eye[2] - 900) / 700, 0, 1);
+        if (cloudsOn > 0.001) deck?.render({ eye, f: basis.f, r: basis.r, u: basis.u, tanHalf, shift }, cloudAnchors, sun, cloudsOn);
+        const cloudVis = cloudsOn > 0.001 ? 'visible' : 'hidden';
+        if (cloudCanvas.style.visibility !== cloudVis) { if (cloudVis === 'hidden') deck?.render({ eye, f: basis.f, r: basis.r, u: basis.u, tanHalf, shift }, cloudAnchors, sun, 0); cloudCanvas.style.visibility = cloudVis; }
         const projectUp = (ll: LngLat, alt: number): [number, number] | null => {
           const [x, y] = enu(F, ll), v = [x - eye[0], y - eye[1], alt - eye[2]];
           const z = v[0] * basis.f[0] + v[1] * basis.f[1] + v[2] * basis.f[2];
