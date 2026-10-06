@@ -16,7 +16,7 @@ from ..db import get_db
 from ..models import AllocationPlan, AuditLog, Complaint, Delivery, User, WaterRequest
 from ..schemas import CommunityDetailIn, OperationsIn, WeightsIn
 from ..security import any_user, require
-from ..services import access, granularity, ml
+from ..services import access, demo_reset, granularity, ml
 from ..services.common import DEFAULT_SETTINGS, audit, get_setting, put_setting
 from ..services.realtime import hub
 from ..services.views import community_views, complaint_view, delivery_view, iso, request_view
@@ -85,6 +85,48 @@ def put_community_detail(body: CommunityDetailIn, db: Session = Depends(get_db),
     for ev in ("settings.changed", "communities.changed", "allocation.changed"):
         hub.publish(ev)
     return granularity.summary(db)
+
+
+@router.get("/demo/reset")
+def demo_status(_: User = Depends(require("manage_settings"))):
+    """Is a demo starting point saved, and when."""
+    return demo_reset.status()
+
+
+@router.post("/demo/snapshot")
+def demo_snapshot(db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
+    """Save the whole current state as the demo starting point."""
+    try:
+        out = demo_reset.save()
+    except demo_reset.NotSupported as e:
+        raise HTTPException(501, str(e)) from e
+    audit(db, admin, "demo.snapshot", "system", "demo", out)
+    db.commit()
+    return out
+
+
+@router.post("/demo/reset")
+def demo_restore(db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
+    """Put tankers, trips, requests, plans and everything else back to the saved starting point (users and audit stay)."""
+    db.close()  # release this request's connection before the tables are rewritten
+    try:
+        out = demo_reset.restore()
+    except demo_reset.NotSupported as e:
+        raise HTTPException(501, str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(409, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(409, str(e)) from e
+    from .analytics import _forecast_memo, _shortage_memo
+    _forecast_memo.clear(); _shortage_memo.clear()
+    from ..db import SessionLocal
+    with SessionLocal() as s2:
+        audit(s2, admin, "demo.reset", "system", "demo", out)
+        s2.commit()
+    for ev in ("trip.changed", "tankers.changed", "requests.changed", "complaints.changed", "allocation.changed",
+               "dispatch.changed", "communities.changed", "schedules.changed", "anomalies.changed", "settings.changed"):
+        hub.publish(ev)
+    return {**out, **demo_reset.status()}
 
 
 @router.get("/ml/status")
