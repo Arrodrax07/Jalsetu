@@ -38,24 +38,26 @@ export const earthState: { mode: 'loading' | 'ready' | 'failed'; ready: boolean;
 export const groundState = { arrived: false, stopped: false, delivering: false };
 
 /** Shared, mutable story clock. `target` follows the scrollbar; `p` eases toward it in the render loop. */
-export const clock = { target: 0, p: 0, v: 0, pointerX: 0, pointerY: 0, reduce: false };
+export const clock = { target: 0, p: 0, v: 0, pointerX: 0, pointerY: 0, reduce: false, eased: 0 };
 
 /** Advance the story clock: one critically damped spring toward the scroll position (settles in ~0.3 s, no overshoot),
  *  with a speed cap so a long jump (scrollbar drag, chapter rail, End key) flies through the journey instead of snapping.
  *  This is the ONLY smoothing between input and camera: native scroll is never hijacked, so wheels, trackpads (which
  *  bring their own inertia), touch and the scrollbar all feel like themselves. */
 export function stepClock(dt: number) {
-  const K = clock.reduce ? 900 : 130, D = 2 * Math.sqrt(K), VMAX = clock.reduce ? 50 : 0.38;
+  const K = clock.reduce ? 900 : 160, D = 2 * Math.sqrt(K), VMAX = clock.reduce ? 50 : 0.38;
+  const TAU = clock.reduce ? 0 : 0.2; // s: how long a wheel notch takes to glide in
   let rem = Math.min(dt, 0.1);
   while (rem > 0) {
     const h = Math.min(rem, 1 / 240);
-    clock.v += ((clock.target - clock.p) * K - clock.v * D) * h;
+    clock.eased = TAU ? clock.eased + (clock.target - clock.eased) * (1 - Math.exp(-h / TAU)) : clock.target;
+    clock.v += ((clock.eased - clock.p) * K - clock.v * D) * h;
     if (clock.v > VMAX) clock.v = VMAX; else if (clock.v < -VMAX) clock.v = -VMAX;
     clock.p += clock.v * h;
     rem -= h;
   }
   if (clock.p < 0) { clock.p = 0; clock.v = 0; } else if (clock.p > 1) { clock.p = 1; clock.v = 0; }
-  if (Math.abs(clock.target - clock.p) < 2e-5 && Math.abs(clock.v) < 2e-4) { clock.p = clock.target; clock.v = 0; }
+  if (Math.abs(clock.target - clock.p) < 2e-5 && Math.abs(clock.v) < 2e-4 && Math.abs(clock.target - clock.eased) < 2e-5) { clock.p = clock.eased = clock.target; clock.v = 0; }
 }
 
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);

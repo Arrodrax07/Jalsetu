@@ -142,10 +142,10 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
     // (3D terrain is switched on per moment by the film, and only with ?debug=terrain3d: see terrainAt)
     layers: [
       { id: 'space', type: 'background', paint: { 'background-color': '#c9dae2' } },
-      { id: 'imagery', type: 'raster', source: 's2', paint: { 'raster-saturation': 0.06, 'raster-contrast': 0.1, 'raster-fade-duration': 300 } },
+      { id: 'imagery', type: 'raster', source: 's2', paint: { 'raster-saturation': 0.06, 'raster-contrast': 0.1, 'raster-fade-duration': 150 } },
       // street imagery: real roofs, trees, cars; it takes over from Sentinel-2 as the camera comes down
       { id: 'imagery-hi', type: 'raster', source: 'hires', minzoom: 12, paint: {
-        'raster-opacity': ['interpolate', ['linear'], ['zoom'], 12.4, 0, 13.4, 1], 'raster-fade-duration': 250, 'raster-contrast': 0.04 } },
+        'raster-opacity': ['interpolate', ['linear'], ['zoom'], 12.4, 0, 13.4, 1], 'raster-fade-duration': 120, 'raster-contrast': 0.04 } },
       { id: 'relief', type: 'hillshade', source: 'demShade', maxzoom: 12, paint: { 'hillshade-exaggeration': 0.32, 'hillshade-shadow-color': '#2a2016', 'hillshade-highlight-color': '#fff8ec', 'hillshade-illumination-direction': 315 } },
       { id: 'water', type: 'fill', source: 'osm', 'source-layer': 'water', minzoom: 10, paint: { 'fill-color': '#3f6f84', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 12.5, 0.4, 13.4, 0] } },
       { id: 'deficit', type: 'fill', source: 'districts', paint: {
@@ -251,7 +251,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         map = new maplibregl.Map({
           container: mapBox, style: style(geo, summary, j, quality), interactive: false, maxPitch: 85, renderWorldCopies: false,
           pixelRatio: Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : 1.5),
-          maxTileCacheSize: quality === 'high' ? 1200 : 400, fadeDuration: 250, attributionControl: { compact: true },
+          maxTileCacheSize: quality === 'high' ? 1200 : 400, fadeDuration: 120, attributionControl: { compact: true },
           canvasContextAttributes: { antialias: quality === 'high', powerPreference: 'high-performance' },
           center: [79.6, 21.4], zoom: 1.5,
         });

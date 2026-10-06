@@ -35,6 +35,8 @@ let protocolAdded = false;
 export function addPackProtocol() {
   if (protocolAdded) return;
   protocolAdded = true;
+  // the film descends fast: let the browser fetch many tiles at once (the default is 16)
+  maplibregl.setMaxParallelImageRequests(48);
   maplibregl.addProtocol('earth', async (params, abort) => {
     const [source, ...parts] = params.url.slice('earth://'.length).split('/').map(decodeURIComponent);
     const key = parts.join('/');
@@ -97,6 +99,6 @@ export function prefetchHires(points: [number, number][], zooms: number[], signa
     try { await fetch(HIRES_URL.replace('{z}', z).replace('{y}', y).replace('{x}', x), { signal, mode: 'cors' }); } catch { /* best effort */ }
     return next();
   };
-  for (let i = 0; i < 4; i++) void next();
+  for (let i = 0; i < 8; i++) void next();
   return keys.size;
 }
