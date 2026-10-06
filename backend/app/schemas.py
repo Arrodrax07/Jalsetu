@@ -194,6 +194,10 @@ class RouteOptimizeIn(In):
     litres: dict[str, int] | None = None  # optional per-stop litres; defaults from approved plan
 
 
+class CommunityDetailIn(In):
+    granularity: Literal["settlements", "areas"]
+
+
 class DispatchIn(RouteOptimizeIn):
     driver_user_id: int | None = None
 

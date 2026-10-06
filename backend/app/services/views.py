@@ -66,6 +66,8 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
     last_delivery = dict(db.execute(select(Delivery.community_id, func.max(Delivery.delivered_at))
                                     .where(Delivery.data_origin != SYNTHETIC).group_by(Delivery.community_id)).all())
 
+    parent_ids = {c.parent_id for c in communities if c.parent_id}
+    parents = dict(db.execute(select(Community.id, Community.name).where(Community.id.in_(parent_ids))).all()) if parent_ids else {}
     out = []
     now = utcnow()
     for c in communities:
@@ -117,6 +119,9 @@ def community_views(db: Session, include_inactive: bool = False) -> list[dict]:
             "demandBasis": c.demand_basis or None,
             "waterAccessKm": c.water_access_km,
             "waterAccessNote": c.water_access_note or None,
+            "level": c.level or "settlement",
+            "parentId": c.parent_id,
+            "parentName": parents.get(c.parent_id) if c.parent_id else None,
         })
     return out
 

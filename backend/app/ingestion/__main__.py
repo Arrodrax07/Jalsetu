@@ -5,6 +5,7 @@
     python -m app.ingestion lgd FILE.csv    # attach official LGD district codes from an LGD export
     python -m app.ingestion probes          # refresh health of credential-gated sources
     python -m app.ingestion maharashtra     # import Maharashtra settlements + water infrastructure (OpenStreetMap)
+    python -m app.ingestion areas           # import areas inside big cities (OpenStreetMap suburbs/neighbourhoods)
     python -m app.ingestion crisis          # refresh rainfall-deficit + news crisis signals and re-score communities
     python -m app.ingestion depots [K] [--keep T-1,T-2]  # site K depots on real water infrastructure near the greatest need
     python -m app.ingestion worker          # run background jobs forever (separate worker container)
@@ -21,6 +22,7 @@ from .geoboundaries import import_lgd_csv, run_geoboundaries
 from .crisis import run_crisis
 from .jobs import run_forever
 from .maharashtra import run_maharashtra
+from .areas import run_areas
 from .probes import probe_imd, probe_static
 from .sachet import run_sachet
 
@@ -40,6 +42,10 @@ def main() -> None:
             probe_static(db)
             probe_imd(db)
             print("probes updated")
+            return
+        if cmd == "areas":
+            rec = run_areas(db)
+            print(rec.status, rec.created, "created", rec.updated, "updated", rec.error or "")
             return
         if cmd == "crisis":
             print(json.dumps(run_crisis(db), indent=2, ensure_ascii=False))

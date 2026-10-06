@@ -181,6 +181,10 @@ class Community(Base):
     # Straight-line km to the nearest recorded water source or active depot (services.access). Null = not computed.
     water_access_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     water_access_note: Mapped[str] = mapped_column(String(200), default="")
+    # Granularity: a 'settlement' (town, village, whole city) or an 'area' inside a city (an OSM suburb/neighbourhood),
+    # linked to its city. Admin -> Settings -> Community detail picks which level is active (services.granularity).
+    level: Mapped[str] = mapped_column(String(12), default="settlement", server_default="settlement")
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("communities.id"), index=True, nullable=True)
 
     district: Mapped[GeoDistrict | None] = relationship()
     state: Mapped[GeoState | None] = relationship()

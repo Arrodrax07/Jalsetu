@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session, joinedload
 from ..config import BACKEND_DIR, get_settings
 from ..db import get_db
 from ..models import AllocationPlan, AuditLog, Complaint, Delivery, User, WaterRequest
-from ..schemas import OperationsIn, WeightsIn
+from ..schemas import CommunityDetailIn, OperationsIn, WeightsIn
 from ..security import any_user, require
-from ..services import ml
+from ..services import access, granularity, ml
 from ..services.common import DEFAULT_SETTINGS, audit, get_setting, put_setting
 from ..services.realtime import hub
 from ..services.views import community_views, complaint_view, delivery_view, iso, request_view
@@ -60,6 +60,31 @@ def put_operations(body: OperationsIn, db: Session = Depends(get_db), admin: Use
     db.commit()
     hub.publish("settings.changed")
     return value
+
+
+@router.get("/settings/communities")
+def get_community_detail(db: Session = Depends(get_db), _: User = Depends(any_user)):
+    """Which level communities are worked at (whole settlements or areas inside cities), and what exists."""
+    return granularity.summary(db)
+
+
+@router.put("/settings/communities")
+def put_community_detail(body: CommunityDetailIn, db: Session = Depends(get_db), admin: User = Depends(require("manage_settings"))):
+    """Switch the community level. Areas are imported from OpenStreetMap the first time they are asked for."""
+    if body.granularity == "areas" and not granularity.summary(db)["areas"]:
+        from ..ingestion.areas import run_areas
+        rec = run_areas(db)
+        if rec.status != "success":
+            raise HTTPException(502, f"Could not import city areas from OpenStreetMap: {rec.error}")
+    before = granularity.mode(db)
+    result = granularity.apply(db, body.granularity)
+    access.recompute(db, only_missing=True)
+    audit(db, admin, "settings.communities", "settings", "communities", {"granularity": body.granularity, **result},
+          before={"granularity": before}, after={"granularity": body.granularity})
+    db.commit()
+    for ev in ("settings.changed", "communities.changed", "allocation.changed"):
+        hub.publish(ev)
+    return granularity.summary(db)
 
 
 @router.get("/ml/status")
