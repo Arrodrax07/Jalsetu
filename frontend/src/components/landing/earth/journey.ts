@@ -60,9 +60,12 @@ export function buildKeys(j: JourneyData, road: Path, portrait: boolean): Key[] 
     ({ ...k(p, road.at(Math.min(L, d + LOOK)), range, pitch, road.heading(d, HEAD) + side), follow: undefined });
   const follow = (key: Key, from: number, to: number, side: number): Key => ({ ...key, follow: { from, to, side } });
   return [
-    // 01 scale: the whole Earth, India in daylight, Maharashtra's places lighting up
+    // 01 scale: the whole Earth beside the satellite that images it; scroll flies into its lens (orbit.ts), and the
+    // film goes on as the sensor's view, straight down onto the Deccan, Maharashtra's places lighting up
     k(0, INDIA, 30_000e3, 0, 0, 0.95),
-    k(0.07, [78.6, 20.9], 19_000e3, 4, -3, 0.8),
+    k(0.024, [79.2, 21.2], 21_000e3, 0, 0, 0.8),
+    k(0.042, [76.6, 19.3], 1_500e3, 0, 0, 0),
+    k(0.09, [76.5, 19.25], 1_380e3, 10, -6, 0.08),
     // 02 the problem: down through the atmosphere onto Maharashtra, crisis places and dry districts
     k(0.125, MH, 1_350e3, 30, -14, 0.3),
     k(0.18, [76.1, 19.15], 1_150e3, 36, -6, 0.3),

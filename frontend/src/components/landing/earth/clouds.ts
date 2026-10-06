@@ -100,6 +100,9 @@ export class CloudDeck {
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    // warm-up: a 1-pixel draw forces the driver to compile the program now, not on the first frame of the dive
+    gl.useProgram(p); gl.viewport(0, 0, 1, 1); gl.uniform1f(this.loc.uOn, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   }
   resize(w: number, h: number) {
     const W = Math.max(1, Math.round(w * this.scale)), H = Math.max(1, Math.round(h * this.scale));

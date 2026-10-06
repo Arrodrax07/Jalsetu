@@ -76,6 +76,9 @@ def vehicle_view(tanker: Tanker, ops: dict, trip: Trip | None, now: datetime | N
         "driverName": tanker.driver_name,
         "driverUserId": tanker.driver_user_id,
         "trackingSource": tanker.tracking_source,
+        # the fleet list shows these (they were missing: the Capacity column read just "L")
+        "capacity": tanker.capacity,
+        "depot": None if tanker.depot is None else {"id": tanker.depot.id, "name": tanker.depot.name, "lat": tanker.depot.lat, "lng": tanker.depot.lng},
         "position": None if tanker.lat is None else {
             "lat": tanker.lat, "lng": tanker.lng, "accuracyM": tanker.accuracy_m,
             "speedKmh": None if tanker.speed_kmh is None else round(tanker.speed_kmh, 1),

@@ -1,0 +1,42 @@
+{
+ "generatedAt": "2026-10-06T09:11:22+00:00",
+ "source": "CelesTrak GP data (mean elements, CCSDS OMM)",
+ "satellites": [
+  {
+   "name": "Sentinel-2A",
+   "norad": 40697,
+   "epoch": "2026-10-06T04:38:53.584800",
+   "mean_motion": 14.30819263,
+   "eccentricity": 0.0001078,
+   "inclination": 98.5649,
+   "ra_of_asc_node": 352.4263,
+   "arg_of_pericenter": 92.2942,
+   "mean_anomaly": 267.8364,
+   "rev_at_epoch": 58960
+  },
+  {
+   "name": "Sentinel-2B",
+   "norad": 42063,
+   "epoch": "2026-10-06T04:28:35.957856",
+   "mean_motion": 14.30817997,
+   "eccentricity": 0.000114,
+   "inclination": 98.5693,
+   "ra_of_asc_node": 352.3657,
+   "arg_of_pericenter": 91.1602,
+   "mean_anomaly": 268.9712,
+   "rev_at_epoch": 50051
+  },
+  {
+   "name": "Sentinel-2C",
+   "norad": 60989,
+   "epoch": "2026-10-06T03:38:17.133216",
+   "mean_motion": 14.30817497,
+   "eccentricity": 0.0001138,
+   "inclination": 98.5701,
+   "ra_of_asc_node": 352.3379,
+   "arg_of_pericenter": 82.0805,
+   "mean_anomaly": 278.0507,
+   "rev_at_epoch": 10885
+  }
+ ]
+}

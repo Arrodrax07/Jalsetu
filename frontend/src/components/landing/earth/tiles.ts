@@ -9,6 +9,10 @@
  * All three are licensed for redistribution, so the tiles on the film's path ship with the site
  * (`public/landing/earth`, made by `backend/scripts/fetch_landing_earth.py`): `earth://<source>/<key>` serves the
  * packed copy when there is one and the public server otherwise. No keys, nothing proprietary cached.
+ *
+ *   hires imagery   Esri World Imagery (Maxar, Earthstar Geographics), ~0.3 m per pixel, ONLY where the camera comes
+ *                   down to the streets (the tanker's last kilometres into Beed, Parbhani). Proprietary: never packed,
+ *                   loaded live from Esri, with the free ArcGIS key from VITE_ESRI_KEY when one is set.
  */
 import maplibregl, { type SourceSpecification } from 'maplibre-gl';
 
@@ -62,3 +66,37 @@ export const SOURCES: Record<string, SourceSpecification> = {
     attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
 };
+
+/** Esri World Imagery, sharp enough for streets (real roofs, trees, cars): only inside `bounds` and only from zoom 12,
+ *  so it is requested just where the film comes down to the ground. With VITE_ESRI_KEY (a free ArcGIS Location
+ *  Platform key) tiles come from the keyed basemap service; without one, from Esri's public tile server (testing). */
+const ESRI_KEY = (import.meta.env.VITE_ESRI_KEY as string | undefined)?.trim();
+export const HIRES_URL = ESRI_KEY
+  ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(ESRI_KEY)}`
+  : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+export const hiresSource = (bounds: [number, number, number, number]): SourceSpecification => ({
+  type: 'raster', tileSize: 256, minzoom: 12, maxzoom: 17, bounds, tiles: [HIRES_URL],
+  attribution: 'Street imagery: Esri World Imagery (Maxar, Earthstar Geographics)',
+});
+
+/** Warm the browser cache with the street imagery along the film's low-altitude path, a few tiles at a time, after the
+ *  first view is up, so the streets arrive sharp instead of sharpening in front of the viewer. Same URLs MapLibre asks
+ *  for. Returns the number of tiles queued. */
+export function prefetchHires(points: [number, number][], zooms: number[], signal: AbortSignal) {
+  const keys = new Set<string>();
+  for (const [lng, lat] of points) for (const z of zooms) {
+    const n = 2 ** z, x = Math.floor(((lng + 180) / 360) * n);
+    const y = Math.floor(((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) keys.add(`${z}/${y + dy}/${x + dx}`);
+  }
+  const queue = [...keys];
+  const next = async (): Promise<void> => {
+    const k = queue.shift();
+    if (!k || signal.aborted) return;
+    const [z, y, x] = k.split('/');
+    try { await fetch(HIRES_URL.replace('{z}', z).replace('{y}', y).replace('{x}', x), { signal, mode: 'cors' }); } catch { /* best effort */ }
+    return next();
+  };
+  for (let i = 0; i < 4; i++) void next();
+  return keys.size;
+}

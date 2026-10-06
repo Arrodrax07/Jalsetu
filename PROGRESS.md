@@ -90,6 +90,66 @@ Last updated: 2026-10-03.
 - Driver app (`src/driver/`): real Geolocation watch + heartbeat, offline buffered uploader (localStorage), wake lock, ACCEPT / START / ARRIVED (server-gated) / DELIVERY (receiver, signature, photo) / END.
 - Leaflet removed.
 
+## 2026-10-06 (later): daylight landing + satellite opening (uncommitted until the user says)
+User asked: the opening globe felt too dark -> light theme; then build the satellite opening discussed earlier.
+- Light theme for the whole real-Earth film: pale page/sky around the globe, MapLibre sky/horizon pale at low zoom,
+  `earth-mode.css` no longer turns the paper design dark; light scrims behind type on chapters 02, 08, 10. From orbit
+  the map light comes from behind the viewer (no night limb); below zoom 4.2 the late-morning SE sun returns.
+- `earth/orbit.ts` (new, three.js canvas over the map):
+  - Sentinel-2A/2B/2C on their REAL orbits: `public/landing/satellites.json` from CelesTrak mean elements
+    (`backend/scripts/export_landing_satellites.py`; re-run before the demo), propagated as circular orbits + J2 drift,
+    Earth turning (GMST). Camera = the map's own (target/range/bearing/pitch/roll/padding shift), invisible Earth
+    sphere for occlusion. Each satellite trails its 290 km MSI swath, only where the sun is up. Time-lapse x60
+    (x1 with reduced motion). Pale atmosphere veil + halo around the globe. Labelled on the page.
+  - Close-up Sentinel-2 (own simplified model: foil bus, MSI with round baffle/lens, star trackers, X-band dish,
+    3-panel wing that unfolds on load, idle drift). Scroll 0 -> 0.05: camera flies into the lens (baffle frames the
+    lens at ~0.036), iris opens onto the sensor view.
+  - Sensor view (p 0.04-0.1, DOM in OpenEarth): frame brackets, crosshair, pushbroom scan line along the ground
+    track, typed readout with the real current orbit number, "archive mosaic, not a live pass".
+- `journey.ts`: keys 0 / 0.024 (hold) / 0.042 (nadir over Maharashtra, 1,500 km) / 0.09, then the old 0.125 dive.
+- Checked (Playwright, dev + prod build): 1440x900 opening frames, every later chapter, 390x844, reduced motion,
+  no page errors. Perf headless: scroll through the opening median 17.7 ms vs 12.3 ms with `?debug=nosat`;
+  >50 ms hitches are first-visit tile decode with or without satellites. Dev aid: `?debug=nosat`.
+
+## 2026-10-06 (later still): real aerial photos at street level (uncommitted until the user says)
+User: the streets along the tanker's path looked fake/AI. Cause: Sentinel-2 is 10 m/px (mush up close) and the OSM
+buildings were plain extruded boxes. Fix:
+- New source `hires` (tiles.ts): Esri World Imagery (Maxar, Earthstar Geographics), ~1 m/px at z17, ONLY inside a box
+  around the street areas (last 9 km of the road into Beed, Beed, Parbhani; minzoom 12 so it loads only when the
+  camera is that low). Fades in over Sentinel-2 between z12.4 and z13.4. Drawn water/roads fade out where the photo
+  shows the real thing. maxzoom 17 (z18 exists but was not ready in time while flying; z17 is prefetched).
+- Proprietary: never packed into the tile pack. `VITE_ESRI_KEY` (free ArcGIS Location Platform key) switches to the
+  keyed basemap service; without it, Esri's public tile server (testing). See frontend/.env.example. Credits on page.
+- After the first view, ~270 tiles along the street path are prefetched into the browser cache (4 at a time,
+  z14-17 high quality, z14-16 low). `?debug=noprefetch`.
+- Once street photos arrive, the OSM building boxes are hidden (the photo shows the real roofs); if Esri is
+  unreachable they stay (tested with Esri blocked: no errors, old look).
+- Checked on the prod build at visitor scroll speed: the streets arrive sharp; ground card text updated.
+Before the presentation: get the free ArcGIS key and put it in frontend/.env as VITE_ESRI_KEY, then rebuild.
+
+## 2026-10-06 (night): smoothness pass + full audit (uncommitted until the user says)
+Smoothness (landing film), measured with a scripted wheel scroll through the whole film on the prod build:
+- Story clock spring softer (K 90 -> 55, VMAX 0.32 -> 0.3): glides between wheel notches, settles in ~0.5 s.
+- Shader warm-up while the Earth is still invisible: every hidden layer is drawn once at near-zero opacity over the
+  globe, then once from Beed's streets (flat projection + terrain + text programs only exist near the ground; waits
+  for the street tiles, max 1.8 s, 4 s safety). Removed 300-800 ms stalls; first reveal ~2 s later on a cold visit.
+  Clouds (1-px draw), tanker and satellites (renderer.compile) also pre-compiled. `?debug=nowarm`.
+- 3D terrain only where it is seen (terrainAt: p 0.466-0.70 and >= 0.928, switched while the camera holds): -40% frame
+  time across the middle chapters. `?debug=noterrain`, `nohires`.
+- OSM building boxes off by default (street photos show the roofs); on only if Esri imagery fails.
+- Result: ~12 ms/frame through most of the film, descent to Beed p95 54 -> ~18-48 ms, worst 825 -> ~170 ms.
+Audit (QA copy of the DB on :8010 + prod build on :5180; never the live DB):
+- Backend 85/85 tests (new tests/test_fleet_view.py), ML 9/9, frontend tsc -b + oxlint 0 errors, build OK.
+- 55 GET routes x 5 roles: 0 server errors, auth/permissions correct. 29 staff write actions all correct.
+- Browser E2E: 15 staff pages x desktop/phone, dispatcher, admin, driver, citizen x4 pages: no page errors, no
+  horizontal overflow. Citizen request + complaint + tracking; 6 CSV reports; full trip with emulated phone GPS
+  (accept -> start -> geofence arrival -> signature + photo delivery -> end -> verify -> Completed); offline outbox;
+  Marathi/Hindi complete; dark theme; command palette.
+- Fixed: Fleet "Capacity" column was empty (vehicle_view lacked capacity/depot). nginx: gzip + security headers.
+- Known/open: maplibre-gl 5.x has a critical XSS advisory (sanitizer bypass, fix only in 6.x major; this app passes
+  no user HTML to it) -> upgrade after the demo. Docker daemon not running here: compose stack not built/tested.
+  Unknown URLs show the landing page (no 404 page). Esri key still to obtain. dist = 132 MB (tile pack).
+
 ## Next session (planned by the user, 2026-10-06)
 1. A few UI changes (user will specify).
 2. Final full check of the whole product ("final boss check") before the presentation.

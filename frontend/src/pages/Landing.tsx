@@ -159,7 +159,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
   useEffect(() => {
     const prev = [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background];
     document.documentElement.style.overflowY = 'auto'; document.body.style.overflowY = 'visible';
-    document.documentElement.style.background = earth ? '#03070c' : '#eaf1f3';
+    document.documentElement.style.background = '#eaf1f3';
     clock.reduce = reduce;
     return () => { [document.documentElement.style.overflowY, document.body.style.overflowY, document.documentElement.style.background] = prev; };
   }, [reduce, earth]);
@@ -269,10 +269,10 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
   return (
     <EnterContext.Provider value={onEnter}>
-      <div className={cx('landing relative antialiased selection:bg-[#0a7f99]/20', earth ? 'earth-mode bg-[#03070c] text-[#f2f6f7]' : 'bg-[#eaf1f3] text-[#13222b]')}>
+      <div className={cx('landing relative antialiased selection:bg-[#0a7f99]/20', earth ? 'earth-mode bg-[#eaf1f3] text-[#13222b]' : 'bg-[#eaf1f3] text-[#13222b]')}>
         {/* ------------------------------------------------ stage (fixed) */}
         <div ref={stage} className="fixed inset-0 overflow-hidden [perspective:1400px]" aria-hidden>
-          <div className={cx('absolute inset-0', earth ? 'bg-[#03070c]' : 'bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]')} />
+          <div className={cx('absolute inset-0', earth ? 'bg-[radial-gradient(90%_75%_at_70%_48%,#ffffff_0%,#f3f7f9_34%,#e2ecf0_72%,#d5e2e8_100%)]' : 'bg-[radial-gradient(120%_80%_at_70%_0%,#ffffff_0%,#eef4f6_38%,#dde8ec_100%)]')} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-end overflow-hidden pr-[3vw]">
             <span ref={numeral} className="select-none font-display text-[46vw] font-semibold leading-none tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgba(19,34,43,0.07)] will-change-transform md:text-[34vw]">01</span>
           </div>
@@ -296,9 +296,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           {/* vignette and horizon haze keep type readable over the world */}
           {earth ? (
             <div ref={haze} data-earth="1" className="pointer-events-none absolute inset-0">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,transparent_55%,rgba(3,7,12,0.55)_100%)]" />
-              <div className="absolute inset-x-0 bottom-0 h-[28vh] bg-gradient-to-t from-[#03070c]/70 to-transparent" />
-              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#03070c]/60 to-transparent" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,transparent_66%,rgba(226,236,240,0.32)_100%)]" />
+              <div className="absolute inset-x-0 bottom-0 h-[22vh] bg-gradient-to-t from-[#eaf1f3]/60 to-transparent" />
+              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#f3f7f8]/85 to-transparent" />
             </div>
           ) : (
             <div ref={haze} className="pointer-events-none absolute inset-0">
@@ -311,11 +311,14 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
 
           {/* readability scrims for the chapters that sit over a busy scene */}
           <Layer ch={0} a={0} b={1} depth={0} first className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/90 from-25% via-[#eef4f6]/50 via-50% to-transparent to-75% md:w-[62vw] md:bg-gradient-to-r md:from-[#eef4f6]/95 md:from-0% md:via-[#eef4f6]/60 md:via-55% md:to-transparent md:to-100%" />
+          <Layer ch={1} a={0} b={1} depth={0} className="inset-x-0 top-0 h-[62vh] bg-gradient-to-b from-[#eef4f6]/90 from-20% via-[#eef4f6]/50 via-55% to-transparent" />
+          <Layer ch={7} a={0} b={1} depth={0} className="inset-x-0 top-0 h-[40vh] bg-gradient-to-b from-[#eef4f6]/85 from-25% via-[#eef4f6]/40 via-60% to-transparent" />
+          <Layer ch={9} a={0} b={1} depth={0} className="inset-x-0 top-0 h-[55vh] bg-gradient-to-b from-[#eef4f6]/88 from-20% via-[#eef4f6]/45 via-55% to-transparent" />
           {[3, 4, 6].map(ch => <Layer key={ch} ch={ch} a={0} b={1} depth={0} className="inset-y-0 left-0 w-full bg-gradient-to-b from-[#eef4f6]/95 from-30% via-[#eef4f6]/60 via-50% to-transparent to-70% md:w-[46vw] md:bg-gradient-to-r md:from-[#eef4f6]/92 md:from-0% md:via-[#eef4f6]/55 md:via-50% md:to-transparent md:to-100%" />)}
           <Layer ch={8} a={0} b={1} depth={0} className="inset-0 bg-[#eef4f6]/78" />
 
           {/* Chapter 1: scale */}
-          <Layer ch={0} a={0} b={0.62} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">
+          <Layer ch={0} a={0} b={0.32} first className="inset-x-5 top-[24vh] md:left-[8vw] md:right-auto md:top-[28vh]">
             <Eyebrow className="mb-6">Maharashtra · {s ? `${num(s.places)} towns and villages` : 'loading the country'}</Eyebrow>
             <h1 className={cx(H, 'text-[13vw] leading-[0.9] md:text-[5.6vw]')}>Water moves.<br /><span className="text-[#0a7f99]">So should intelligence.</span></h1>
           </Layer>
@@ -352,7 +355,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <p className={cx(H, 'text-[7vw] leading-tight md:text-[2.8vw]')}>One picture of need. One plan for every tanker.</p>
             <p className="mx-auto mt-3 max-w-[56ch] text-[14px] text-[#4d626b] md:text-[16px]">Priority from live crisis signals, vulnerability, unmet need and distance to water, with the reasons shown.</p>
             <div className="mt-4 flex justify-center">{earth
-              ? <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8fd3e3]">Lines: every critical place to its nearest depot · the planner’s first step</span>
+              ? <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#2d6c7f]">Lines: every critical place to its nearest depot · the planner’s first step</span>
               : <Illustration>supply arcs</Illustration>}</div>
           </Layer>
 
@@ -387,7 +390,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             <p className={cx(H, 'text-[10vw] leading-[0.95] md:text-[4.2vw]')}>Every tanker,<br />on real GPS.</p>
             <p className="mt-4 text-[14px] leading-relaxed text-[#4d626b] md:text-[15px]">The driver’s phone is the tracker. Start needs a fresh fix, arrival is detected by geofence, delivery is signed and photographed, and an officer verifies it.</p>
             <div className="mt-4 space-y-2">{earth && focus?.depotName && (
-              <p className="font-mono text-[11px] leading-relaxed text-[#8fd3e3]">Real road · {focus.routeKm} km on OpenStreetMap (OSRM) from {focus.depotName}, the depot nearest {focus.focusName}</p>
+              <p className="font-mono text-[11px] leading-relaxed text-[#2d6c7f]">Real road · {focus.routeKm} km on OpenStreetMap (OSRM) from {focus.depotName}, the depot nearest {focus.focusName}</p>
             )}<Illustration>{earth ? 'the tanker’s run, not live telemetry' : 'the tracking workflow, not live telemetry'}</Illustration></div>
           </Layer>
           <div ref={el => { anchors.current.truck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
@@ -404,7 +407,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           <Layer ch={5} a={0.5} b={0.82} depth={0.4} className="bottom-[12vh] left-5 max-w-[88vw] md:left-[6vw] md:max-w-[30vw]">
             <div className="rounded-xl bg-white/80 p-4 shadow-[0_30px_60px_-30px_rgba(19,34,43,0.55)] backdrop-blur-md">
               <p className={cx(H, 'text-[6.5vw] leading-[1] md:text-[2.2vw]')}>Beed, from orbit<br /><span className="text-[#0a7f99]">to its streets.</span></p>
-              <p className="mt-2 text-[13px] leading-relaxed text-[#3f525b]">Real terrain, satellite imagery and OpenStreetMap buildings. Drag to look around.</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#3f525b]">{earth ? 'Real aerial photos of Beed (Esri World Imagery) on real terrain.' : 'Real terrain, satellite imagery and OpenStreetMap buildings.'} Drag to look around.</p>
             </div>
           </Layer>
           <div ref={el => { anchors.current.gtruck = el; }} className="pointer-events-none absolute left-0 top-0 opacity-0" style={{ visibility: 'hidden' }}>
@@ -466,7 +469,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
           <Layer ch={9} a={0} b={1} className="inset-x-5 top-[14vh] text-center md:top-[16vh]">
             <p className={cx(H, 'text-[9vw] leading-[0.95] md:text-[5vw]')}>From water movement<br /><span className="text-[#0a7f99]">to intelligent response.</span></p>
             {earth && focus?.nextName && (
-              <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[#8fd3e3]">
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[#2d6c7f]">
                 Next on the planner’s list · {focus.nextName}{focus.nextDistrict && plain(focus.nextDistrict) !== plain(focus.nextName) ? `, ${districtName(focus.nextDistrict)}` : ''} · crisis {focus.nextCrisis}/100
                 {focus.asOf ? <span className="text-[#9fb3bb]"> · as of {new Date(focus.asOf).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span> : null}
               </p>
@@ -494,9 +497,9 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
               {String(chapter + 1).padStart(2, '0')} / {String(CHAPTERS.length).padStart(2, '0')} · {CHAPTERS[chapter].label}
             </p>
             <nav aria-label="Primary" className="flex items-center gap-1 md:gap-5">
-              <a href="/request" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] sm:inline">Request water</a>
-              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] lg:inline">Report a problem</a>
-              <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] md:inline">Water schedule</a>
+              <a href="/request" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] sm:inline">Request water</a>
+              <a href="/report" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] lg:inline">Report a problem</a>
+              <a href="/water" className="hidden rounded px-2 py-1 text-[13px] text-[#3f525b] hover:text-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0a7f99] md:inline">Water schedule</a>
               <EnterLink className="group flex items-center gap-1.5 rounded-full border border-[#0a7f99]/50 px-3.5 py-1.5 text-[13px] font-medium text-[#13222b] transition-colors hover:bg-[#0a7f99] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0a7f99]">
                 Control room <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
               </EnterLink>
@@ -541,9 +544,7 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
             {/* final chapter: real, focusable content that arrives with the end of the journey */}
             <section id="return" aria-labelledby="return-title" className="absolute inset-x-0 bottom-0 flex h-[100svh] flex-col items-center justify-end px-5 pb-[10vh] text-center [&_a]:pointer-events-auto [&_button]:pointer-events-auto">
               <h2 id="return-title" className="sr-only">From water movement to intelligent response</h2>
-              <div aria-hidden className={cx('pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[75%]', earth
-                ? 'bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(3,7,12,0.72)_0%,rgba(3,7,12,0.45)_45%,transparent_75%)]'
-                : 'bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(238,244,246,0.94)_0%,rgba(238,244,246,0.7)_45%,transparent_75%)]')} />
+              <div aria-hidden className={cx('pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[75%]', 'bg-[radial-gradient(ellipse_60%_55%_at_50%_70%,rgba(238,244,246,0.94)_0%,rgba(238,244,246,0.7)_45%,transparent_75%)]')} />
               <div className="pointer-events-none [perspective:1200px]"><Wordmark3D text="JalSetu" className={cx(H, 'text-[20vw] leading-none md:text-[10vw]')} /></div>
               <p className="mt-3 font-mono text-[12px] uppercase tracking-[0.32em] text-[#2d6c7f] md:text-[13px]">Connect · Coordinate · Respond</p>
               <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
@@ -553,14 +554,14 @@ export const Landing: React.FC<{ onEnter?: () => void }> = ({ onEnter }) => {
                 <a href="/request" className="inline-flex items-center gap-1.5 rounded-full border border-[#9fb3bb] px-5 py-3 text-[14px] text-[#23343d] transition-colors hover:border-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   Ask for a water tanker <ArrowUpRight className="h-4 w-4" />
                 </a>
-                <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#4d626b] transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
+                <a href="/water" className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[14px] text-[#4d626b] transition-colors hover:text-[#0a7f99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0a7f99]">
                   When is water coming? <ArrowUpRight className="h-4 w-4" />
                 </a>
               </div>
               <p className="mt-10 max-w-[70ch] text-[11px] leading-relaxed text-[#6a7f88]">
                 Live figures from the JalSetu database{at ? ` at ${at} IST` : ''}. Places: OpenStreetMap with Census 2011 populations. Rainfall: Open-Meteo ERA5.
                 Outlines: geoBoundaries (CC BY 2.5 IN / ODbL). Imagery: {earth ? '' : 'NASA Blue Marble via GIBS; '}Sentinel-2 cloudless 2016 by EOX IT Services (contains modified Copernicus Sentinel data, CC BY 4.0). Elevation: Mapzen terrain tiles (SRTM). {earth
-                  ? 'The film is an open 3D Earth (MapLibre globe) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap roads and buildings (OpenFreeMap). The road from the depot to Beed is an OSRM route on OpenStreetMap. The tanker’s run is an illustration; clouds are atmosphere.'
+                  ? 'The film is an open 3D Earth (MapLibre globe) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap roads and buildings (OpenFreeMap); at street level in Beed and Parbhani, aerial imagery from Esri World Imagery (Maxar, Earthstar Geographics). Satellite orbits: CelesTrak; the Sentinel-2 close-up is a simplified model. The road from the depot to Beed is an OSRM route on OpenStreetMap. The tanker’s run is an illustration; clouds are atmosphere.'
                   : 'The descent to Beed is an open 3D Earth (MapLibre) with Sentinel-2 imagery, Terrarium elevation and OpenStreetMap buildings. Supply arcs, the tanker run and national arcs are illustrations; clouds and haze are atmosphere.'}
               </p>
             </section>

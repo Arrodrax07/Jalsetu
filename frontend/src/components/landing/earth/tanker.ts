@@ -50,6 +50,7 @@ export function tankerLayer(map: MLMap, state: () => TankerState): CustomLayerIn
     onAdd(_m, gl) {
       renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl as WebGL2RenderingContext, antialias: true });
       renderer.autoClear = false;
+      renderer.compile(scene, camera); // compile now, not when the tanker first comes into view
     },
     render(_gl, args: CustomRenderMethodInput) {
       const s = state();

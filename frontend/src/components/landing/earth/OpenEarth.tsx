@@ -20,8 +20,9 @@ import type { Anchors, Quality } from '../World';
 import { CloudDeck, cameraBasis } from './clouds';
 import { blank, buildKeys, sceneAt, shotAt, tankerAt, turnRate, type JourneyData, type Scene } from './journey';
 import { FOV, Path, clamp, enu, haversine, rangeToZoom, type LngLat } from './math';
-import { GLYPHS, SOURCES, addPackProtocol } from './tiles';
+import { GLYPHS, SOURCES, addPackProtocol, hiresSource, prefetchHires } from './tiles';
 import { tankerLayer, type TankerState } from './tanker';
+import { OrbitLayer, type GlobeView, type SatFile } from './orbit';
 
 export interface EarthInfo {
   focusName: string | null; focusDistrict: string | null; focusCrisis: number; focusPop: number;
@@ -41,8 +42,21 @@ const wordHalf = (portrait: boolean): [number, number] => (portrait ? [1.15, 0.2
 /** Street hold: the visitor may look around. */
 const HOLD: [number, number] = [0.598, 0.632];
 const SUN_AZ = 140, SUN_EL = 42; // late morning, south-east
+/** 3D terrain: exaggeration, and where in the film it is on. From orbit and region heights the relief cannot be seen
+ *  (the hillshade layer still draws it) but the terrain mesh costs ~40% of every frame; so it is on only for the
+ *  descents to the ground. Switching it stalls one frame, so the switches sit where the camera holds still: the
+ *  route shot before the dive to Beed, the regional hold after the climb out, the hold over Maharashtra before the
+ *  last dive. */
+const TERRAIN_X = 1.4;
+const terrainAt = (p: number) => (p >= 0.466 && p < 0.7) || p >= 0.928;
 /** Height of the focus place's column at crisis 100 (m), and of the district as it lifts off the map. */
 const COLUMN_M = 30000, RISE_M = 3500;
+/** Opening (page progress): scroll brings the satellite's lens to the camera, the lens opens onto the sensor's view. */
+const APPROACH_END = 0.05, IRIS: [number, number] = [0.037, 0.05];
+const SENSOR: [number, number, number, number] = [0.04, 0.05, 0.088, 0.102]; // the sensor view's frame: in, hold, out
+const SCAN: [number, number] = [0.045, 0.078]; // the pushbroom line sweeps the frame
+const fmtLat = (v: number) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'N' : 'S'}`, fmtLng = (v: number) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'E' : 'W'}`;
+const band4 = (p: number, [a, b, c, d]: [number, number, number, number]) => Math.min(clamp((p - a) / (b - a), 0, 1), 1 - clamp((p - c) / (d - c), 0, 1));
 
 type FC = GeoJSON.FeatureCollection;
 const fc = (features: GeoJSON.Feature[]): FC => ({ type: 'FeatureCollection', features });
@@ -64,8 +78,21 @@ function quadMatrix(w: number, h: number, q: [number, number][]) {
   return `matrix3d(${m.map(v => +v.toFixed(8)).join(',')})`;
 }
 
+/** The places the camera comes down to street level: the tanker's last kilometres into Beed, and Parbhani. Only here
+ *  does the film use the sharp (proprietary) street imagery. */
+function streetPoints(j: JourneyData, road: Path, step = 250): LngLat[] {
+  const pts: LngLat[] = [];
+  for (let d = Math.max(0, road.length - 9000); d <= road.length; d += step) pts.push(road.at(d));
+  pts.push([j.focus.lng, j.focus.lat], [j.next.lng, j.next.lat]);
+  return pts;
+}
+const bbox = (pts: LngLat[], pad: number): [number, number, number, number] => [
+  Math.min(...pts.map(p => p[0])) - pad, Math.min(...pts.map(p => p[1])) - pad,
+  Math.max(...pts.map(p => p[0])) + pad, Math.max(...pts.map(p => p[1])) + pad];
+
 function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality): StyleSpecification {
   const F: LngLat = [j.focus.lng, j.focus.lat], N: LngLat = [j.next.lng, j.next.lat];
+  const street = streetPoints(j, new Path(j.route.lngLat), 600);
   const deficit = new Map(s.rainfall.map(r => [plain(r.district), r.deviation]));
   const focusKey = plain(j.focus.district ?? '');
   const district = geo.districts.find(d => d.key === focusKey);
@@ -88,6 +115,9 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
     glyphs: GLYPHS,
     sources: {
       ...SOURCES,
+      // two separate street areas (Beed and Parbhani) would each need a source; one box over both requests nothing extra,
+      // because tiles load only where the camera is below zoom 12 (and the camera is only that low at these places)
+      hires: hiresSource(bbox(street, 0.16)),
       demShade: { ...SOURCES.dem } as typeof SOURCES.dem,
       places: { type: 'geojson', data: fc(s.points.map(([lng, lat, crisis, pop]) => ({ type: 'Feature', properties: { crisis, pop }, geometry: { type: 'Point', coordinates: [lng, lat] } }) as GeoJSON.Feature)) },
       depots: { type: 'geojson', data: fc(j.depots.map(d => ({ type: 'Feature', properties: { name: d.name }, geometry: { type: 'Point', coordinates: [d.lng, d.lat] } }) as GeoJSON.Feature)) },
@@ -100,19 +130,22 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
       route: { type: 'geojson', lineMetrics: true, data: fc([{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: j.route.lngLat } }]) },
     },
     sky: {
-      // deep space above the atmosphere, daylight sky once the camera is low
-      'sky-color': ['interpolate', ['linear'], ['zoom'], 3, '#03070c', 6, '#0d2238', 9, '#5f8fbb', 12, '#8ab4d6'],
-      'horizon-color': ['interpolate', ['linear'], ['zoom'], 3, '#2a5b85', 8, '#bcd3e2', 12, '#e5edf1'],
+      // daylight edition: a pale sky around the globe (the page's paper), a deeper day sky once the camera is low
+      'sky-color': ['interpolate', ['linear'], ['zoom'], 3, '#eef4f7', 6, '#cfe0ea', 9, '#8db6d4', 12, '#a9c8df'],
+      'horizon-color': ['interpolate', ['linear'], ['zoom'], 3, '#ffffff', 8, '#dbe8ef', 12, '#eef3f5'],
       'fog-color': ['interpolate', ['linear'], ['zoom'], 5, '#b5c8d4', 12, '#dfe7ea'],
       'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.8,
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 4.5, 1, 7, 0],
     },
-    terrain: { source: 'dem', exaggeration: 1.4 },
+    terrain: { source: 'dem', exaggeration: TERRAIN_X },
     layers: [
-      { id: 'space', type: 'background', paint: { 'background-color': '#03070c' } },
+      { id: 'space', type: 'background', paint: { 'background-color': '#c9dae2' } },
       { id: 'imagery', type: 'raster', source: 's2', paint: { 'raster-saturation': 0.06, 'raster-contrast': 0.1, 'raster-fade-duration': 300 } },
+      // street imagery: real roofs, trees, cars; it takes over from Sentinel-2 as the camera comes down
+      { id: 'imagery-hi', type: 'raster', source: 'hires', minzoom: 12, paint: {
+        'raster-opacity': ['interpolate', ['linear'], ['zoom'], 12.4, 0, 13.4, 1], 'raster-fade-duration': 250, 'raster-contrast': 0.04 } },
       { id: 'relief', type: 'hillshade', source: 'demShade', maxzoom: 12, paint: { 'hillshade-exaggeration': 0.32, 'hillshade-shadow-color': '#2a2016', 'hillshade-highlight-color': '#fff8ec', 'hillshade-illumination-direction': 315 } },
-      { id: 'water', type: 'fill', source: 'osm', 'source-layer': 'water', minzoom: 10, paint: { 'fill-color': '#3f6f84', 'fill-opacity': 0.4 } },
+      { id: 'water', type: 'fill', source: 'osm', 'source-layer': 'water', minzoom: 10, paint: { 'fill-color': '#3f6f84', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 12.5, 0.4, 13.4, 0] } },
       { id: 'deficit', type: 'fill', source: 'districts', paint: {
         'fill-color': ['interpolate', ['linear'], ['get', 'deviation'], -60, '#b8411a', -35, '#d9772c', -15, '#e9b45c', 0, 'rgba(0,0,0,0)'],
         'fill-opacity': 0, 'fill-opacity-transition': { duration: 0 } } },
@@ -122,7 +155,7 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
         filter: ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service'], true, false],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary'], '#6d6860', '#8f8170'],
-          'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13.5, 0.4, 16, 0.6],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12.8, 0.35, 14.2, 0],
           'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 15, 2.2, 18, 14], 'line-blur': 0.6 } },
       { id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#7fe3f5', 'line-opacity': 0, 'line-blur': ['interpolate', ['linear'], ['zoom'], 7, 6, 15, 3],
@@ -135,7 +168,9 @@ function style(geo: GeoFile, s: PublicSummary, j: JourneyData, quality: Quality)
         paint: { 'line-color': '#9be7f6', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.7, 8, 1.4], 'line-opacity': 0 } },
       { id: 'rise', type: 'fill-extrusion', source: 'focusDistrict', paint: {
         'fill-extrusion-color': '#f0b25a', 'fill-extrusion-opacity': 0.0, 'fill-extrusion-height': 0, 'fill-extrusion-base': 0, 'fill-extrusion-vertical-gradient': true } },
-      { id: 'buildings', type: 'fill-extrusion', source: 'osm', 'source-layer': 'building', minzoom: lowDetail ? 14.5 : 13.5,
+      // OSM buildings: off while the street photos show the real roofs (and spare every frame their geometry); they come
+      // on only if the street imagery cannot be reached, so the street is never empty
+      { id: 'buildings', type: 'fill-extrusion', source: 'osm', 'source-layer': 'building', minzoom: lowDetail ? 14.5 : 13.5, layout: { visibility: 'none' },
         paint: {
           'fill-extrusion-color': ['match', ['%', ['to-number', ['coalesce', ['get', 'render_height'], 0]], 7],
             0, '#d8cbb6', 1, '#e6ddcf', 2, '#c9b597', 3, '#ddd3c3', 4, '#bfae96', 5, '#e9e2d6', '#cfc2ad'],
@@ -180,13 +215,16 @@ const drawTo = (prog: number, color: string): ExpressionSpecification =>
 export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, reduce, anchors, onReady, onFail }) => {
   const wrap = useRef<HTMLDivElement>(null), mapEl = useRef<HTMLDivElement>(null);
   const cloudEl = useRef<HTMLCanvasElement>(null), svgEl = useRef<SVGSVGElement>(null), wordEl = useRef<HTMLDivElement>(null);
+  const orbitEl = useRef<HTMLCanvasElement>(null), satLabelsEl = useRef<HTMLDivElement>(null), heroLabelEl = useRef<HTMLDivElement>(null);
+  const hudEl = useRef<HTMLDivElement>(null), scanEl = useRef<HTMLDivElement>(null), teleEl = useRef<HTMLPreElement>(null), noteEl = useRef<HTMLParagraphElement>(null);
   const cb = useRef({ onReady, onFail }); cb.current = { onReady, onFail };
 
   useEffect(() => {
-    const box = wrap.current, mapBox = mapEl.current, cloudCanvas = cloudEl.current, svg = svgEl.current;
+    const box = wrap.current, mapBox = mapEl.current, cloudCanvas = cloudEl.current, svg = svgEl.current, satBox = satLabelsEl.current;
     if (!box || !mapBox || !cloudCanvas || !svg) return;
-    let disposed = false, map: MLMap | null = null, raf = 0, deck: CloudDeck | null = null;
+    let disposed = false, map: MLMap | null = null, raf = 0, deck: CloudDeck | null = null, orbit: OrbitLayer | null = null;
     let timer = 0, imageryTimer = 0, cleanupExtra = () => {};
+    const prefetch = new AbortController();
     const fail = (why: string) => {
       if (disposed || earthState.mode === 'failed') return;
       earthState.mode = 'failed'; earthState.ready = false;
@@ -195,9 +233,11 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
     };
 
     (async () => {
+      const satReq = fetch('/landing/satellites.json').then(x => (x.ok ? (x.json() as Promise<SatFile>) : null)).catch(() => null);
       const r = await fetch('/landing/journey.json');
       if (!r.ok) throw new Error(`journey.json ${r.status}`);
       const j = (await r.json()) as JourneyData;
+      const sats = await satReq;
       if (disposed) return;
       const road = new Path(j.route.lngLat);
       const F: LngLat = [j.focus.lng, j.focus.lat], N: LngLat = [j.next.lng, j.next.lat];
@@ -214,14 +254,39 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         });
       } catch (e) { fail(`map: ${e}`); return; }
       const m = map;
-      // dev aid: ?debug=noclouds,nohill,nobuild,notank,nopaint switch parts off to measure their cost
+      // dev aid: ?debug=noclouds,nohill,nobuild,notank,nopaint,nohires,noterrain,nowarm switch parts off to measure their cost
       const dbg = new URLSearchParams(window.location.search).get('debug') ?? '';
       try { if (!dbg.includes('noclouds')) deck = new CloudDeck(cloudCanvas, quality); } catch (e) { console.warn('cloud deck off:', e); }
+      // the satellites (constellation on real orbits + the close-up); the film works without them
+      const orbitCanvas = orbitEl.current, satLabels = satBox;
+      try { if (orbitCanvas && !dbg.includes('nosat')) orbit = new OrbitLayer(orbitCanvas, sats, { quality, reduce }); } catch (e) { console.warn('satellites off:', e); }
+      const satTags = (orbit ? sats?.satellites ?? [] : []).map(sat => {
+        const el = document.createElement('div');
+        el.className = 'absolute left-0 top-0 whitespace-nowrap rounded-full bg-white/85 px-2 py-0.5 font-mono text-[10px] tracking-[0.08em] text-[#13222b] shadow-[0_6px_16px_-8px_rgba(19,34,43,0.5)] backdrop-blur-sm';
+        el.style.visibility = 'hidden';
+        el.textContent = sat.name;
+        satLabels?.appendChild(el);
+        return el;
+      });
+      if (noteEl.current && sats && orbit) {
+        const d = new Date(sats.generatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        noteEl.current.textContent = `Sentinel-2A, 2B and 2C on their real orbits (CelesTrak elements, ${d}), time-lapse ×${orbit.timeLapse}. The bright strip is the 290 km swath each one images in daylight. Close-up: simplified model, not to scale.`;
+      }
       timer = window.setTimeout(() => { if (!earthState.ready) fail('the first view did not load within 20 s'); }, 20000);
       // imagery that never arrives (offline with no tile pack, provider down) hands the film to the fallback world
       let s2ok = 0, s2err = 0;
-      m.on('sourcedata', ev => { if (ev.sourceId === 's2' && ev.tile) s2ok++; });
+      // street imagery: if it cannot be reached (and none has arrived), the OSM buildings come on instead
+      let hiOk = 0, hiErr = 0;
+      m.on('sourcedata', ev => {
+        if (ev.sourceId === 's2' && ev.tile) s2ok++;
+        if (ev.sourceId === 'hires' && ev.tile) hiOk++;
+      });
       m.on('error', ev => {
+        const hi = (ev as unknown as { sourceId?: string }).sourceId === 'hires' || String(ev.error?.message ?? '').includes('World_Imagery');
+        if (hi) {
+          if (++hiErr === 3 && hiOk === 0 && m.getLayer('buildings')) { console.warn('street imagery unavailable, showing OSM buildings:', ev.error?.message); m.setLayoutProperty('buildings', 'visibility', 'visible'); }
+          return;
+        }
         if (++s2err <= 3) console.warn('Open Earth:', ev.error?.message);
       });
       // not one imagery tile after 12 s: the provider (or the network, with no tile pack) is gone
@@ -234,14 +299,65 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         if (!dbg.includes('notank')) m.addLayer(tankerLayer(m, () => tank), 'column');
         if (dbg.includes('nohill')) m.removeLayer('relief');
         if (dbg.includes('nobuild')) m.removeLayer('buildings');
-        m.setLight({ anchor: 'map', position: [1.4, SUN_AZ, 90 - SUN_EL], color: '#fff3df', intensity: 0.45 });
+        if (dbg.includes('nohires')) m.removeLayer('imagery-hi');
+        if (dbg.includes('noterrain')) m.setTerrain(null);
         mapBox.querySelectorAll('.maplibregl-ctrl-attrib.maplibregl-compact-show').forEach(n => n.classList.remove('maplibregl-compact-show'));
-        earthState.ready = true; earthState.mode = 'ready'; earthState.opacity = 1;
-        box.style.opacity = '1';
-        cb.current.onReady?.({ focusName: j.focus.name, focusDistrict: j.focus.district, focusCrisis: j.focus.crisis, focusPop: j.focus.population,
-          depotName: j.depot.name, routeKm: j.route.km, nextName: j.next.name, nextCrisis: j.next.crisis, nextDistrict: j.next.district, asOf: j.generatedAt });
+        warmUp(() => {
+          earthState.ready = true; earthState.mode = 'ready'; earthState.opacity = 1;
+          if (!dbg.includes('noprefetch')) prefetchHires(streetPoints(j, road), quality === 'high' ? [14, 15, 16, 17] : [14, 15, 16], prefetch.signal);
+          box.style.opacity = '1';
+          cb.current.onReady?.({ focusName: j.focus.name, focusDistrict: j.focus.district, focusCrisis: j.focus.crisis, focusPop: j.focus.population,
+            depotName: j.depot.name, routeKm: j.route.km, nextName: j.next.name, nextCrisis: j.next.crisis, nextDistrict: j.next.district, asOf: j.generatedAt });
+        });
       });
       if (new URLSearchParams(window.location.search).get('debug')?.includes('expose')) Object.assign(window, { __earth: m, __clock: clock });
+
+      // ---- shader warm-up, while the Earth is still invisible. Chrome on Windows compiles each GPU program the first time
+      // it draws, which stalls a frame by 50-600 ms; the film would hit that mid-scroll. So: every layer that starts hidden
+      // is drawn once at near-zero opacity over the globe, then once more from Beed's streets (the flat street
+      // projection, terrain and the text programs exist only near the ground), then the film takes over.
+      let warmed = dbg.includes('nowarm');
+      const warmUp = (done: () => void) => {
+        if (warmed) { done(); return; }
+        const W0 = 0.003;
+        const g = (c: string) => drawTo(0.5, c);
+        const set: [string, string, unknown][] = [
+          ['places', 'circle-opacity', W0], ['places-low', 'circle-opacity', W0], ['places-halo', 'circle-opacity', W0],
+          ['places', 'circle-stroke-opacity', W0], ['depots', 'circle-opacity', W0], ['depots', 'circle-stroke-opacity', W0],
+          ['deficit', 'fill-opacity', W0], ['district-lines', 'line-opacity', W0],
+          ['links', 'line-opacity', W0], ['links', 'line-gradient', g('#9be7f6')],
+          ['route', 'line-opacity', W0], ['route', 'line-gradient', g('#e9fbff')], ['route-glow', 'line-opacity', W0], ['route-glow', 'line-gradient', g('#7fe3f5')],
+          ['rise', 'fill-extrusion-opacity', W0], ['rise', 'fill-extrusion-height', 50],
+          ['column', 'fill-extrusion-opacity', W0], ['column', 'fill-extrusion-height', 50], ['beacon', 'fill-extrusion-height', 5],
+        ];
+        for (const [layer, prop, v] of set) if (m.getLayer(layer)) m.setPaintProperty(layer, prop, v);
+        // the text program (town and road names only appear near the ground) and its glyphs
+        m.addLayer({ id: 'warm-text', type: 'symbol', source: 'places', layout: { 'text-field': 'Beed', 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true },
+          paint: { 'text-opacity': W0, 'text-halo-color': '#fff', 'text-halo-width': 1 } });
+        let finished = false;
+        const finish = () => {
+          if (disposed || finished) return;
+          finished = true; window.clearTimeout(safety);
+          if (m.getLayer('warm-text')) m.removeLayer('warm-text');
+          for (const k of Object.keys(last)) delete last[k];
+          warmed = true; lastP = -1; terrainOn = null; // the film's own camera, values and terrain go back on at the next frame
+          done();
+        };
+        // never keep the Earth hidden: if a warm-up frame does not come (a slow GPU, a lost tile), show it anyway
+        const safety = window.setTimeout(finish, 4000);
+        m.once('render', () => requestAnimationFrame(() => {
+          if (disposed) return;
+          // step two: the streets of Beed, with terrain (whatever tiles are there; drawing anything compiles the program)
+          if (!dbg.includes('noterrain')) m.setTerrain({ source: 'dem', exaggeration: TERRAIN_X });
+          m.jumpTo({ center: F, zoom: 14.6, pitch: 66, bearing: 30 });
+          // wait for the street tiles (drawing them is what compiles their programs; it also preloads Beed), at most ~1.8 s
+          const t0 = performance.now();
+          const onRender = () => { if (finished) { m.off('render', onRender); return; } if (m.areTilesLoaded() || performance.now() - t0 > 1800) { m.off('render', onRender); requestAnimationFrame(finish); } };
+          m.on('render', onRender);
+          m.triggerRepaint();
+        }));
+        m.triggerRepaint();
+      };
 
       // ---- the visitor's own look-around while the shot holds over the streets
       const user = { bearing: 0, pitch: 0 };
@@ -279,6 +395,58 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         c.setAttribute('r', '2.6'); c.setAttribute('fill', '#ff6b3d'); svg.appendChild(c); return c;
       });
       const deficitTop = summary.rainfall.slice(0, 3).map(r => geo.districts.find(d => d.key === plain(r.district))?.c ?? null);
+      let lightOrbit: boolean | null = null, terrainOn: boolean | null = null;
+      const view: GlobeView = { target: [79.6, 21.4], range: 30_000e3, bearing: 0, pitch: 0, roll: 0, shift: [0, 0] };
+      let teleShown = -1, teleTarget = '';
+      const orbitFrame = (now: number, dt: number, p: number, W: number, H: number) => {
+        if (!orbit || !orbitCanvas) return;
+        orbit.resize(W, H);
+        const globeOn = clamp((view.range - 6e6) / 5e6, 0, 1);
+        const drawn = orbit.render(view, globeOn, { approach: clamp(p / APPROACH_END, 0, 1), on: p < IRIS[1] ? 1 : 0, portrait }, now, dt);
+        orbitCanvas.style.visibility = drawn ? 'visible' : 'hidden';
+        // the lens opens like an iris onto what the sensor sees
+        const ir = clamp((p - IRIS[0]) / (IRIS[1] - IRIS[0]), 0, 1), rad = Math.pow(ir, 1.5) * Math.hypot(W, H) * 0.55;
+        const mask = ir > 0 && ir < 1 ? `radial-gradient(circle at 50% 50%, transparent ${rad.toFixed(0)}px, #000 ${(rad + 70).toFixed(0)}px)` : '';
+        if (orbitCanvas.style.maskImage !== mask) { orbitCanvas.style.maskImage = mask; orbitCanvas.style.webkitMaskImage = mask; }
+        satTags.forEach((el, i) => {
+          const pt = orbit!.satScreen[i];
+          const a = pt ? globeOn * (p < 0.5 ? 1 - clamp((p - 0.004) / 0.014, 0, 1) : 1) : 0;
+          if (!pt || a < 0.01 || pt[0] > W - 170 || pt[1] < 80) { if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden'; return; }
+          el.style.transform = `translate3d(${(pt[0] + 10).toFixed(1)}px, ${(pt[1] - 22).toFixed(1)}px, 0)`;
+          el.style.opacity = a.toFixed(3); el.style.visibility = 'visible';
+        });
+        const hl = heroLabelEl.current, hp = orbit.heroScreen;
+        const ha = hp ? 1 - clamp((p - 0.003) / 0.012, 0, 1) : 0;
+        if (hl) {
+          if (!hp || ha < 0.01) hl.style.visibility = 'hidden';
+          else { hl.style.transform = `translate3d(${hp[0].toFixed(1)}px, ${hp[1].toFixed(1)}px, 0)`; hl.style.opacity = ha.toFixed(3); hl.style.visibility = 'visible'; }
+        }
+        if (noteEl.current) noteEl.current.style.opacity = (globeOn * (p < 0.5 ? 1 - clamp((p - 0.01) / 0.016, 0, 1) : 1)).toFixed(3);
+        // the sensor's view: frame, crosshair, pushbroom line, readout typing itself
+        const hud = hudEl.current;
+        if (hud) {
+          const o = band4(p, SENSOR);
+          hud.style.opacity = o.toFixed(3); hud.style.visibility = o < 0.005 ? 'hidden' : 'visible';
+          if (o >= 0.005) {
+            const sc = clamp((p - SCAN[0]) / (SCAN[1] - SCAN[0]), 0, 1);
+            if (scanEl.current) { scanEl.current.style.transform = `translate3d(0, ${(14 + sc * 72).toFixed(2)}%, 0)`; scanEl.current.style.opacity = sc >= 1 ? '0' : '1'; }
+            const tele = teleEl.current;
+            if (tele) {
+              const rev = orbit.revolution(now);
+              const tgt = `${fmtLat(view.target[1])}  ${fmtLng(view.target[0])}`;
+              const text = [
+                'SENTINEL-2 · MULTISPECTRAL INSTRUMENT',
+                `${rev ? `ORBIT ${rev.toLocaleString('en-IN')} · ` : ''}786 KM · SUN-SYNCHRONOUS`,
+                'SWATH 290 KM · 10 M/PX · B4 B3 B2',
+                `TARGET ${tgt}`,
+                'ARCHIVE MOSAIC (S2 CLOUDLESS) · NOT A LIVE PASS',
+              ].join('\n');
+              const n = Math.round(text.length * clamp((p - 0.046) / 0.022, 0, 1));
+              if (n !== teleShown || tgt !== teleTarget) { teleShown = n; teleTarget = tgt; tele.textContent = text.slice(0, n) + (n < text.length ? '▍' : ''); }
+            }
+          }
+        }
+      };
       let roll = 0, lastP = -1, lastW = 0, lastH = 0, interactive = false, elevT = 0, elevAt: LngLat = [0, 0];
       // dynamic resolution: drop the pixel ratio a step when moving frames run slow, restore it when there is headroom
       const maxPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : 1.5);
@@ -349,7 +517,7 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         const rollTarget = reduce ? 0 : clamp(-turnRate(keys, road, p) * clock.v * 0.035, -5, 5);
         roll += (rollTarget - roll) * (1 - Math.exp(-dt * 5));
         const moving = Math.abs(p - lastP) > 1e-7 || Math.abs(roll) > 0.01 || Math.abs(user.bearing) > 0.01 || Math.abs(user.pitch) > 0.01 || drag;
-        if (!moving) return;
+        if (!moving) { orbitFrame(now, dt, p, W, H); return; }
         lastP = p;
         if (dt > 0.03) { slowFrames++; fastFrames = 0; } else if (dt < 0.012) { fastFrames++; if (fastFrames > 240) slowFrames = 0; }
         if (now - lastPRChange > 4000) {
@@ -361,10 +529,26 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         const pitch = clamp(shot.pitch + user.pitch, 0, 85), bearing = shot.bearing + user.bearing;
         // the subject makes room for the type: to the right of it on wide screens, below it on tall ones
         const padL = portrait ? 0 : shot.pad * W * 0.5, padT = portrait ? shot.pad * H * 0.5 : 0;
-        m.jumpTo({ center: shot.target, zoom: rangeToZoom(shot.range, shot.target[1], H), pitch, bearing, roll, padding: { left: padL, top: padT, right: 0, bottom: 0 } });
+        const zoom = rangeToZoom(shot.range, shot.target[1], H);
+        if (!dbg.includes('noterrain')) {
+          const want = terrainAt(p);
+          if (want !== terrainOn) { terrainOn = want; m.setTerrain(want ? { source: 'dem', exaggeration: TERRAIN_X } : null); elevAt = [0, 0]; }
+        }
+        m.jumpTo({ center: shot.target, zoom, pitch, bearing, roll, padding: { left: padL, top: padT, right: 0, bottom: 0 } });
+        // daylight edition: from orbit the sun stands behind the viewer (the whole disc lit, no night limb on the pale
+        // page); closer in it moves to late morning in the south-east so terrain and buildings get their shadows
+        const orbitLight = zoom < 4.2;
+        if (orbitLight !== lightOrbit) {
+          lightOrbit = orbitLight;
+          m.setLight(orbitLight ? { anchor: 'viewport', position: [1.4, 180, 20], color: '#ffffff', intensity: 0.3 }
+            : { anchor: 'map', position: [1.4, SUN_AZ, 90 - SUN_EL], color: '#fff3df', intensity: 0.45 });
+        }
+
+        Object.assign(view, { target: shot.target, range: shot.range, bearing, pitch, roll, shift: [padL / W, -padT / H] });
+        orbitFrame(now, dt, p, W, H);
 
         const sc = sceneAt(p);
-        if (!dbg.includes('nopaint')) applyScene(sc, p);
+        if (!dbg.includes('nopaint') && warmed) applyScene(sc, p);
 
         // tanker on the road
         const d = tankerAt(p, road);
@@ -372,7 +556,8 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
         groundState.arrived = d > road.length - 180; groundState.stopped = p > 0.6; groundState.delivering = p > 0.606;
 
         // ---- camera in local metres (for the cloud deck and for points above the ground)
-        if (haversine(elevAt, shot.target) > 30) { elevT = m.queryTerrainElevation(shot.target) ?? elevT; elevAt = shot.target; }
+        if (!terrainOn) elevT = 0; // without terrain the map's ground is at sea level
+        else if (haversine(elevAt, shot.target) > 30) { elevT = m.queryTerrainElevation(shot.target) ?? elevT; elevAt = shot.target; }
         const basis = cameraBasis(bearing, pitch, roll);
         const [tx, ty] = enu(F, shot.target);
         const eye: [number, number, number] = [tx - basis.f[0] * shot.range, ty - basis.f[1] * shot.range, elevT - basis.f[2] * shot.range];
@@ -438,9 +623,10 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
     })().catch(e => fail(String(e)));
     return () => {
       disposed = true;
-      cancelAnimationFrame(raf); window.clearTimeout(timer); window.clearTimeout(imageryTimer);
+      cancelAnimationFrame(raf); window.clearTimeout(timer); window.clearTimeout(imageryTimer); prefetch.abort();
       cleanupExtra();
-      deck?.dispose(); map?.remove();
+      deck?.dispose(); orbit?.dispose(); map?.remove();
+      if (satBox) satBox.innerHTML = '';
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       earthState.ready = false; earthState.opacity = 0; if (earthState.mode !== 'failed') earthState.mode = 'loading';
     };
@@ -453,6 +639,34 @@ export const OpenEarth: React.FC<OpenEarthProps> = ({ geo, summary, quality, red
       <div ref={mapEl} className="h-full w-full" />
       <canvas ref={cloudEl} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
       <svg ref={svgEl} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full opacity-0" />
+      {/* the satellites: constellation on its real orbits, and the close-up whose lens the film flies into */}
+      <canvas ref={orbitEl} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" style={{ visibility: 'hidden' }} />
+      <div ref={satLabelsEl} aria-hidden className="pointer-events-none absolute inset-0" />
+      <div ref={heroLabelEl} aria-hidden className="pointer-events-none absolute left-0 top-0 hidden sm:block" style={{ visibility: 'hidden' }}>
+        <div className="w-max -translate-x-[calc(100%+64px)] -translate-y-1/2 border-r border-[#0a7f99] pr-3 text-right">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#3d7486]">ESA · Copernicus</p>
+          <p className="font-display text-[20px] font-semibold leading-tight tracking-[-0.02em] text-[#13222b]">Sentinel-2</p>
+          <p className="ml-auto mt-0.5 max-w-[24ch] text-[12px] leading-snug text-[#4d626b]">The satellite behind this imagery. 786 km up, it photographs every place in the film.</p>
+        </div>
+      </div>
+      <p ref={noteEl} aria-hidden className="pointer-events-none absolute inset-x-5 bottom-[104px] rounded-md bg-white/75 px-2 py-1 text-center font-mono text-[10px] leading-relaxed text-[#4d626b] opacity-0 backdrop-blur-sm md:inset-x-auto md:bottom-[54px] md:right-14 md:max-w-[46ch] md:bg-transparent md:p-0 md:text-right md:backdrop-blur-none" />
+      {/* the sensor's view: frame, crosshair, pushbroom line along the ground track, readout */}
+      <div ref={hudEl} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden opacity-0" style={{ visibility: 'hidden' }}>
+        <div className="absolute inset-[-25%] rotate-[12deg]">
+          <div ref={scanEl} className="absolute inset-0 will-change-transform">
+            <div className="absolute inset-x-0 top-0 h-[2px] bg-white shadow-[0_0_18px_4px_rgba(127,227,245,0.85)]" />
+            <div className="absolute inset-x-0 top-[2px] h-full bg-[#eef4f6]/35" />
+          </div>
+        </div>
+        <div className="absolute left-1/2 top-1/2 h-[64vmin] w-[64vmin] -translate-x-1/2 -translate-y-1/2 [filter:drop-shadow(0_1px_2px_rgba(10,20,26,0.55))]">
+          {['left-0 top-0 border-l-2 border-t-2', 'right-0 top-0 border-r-2 border-t-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'].map(c =>
+            <span key={c} className={`absolute h-10 w-10 border-white ${c}`} />)}
+          <svg viewBox="-50 -50 100 100" className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2" fill="none" stroke="white" strokeWidth="1.6">
+            <path d="M-46 0H-14M14 0H46M0-46V-14M0 14V46" /><circle r="5" />
+          </svg>
+        </div>
+        <pre ref={teleEl} className="absolute right-4 top-20 m-0 whitespace-pre rounded-md bg-white/85 px-3 py-2 font-mono text-[10.5px] leading-[1.55] text-[#13222b] shadow-[0_16px_40px_-20px_rgba(19,34,43,0.5)] backdrop-blur-md md:right-16 md:top-24 md:text-[11px]" />
+      </div>
       {/* the name, lying on the Deccan plateau (warped onto four real ground points every frame) */}
       <div ref={wordEl} aria-hidden className="pointer-events-none absolute left-0 top-0 flex h-[250px] w-[1300px] origin-top-left items-center justify-center font-display text-[236px] font-semibold leading-none tracking-[0.02em] text-white/90 opacity-0 [font-variation-settings:'wdth'_112] [text-shadow:0_0_40px_rgba(155,231,246,0.35)]"
         style={{ visibility: 'hidden' }}>JalSetu</div>
