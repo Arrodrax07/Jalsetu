@@ -10,7 +10,7 @@ export type TankerStatus = 'Available' | 'Assigned' | 'On Trip' | 'Maintenance';
 export type TripStatus = 'Planned' | 'Assigned' | 'Accepted' | 'En Route' | 'Arrived' | 'Delivering' | 'Delivered' | 'Completed' | 'Cancelled';
 export type DeliveryStatus = 'Pending Verification' | 'Verified' | 'Mismatch' | 'Under Investigation';
 export type UserRole = 'admin' | 'operator' | 'dispatcher' | 'driver';
-export type DataOrigin = 'seeded' | 'manual' | 'external' | 'citizen' | 'synthetic';
+export type DataOrigin = 'seeded' | 'manual' | 'external' | 'citizen' | 'synthetic' | 'derived';
 export type TrackingState = 'live' | 'stale' | 'offline' | 'no_signal';
 
 export interface UserProfile {
@@ -20,6 +20,10 @@ export interface UserProfile {
 
 export interface PriorityFactors { demand: number; vulnerability: number; unmetNeed: number; previousCoverage: number; population: number; liveCrisis?: number; waterAccess?: number }
 
+export interface CommunityDetail {
+  granularity: 'settlements' | 'areas'; activeCommunities: number; areas: number;
+  cities: { id: string; name: string; population: number; areas: number }[];
+}
 export interface Community {
   id: string; name: string; ward: string; population: number; dailyDemand: number; allocatedWater: number; availableWater: number;
   shortfall: number; vulnerability: VulnerabilityLevel; vulnerabilityScore: number; previousAllocation: number; currentCoverage: number;
@@ -30,6 +34,8 @@ export interface Community {
   baselineSupply?: number; tankerNeed?: number;
   /** 0-100 from live crisis signals (news + rainfall deficit). */
   crisisScore?: number; settlementType?: string | null; source?: string | null; sourceUrl?: string | null; demandBasis?: string | null;
+  /** 'settlement' (town, village, whole city) or 'area' inside a city (parentName = the city). */
+  level?: 'settlement' | 'area'; parentId?: string | null; parentName?: string | null;
   /** Straight-line km to the nearest recorded water source or active depot. */
   waterAccessKm?: number | null; waterAccessNote?: string | null;
 }

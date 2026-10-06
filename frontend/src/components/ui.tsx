@@ -194,7 +194,7 @@ export function formatAge(s: number): string {
   return `${Math.round(s / 86400)}d`;
 }
 
-const ORIGIN_KIND: Record<string, ProvenanceKind> = { seeded: 'seeded', manual: 'manual', external: 'external', citizen: 'citizen', synthetic: 'synthetic' };
+const ORIGIN_KIND: Record<string, ProvenanceKind> = { seeded: 'seeded', manual: 'manual', external: 'external', citizen: 'citizen', synthetic: 'synthetic', derived: 'estimated' };
 export const OriginLabel: React.FC<{ origin?: string | null }> = ({ origin }) => <Provenance kind={ORIGIN_KIND[origin || 'manual'] || 'manual'} />;
 
 export const KindLabel: React.FC<{ kind: 'predicted' | 'estimated' | 'live-gps' | 'external-alert' | 'rule-based'; title?: string }> = ({ kind, title }) => {

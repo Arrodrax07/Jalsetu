@@ -15,7 +15,7 @@ export const Communities: React.FC = () => {
   const [depotOpen, setDepotOpen] = useState(false);
   return (
     <div className="p-4 lg:p-8">
-      <PageHeader eyebrow="Demand" title="Communities" subtitle={`${communities.length.toLocaleString('en-IN')} towns and villages with real populations (OpenStreetMap / Census). Coverage, status and priority are computed live from supply, deliveries and crisis signals.`}
+      <PageHeader eyebrow="Demand" title="Communities" subtitle={`${communities.length.toLocaleString('en-IN')} ${communities.some(c => c.level === 'area') ? 'places (towns, villages and areas within cities)' : 'towns and villages'} with real populations (OpenStreetMap / Census; area populations are estimates). Coverage, status and priority are computed live from supply, deliveries and crisis signals.`}
         actions={can('manage_master_data') && <>
           <Button icon={<Warehouse className="h-4 w-4" />} onClick={() => setDepotOpen(true)}>Add depot</Button>
           <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEdit('new')}>Add community</Button>
@@ -31,7 +31,7 @@ export const Communities: React.FC = () => {
         search={c => `${c.name} ${c.ward} ${c.districtName} ${districtName(c.districtName)} ${c.stateName}`} searchPlaceholder="Search town, village or district"
         emptyTitle="No communities match"
         columns={[
-          { id: 'name', header: 'Place', sort: c => c.name, cell: c => <><span className="font-medium">{c.name}</span><div className="text-[11.5px] capitalize text-cc-faint">{c.settlementType || c.ward}</div></> },
+          { id: 'name', header: 'Place', sort: c => c.name, cell: c => <><span className="font-medium">{c.name}</span><div className="text-[11.5px] text-cc-faint">{c.level === 'area' && c.parentName ? `Area of ${c.parentName}` : <span className="capitalize">{c.settlementType || c.ward}</span>}</div></> },
           { id: 'district', header: 'District', sort: c => districtName(c.districtName), hideBelow: 'md', cell: c => <span className="text-cc-muted">{districtName(c.districtName) || '—'}</span> },
           { id: 'pop', header: 'Population', align: 'right', sort: c => c.population, cell: c => <span className="mono">{c.population.toLocaleString('en-IN')}</span> },
           { id: 'crisis', header: 'Crisis signals', sort: c => c.crisisScore ?? 0, cell: c => { const cs = c.crisisScore ?? 0; return (

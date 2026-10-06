@@ -335,3 +335,16 @@ Restart with `start.ps1` (or `-Dev`).
   closer (1.6 km on the road, 320 m at the water point), z18 Esri tiles for the last 1.5 km, thinner route line.
 - Port 5173 now serves the PRODUCTION build (vite preview); judge smoothness there, never on the dev server.
 - Google Photorealistic 3D Tiles: not added (needs a billed Google key; terms forbid mixing with other imagery).
+
+## 2026-10-06 (night): communities in depth (committed)
+- Two levels in `communities`: settlement (town/village/whole city) and area (OSM suburb/neighbourhood/quarter inside a
+  city, `parent_id` = the city). Migration 0006 (`level`, `parent_id`), applied to the live DB (additive).
+- `ingestion/areas.py` (`python -m app.ingestion areas`): 1,092 areas in 14 cities >= 300k with >= 5 areas (Mumbai 452,
+  Thane 192, Pune 70, Nagpur 68 ...). Population = ESTIMATED share of the city's Census figure by built land (250 m
+  grid, land > 1.2 km from any mapped area counts for no one); data_origin `derived`, shown as "Estimated".
+- `services/granularity.py` + GET/PUT `/api/settings/communities` (admin only): "Towns and villages" (default) or
+  "Areas within cities". Switching flips is_active on split cities and their areas, so every feature follows.
+  First switch to areas imports them (Overpass, cached in backend/var/cache). Admin -> Settings -> Community detail.
+- Live DB is still at "Towns and villages" (1,263 places); no areas imported there yet. Tested on the QA copy:
+  areas mode = 2,341 active places, allocation runs over all, switching back restores exactly 1,263.
+- Communities page shows "Area of <city>". Tests: backend 87/87 (tests/test_granularity.py).

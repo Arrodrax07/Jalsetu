@@ -5,7 +5,7 @@
  * - Every request carries a stable per-browser X-Device-Id for the audit trail.
  */
 import type {
-  ActivityProfile, AIAssessment, AllocationPlan, Anomaly, CityForecast, Community, Complaint, ComplaintAnalysis, ComplaintCategory, ComplaintStatus,
+  CommunityDetail, ActivityProfile, AIAssessment, AllocationPlan, Anomaly, CityForecast, Community, Complaint, ComplaintAnalysis, ComplaintCategory, ComplaintStatus,
   CrisisSignal, DashboardStats, PublicSummary, DeliveryRecord, Depot, DispatchProposal, DisasterEvent, DisasterImpact, DriverAssignment, ImpactStats, MlStatus, NewWaterRequest, Notification,
   OperationsSettings, Overview, PriorityWeights, RequestStatus, RouteOptimizationResult, SystemHealth, Trip, UrgencyLevel, UserProfile, UserRole,
   Vehicle, WaterRequest, OperationsMetrics, ImpactReplay, TapSchedule, SupplyNotice, PublicSupply, ScheduleKind, NoticeKind,
@@ -274,6 +274,8 @@ export const api = {
   // settings, ML, audit, reports
   settings: () => get<{ weights: PriorityWeights; operations: OperationsSettings; defaults: { weights: PriorityWeights; operations: OperationsSettings } }>('/settings'),
   saveWeights: (w: PriorityWeights) => put<PriorityWeights>('/settings/weights', w),
+  communityDetail: () => get<CommunityDetail>('/settings/communities'),
+  setCommunityDetail: (granularity: CommunityDetail['granularity']) => put<CommunityDetail>('/settings/communities', { granularity }),
   saveOperations: (o: Partial<OperationsSettings>) => put<OperationsSettings>('/settings/operations', o),
   mlStatus: () => get<MlStatus>('/ml/status'),
   retrain: (target: 'all' | 'complaints' | 'demand') => post<{ started: boolean }>(`/ml/retrain?target=${target}`),

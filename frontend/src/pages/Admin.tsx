@@ -4,7 +4,7 @@ import { useApp, useNow } from '../context/AppContext';
 import { api } from '../services/api';
 import { Button, Chip, Dialog, Empty, Field, Loading, PageHeader, Panel, StatusChip, Tabs } from '../components/ui';
 import { FACTOR_LABELS } from './Requests';
-import type { MlStatus, OperationsSettings, PriorityWeights, UserProfile, UserRole } from '../types';
+import type { CommunityDetail, MlStatus, OperationsSettings, PriorityWeights, UserProfile, UserRole } from '../types';
 import { dt, timeAgo } from '../utils/format';
 
 export const Admin: React.FC = () => {
@@ -117,6 +117,60 @@ const OPS: { k: keyof OperationsSettings; label: string; step?: string }[] = [
   { k: 'stopServiceMinutes', label: 'Filling + unloading per stop (min)' },
 ];
 
+/** Which level the whole system works at: whole towns and villages, or areas inside the big cities. */
+const CommunityLevel: React.FC = () => {
+  const { can, fail, toast, refresh } = useApp();
+  const [d, setD] = useState<CommunityDetail | null>(null);
+  const [busy, setBusy] = useState<CommunityDetail['granularity'] | null>(null);
+  useEffect(() => { api.communityDetail().then(setD).catch(fail); }, [fail]);
+  const edit = can('manage_settings');
+  const choose = async (g: CommunityDetail['granularity']) => {
+    if (!d || g === d.granularity) return;
+    setBusy(g);
+    try {
+      const r = await api.setCommunityDetail(g);
+      setD(r);
+      toast(g === 'areas' ? 'Working at area level' : 'Working at town and village level',
+        `${r.activeCommunities.toLocaleString('en-IN')} active communities. Recompute the allocation plan to plan for them.`, 'success');
+      refresh('communities', 'overview', 'plan');
+    } catch (e) { fail(e); } finally { setBusy(null); }
+  };
+  const OPTIONS: { id: CommunityDetail['granularity']; title: string; body: string }[] = [
+    { id: 'settlements', title: 'Towns and villages', body: 'Each city, town and village is one community (Census 2011 populations). Mumbai is one place.' },
+    { id: 'areas', title: 'Areas within cities', body: 'Big cities are split into their real neighbourhoods and suburbs from OpenStreetMap; towns and villages stay as they are. Area populations are estimated shares of the city.' },
+  ];
+  return (
+    <Panel title="Community detail" className="lg:col-span-2">
+      <p className="mb-3 text-[13px] text-cc-muted">The level the whole system plans at: priorities, allocation, dispatch, maps, requests and the public portal all follow this choice. Records already made keep their place.</p>
+      {!d ? <Loading /> : (
+        <>
+          <div role="radiogroup" aria-label="Community detail" className="grid gap-3 sm:grid-cols-2">
+            {OPTIONS.map(o => {
+              const on = d.granularity === o.id;
+              return (
+                <button key={o.id} type="button" role="radio" aria-checked={on} disabled={!edit || !!busy} onClick={() => choose(o.id)}
+                  className={'rounded-xl border p-4 text-left transition-colors ' + (on ? 'border-cc-accent bg-cc-accent/5 ring-1 ring-cc-accent' : 'border-cc-border hover:border-cc-strong') + (!edit ? ' cursor-default' : '')}>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[14px] font-semibold">{o.title}</span>
+                    {on ? <Chip>In use</Chip> : busy === o.id ? <span className="text-[12px] text-cc-muted">Switching…</span> : null}
+                  </span>
+                  <span className="mt-1 block text-[12.5px] leading-snug text-cc-muted">{o.body}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[12.5px] text-cc-muted">
+            {d.activeCommunities.toLocaleString('en-IN')} active communities now.{' '}
+            {d.areas ? <>{d.areas.toLocaleString('en-IN')} areas are available in {d.cities.length} cities: {d.cities.slice(0, 6).map(c => `${c.name} (${c.areas})`).join(', ')}{d.cities.length > 6 ? ', …' : ''}.</>
+              : 'Areas are imported from OpenStreetMap the first time area level is chosen (about a minute).'}
+          </p>
+          {!edit && <p className="mt-2 text-[12px] text-cc-faint">Only an administrator can change this.</p>}
+        </>
+      )}
+    </Panel>
+  );
+};
+
 const Settings: React.FC = () => {
   const { weights, operations, can, fail, toast, refresh } = useApp();
   const [w, setW] = useState<PriorityWeights | null>(weights);
@@ -135,6 +189,7 @@ const Settings: React.FC = () => {
         ))}
         {edit && <Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={async () => { try { await api.saveWeights(w); toast('Weights saved', 'Normalised to 100%.', 'success'); refresh('settings', 'communities'); } catch (e) { fail(e); } }}>Save weights</Button>}
       </Panel>
+      <CommunityLevel />
       <Panel title="Operations, tracking & delivery policy">
         <div className="grid grid-cols-2 gap-3">
           {OPS.map(x => <Field key={x.k} label={x.label}><input className="input" type="number" step={x.step || '1'} disabled={!edit} value={(o[x.k] as number) ?? ''} onChange={e => setO({ ...o, [x.k]: Number(e.target.value) })} /></Field>)}
