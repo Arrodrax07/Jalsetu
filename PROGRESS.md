@@ -324,3 +324,14 @@ Restart with `start.ps1` (or `-Dev`).
 - Dev server only: React StrictMode runs effects twice, so pages fire duplicate requests that queue on the single
   API process and look slow. Judge load times on the production build (`npm run build`, `vite preview`).
 - Browser GPS stops when the phone screen is off; driver must keep the page open (wake lock requested).
+
+## 2026-10-06 (late night): smoother scroll, richer opening, better tanker (committed: c812763, 7f07d06, d022684, d2d9ab3)
+- Scroll: eased scroll target (wheel notches glide, TAU 0.2 s) + spring K 160; no per-frame blur on text; idle frames
+  skip work; 3D terrain OFF (it cost half of every frame near the ground; `?debug=terrain3d` brings it back).
+  ~12 ms/frame through the whole film (prod build). Tiles: 48 parallel requests, shorter fades, wider prefetch.
+- Opening: three live numbers under the headline; live Sentinel-2A readout (position, altitude, speed, next daylight
+  pass over Maharashtra from the real orbit); globe re-centred after the warm-up (it had landed on Africa).
+- Descent: detailed tanker (Marathi "drinking water" lettering, wheels turn with distance, sway, dust), camera
+  closer (1.6 km on the road, 320 m at the water point), z18 Esri tiles for the last 1.5 km, thinner route line.
+- Port 5173 now serves the PRODUCTION build (vite preview); judge smoothness there, never on the dev server.
+- Google Photorealistic 3D Tiles: not added (needs a billed Google key; terms forbid mixing with other imagery).
